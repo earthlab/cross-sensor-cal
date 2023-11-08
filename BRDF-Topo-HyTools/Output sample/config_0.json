@@ -1,0 +1,196 @@
+{
+   "bad_bands": [
+      [
+         300,
+         400
+      ],
+      [
+         1337,
+         1430
+      ],
+      [
+         1800,
+         1960
+      ],
+      [
+         2450,
+         2600
+      ]
+   ],
+   "file_type": "envi",
+   "input_files": [
+      "output/neon"
+   ],
+   "anc_files": {
+      "output/neon": {
+         "path_length": [
+            "output\\neon_155845_ancillary",
+            0
+         ],
+         "sensor_az": [
+            "output\\neon_155845_ancillary",
+            1
+         ],
+         "sensor_zn": [
+            "output\\neon_155845_ancillary",
+            2
+         ],
+         "solar_az": [
+            "output\\neon_155845_ancillary",
+            3
+         ],
+         "solar_zn": [
+            "output\\neon_155845_ancillary",
+            4
+         ],
+         "phase": [
+            "output\\neon_155845_ancillary",
+            5
+         ],
+         "slope": [
+            "output\\neon_155845_ancillary",
+            6
+         ],
+         "aspect": [
+            "output\\neon_155845_ancillary",
+            7
+         ],
+         "cosine_i": [
+            "output\\neon_155845_ancillary",
+            8
+         ]
+      }
+   },
+   "export": {
+      "coeffs": true,
+      "image": true,
+      "masks": true,
+      "subset_waves": [],
+      "output_dir": "export/",
+      "suffix": "_corrected_0"
+   },
+   "corrections": [
+      "topo",
+      "brdf"
+   ],
+   "topo": {
+      "type": "scs+c",
+      "calc_mask": [
+         [
+            "ndi",
+            {
+               "band_1": 850,
+               "band_2": 660,
+               "min": 0.1,
+               "max": 1.0
+            }
+         ],
+         [
+            "ancillary",
+            {
+               "name": "slope",
+               "min": 0.08726646259971647,
+               "max": "+inf"
+            }
+         ],
+         [
+            "ancillary",
+            {
+               "name": "cosine_i",
+               "min": 0.12,
+               "max": "+inf"
+            }
+         ],
+         [
+            "cloud",
+            {
+               "method": "zhai_2018",
+               "cloud": true,
+               "shadow": true,
+               "T1": 0.01,
+               "t2": 0.1,
+               "t3": 0.25,
+               "t4": 0.5,
+               "T7": 9,
+               "T8": 9
+            }
+         ]
+      ],
+      "apply_mask": [
+         [
+            "ndi",
+            {
+               "band_1": 850,
+               "band_2": 660,
+               "min": 0.1,
+               "max": 1.0
+            }
+         ],
+         [
+            "ancillary",
+            {
+               "name": "slope",
+               "min": 0.08726646259971647,
+               "max": "+inf"
+            }
+         ],
+         [
+            "ancillary",
+            {
+               "name": "cosine_i",
+               "min": 0.12,
+               "max": "+inf"
+            }
+         ]
+      ],
+      "c_fit_type": "nnls"
+   },
+   "brdf": {
+      "solar_zn_type": "scene",
+      "type": "flex",
+      "grouped": true,
+      "sample_perc": 0.1,
+      "geometric": "li_dense_r",
+      "volume": "ross_thick",
+      "b/r": 10,
+      "h/b": 2,
+      "interp_kind": "linear",
+      "calc_mask": [
+         [
+            "ndi",
+            {
+               "band_1": 850,
+               "band_2": 660,
+               "min": 0.1,
+               "max": 1.0
+            }
+         ]
+      ],
+      "apply_mask": [
+         [
+            "ndi",
+            {
+               "band_1": 850,
+               "band_2": 660,
+               "min": 0.1,
+               "max": 1.0
+            }
+         ]
+      ],
+      "diagnostic_plots": true,
+      "diagnostic_waves": [
+         440,
+         550,
+         660,
+         850
+      ],
+      "bin_type": "dynamic",
+      "num_bins": 18,
+      "ndvi_bin_min": 0.05,
+      "ndvi_bin_max": 1.0,
+      "ndvi_perc_min": 10,
+      "ndvi_perc_max": 95
+   },
+   "num_cpus": 1,
+   "resample": false
+}
