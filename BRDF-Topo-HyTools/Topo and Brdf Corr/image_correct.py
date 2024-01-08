@@ -15,6 +15,39 @@ warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
 
 def main():
+    """
+    Main Function for Processing Geospatial Imagery
+
+    This function orchestrates the process of reading, correcting, and exporting geospatial imagery 
+    based on the configuration settings specified in a JSON file. It utilizes parallel processing capabilities
+    provided by Ray to efficiently handle multiple images.
+
+    Process Flow:
+    1. Load Configuration: Reads the JSON configuration file provided as a command line argument.
+    2. Initialize Ray: Sets up Ray for parallel processing, using the number of CPUs specified in the config.
+    3. Read Files: Depending on the file type ('envi' or 'neon'), reads the input files and ancillary data.
+    4. Apply Corrections: Executes various correction algorithms (e.g., TOPO, BRDF, glint) as specified in the config.
+    5. Export Data: Outputs corrected imagery and correction coefficients, again as specified in the config.
+
+    Inputs:
+    - A single command line argument specifying the path to the JSON configuration file.
+
+    The configuration file should contain:
+    - Input file paths.
+    - Number of CPUs to use for processing.
+    - File type (e.g., 'envi', 'neon').
+    - Correction parameters and settings.
+    - Export settings for the corrected images and coefficients.
+
+    Output:
+    - Corrected geospatial imagery files.
+    - Correction coefficients files, if specified in the configuration.
+
+    Usage:
+    - This function is typically used as part of a larger workflow for processing and analyzing geospatial imagery,
+      particularly when dealing with large datasets or requiring specialized correction techniques.
+    - To execute, run this script with Python, providing the path to the configuration file as an argument.
+    """
 
     config_file = sys.argv[1]
 
@@ -60,8 +93,38 @@ def main():
     ray.shutdown()
 
 def export_coeffs(hy_obj,export_dict):
-    '''Export correction coefficients to file.
-    '''
+    """
+    Exports Correction Coefficients to Files
+
+    This function exports the correction coefficients for various corrections applied to geospatial imagery. 
+    It generates a separate file for each type of correction, storing the coefficients in JSON format.
+
+    Inputs:
+    - hy_obj: An object representing the processed imagery data, which includes correction coefficients.
+    - export_dict: A dictionary containing export settings, such as the output directory and file suffix.
+
+    Process:
+    - Iterates through each correction type present in the 'hy_obj'.
+    - Constructs a file path for each correction's coefficients based on the settings in 'export_dict'.
+    - Exports the coefficients to a JSON file.
+
+    Supported Corrections:
+    - Topographic ('topo') 
+    - Glint (currently skipped in this function)
+    - BRDF ('brdf')
+
+    Output:
+    - JSON files containing correction coefficients for each correction type.
+      The files are named based on the correction type and include a suffix from 'export_dict'.
+
+    Usage:
+    - Typically used after applying corrections to geospatial imagery data.
+    - Helps in documenting the coefficients used for corrections, which can be useful for analysis, reproducibility, and auditing.
+
+    Note:
+    - The function currently skips exporting coefficients for 'glint' correction.
+    """
+
     for correction in hy_obj.corrections:
         coeff_file = export_dict['output_dir']
         coeff_file += os.path.splitext(os.path.basename(hy_obj.file_name))[0]
@@ -77,9 +140,34 @@ def export_coeffs(hy_obj,export_dict):
             json.dump(corr_dict,outfile)
 
 def apply_corrections(hy_obj,config_dict):
-    '''Apply correction to image and export
-        to file.
-    '''
+    """
+    Applies specified corrections to geospatial imagery data and exports the corrected images.
+
+    Inputs:
+    - hy_obj: An object representing the processed imagery data.
+    - config_dict: A dictionary containing configuration settings for corrections and exports.
+
+    Process Overview:
+    1. Update Header: Modifies the header dictionary with relevant details like 'data ignore value' and 'data type'.
+    2. Output File Naming: Constructs the output file path based on the provided configuration.
+    3. Correction and Export:
+       a. If 'subset_waves' is empty, exports all wavelengths, with optional resampling.
+       b. If 'subset_waves' contains specific wavelengths, exports only the selected bands.
+    4. Mask Export: Optionally, exports masks associated with the applied corrections.
+    5. File Writing: Utilizes the WriteENVI utility to write the corrected data to ENVI format files.
+
+    Outputs:
+    - Corrected imagery files in ENVI format.
+    - Optionally, mask files indicating areas affected by specific corrections.
+
+    Usage:
+    - This function is used in workflows where geospatial imagery requires corrections like TOPO, BRDF, etc.
+    - It is a part of a larger processing pipeline, following the application of corrections to the data.
+
+    Note:
+    - The function assumes that the 'hy_obj' has methods like 'get_header', 'iterate', and 'get_band' and attributes like 'corrections' and 'wavelengths'.
+    - The 'WriteENVI' utility is used for writing the output, which should be predefined or imported.
+    """
 
     header_dict = hy_obj.get_header()
     header_dict['data ignore value'] = hy_obj.no_data

@@ -7,10 +7,30 @@ import hytools as ht
 from hytools.io.envi import WriteENVI
 
 def get_actual_key(h5_file, expected_key):
+    """
+    Finds the actual key in an HDF5 file that corresponds to an expected key, accounting for case sensitivity.
+
+    Inputs:
+    - h5_file: The HDF5 file object.
+    - expected_key: The expected key (string) whose actual key in the file is to be found.
+
+    Output:
+    - Returns the actual key from the HDF5 file that matches the expected key, regardless of case sensitivity.
+    """
     actual_keys = {key.lower(): key for key in h5_file.keys()}
     return actual_keys.get(expected_key.lower(), expected_key)
 
 def get_all_solar_angles(logs_group):
+    """
+        Extracts all solar azimuth and zenith angles from a logs group in an HDF5 file.
+
+        Input:
+        - logs_group: The group within the HDF5 file containing logs data.
+
+        Output:
+        - Returns an array of tuples containing solar azimuth and zenith angles.
+    """
+    
     angles = []
     for log_entry in logs_group.keys():
         angles.append((
@@ -19,66 +39,66 @@ def get_all_solar_angles(logs_group):
         ))
     return np.array(angles)
 
-
 def export_anc(hy_obj, args_and_image):
+    """
+    Exports ancillary data from an HDF5 file to ENVI format.
+
+    Inputs:
+    - hy_obj: An object representing the HDF5 file.
+    - args_and_image: A tuple containing command line arguments and the image file path.
+
+    This function reads various ancillary data from the HDF5 file, such as path length, slope, aspect, etc., and exports them to ENVI format.
+    """
     h5_file_path, args = args_and_image
 
     with h5py.File(hy_obj.file_name, 'r') as h5_file:
-        anc_imagery_path = '/NIWO/Reflectance/Metadata/Ancillary_Imagery/'
-        
         # Fetching data from the provided h5 file structure
-        path_length_data = h5_file[anc_imagery_path + 'Path_Length'][...]
-        slope_data = h5_file[anc_imagery_path + 'Slope'][...]
-        aspect_data = h5_file[anc_imagery_path + 'Aspect'][...]
+        path_length_data = h5_file['/NIWO/Reflectance/Metadata/Ancillary_Imagery/Path_Length'][...]
+        slope_data = h5_file['/NIWO/Reflectance/Metadata/Ancillary_Imagery/Slope'][...]
+        aspect_data = h5_file['/NIWO/Reflectance/Metadata/Ancillary_Imagery/Aspect'][...]
+        # Add other ancillary datasets as needed
 
-        illumination_factor = h5_file[anc_imagery_path + 'Illumination_Factor'][...]
-        to_sensor_azimuth_angle_data = h5_file['/NIWO/Reflectance/Metadata/to-sensor_azimuth_angle'][...]
-        to_sensor_zenith_angle_data = h5_file['/NIWO/Reflectance/Metadata/to-sensor_zenith_angle'][...]
-
+        illumination_factor = h5_file['/NIWO/Reflectance/Metadata/Ancillary_Imagery/Illumination_Factor'][...]
+        to_sensor_azimuth_angle_data = h5_file['/NIWO/Reflectance/Metadata/to-sensor_Azimuth_Angle'][...]
+        to_sensor_zenith_angle_data = h5_file['/NIWO/Reflectance/Metadata/to-sensor_Zenith_Angle'][...]
+        
+        # Assuming solar angles are stored per log entry
         logs_group = h5_file['/NIWO/Reflectance/Metadata/Logs']
-        for log_entry in logs_group.keys():
-            solar_azimuth_angle = logs_group[log_entry]["Solar_Azimuth_Angle"][()]
-            solar_zenith_angle = logs_group[log_entry]["Solar_Zenith_Angle"][()]
-            
-            # Prepare ancillary header
-            anc_header = hy_obj.get_header()
-            anc_header['bands'] = 8
-            anc_header['band_names'] = ['path length', 'to-sensor azimuth', 'to-sensor zenith', 'solar azimuth', 'solar zenith',
-                                        'phase', 'slope', 'aspec    t', 'cosine_i']
-            anc_header['wavelength units'] = np.nan
-            anc_header['wavelength'] = np.nan
-            anc_header['data type'] = 4
+        solar_azimuth_angle = logs_group["Solar_Azimuth_Angle"][()]
+        solar_zenith_angle = logs_group["Solar_Zenith_Angle"][()]
 
-            output_name = f"{args.output_dir}{os.path.basename(os.path.splitext(hy_obj.file_name)[0])}_{log_entry}_ancillary"
-            writer = WriteENVI(output_name, anc_header)
-            
-            # Write bands
-            writer.write_band(path_length_data, 0)
-            writer.write_band(to_sensor_azimuth_angle_data, 1)
-            writer.write_band(to_sensor_zenith_angle_data, 2)
-            writer.write_band(solar_azimuth_angle, 3)
-            writer.write_band(solar_zenith_angle, 4)
-            writer.write_band(slope_data, 5)
-            writer.write_band(aspect_data, 6)
-            writer.write_band(illumination_factor,7)
-            
-            writer.close()
+        # Prepare ancillary header
+        anc_header = hy_obj.get_header()
+        anc_header['bands'] = 8  # Update this number based on the actual number of bands you are including
+        anc_header['band_names'] = ['path length', 'to-sensor azimuth', 'to-sensor zenith', 'solar azimuth', 
+                                    'solar zenith', 'slope', 'aspect', 'cosine_i']
+        anc_header['wavelength units'] = 'Unknown'
+        anc_header['wavelength'] = np.nan
+        anc_header['data type'] = 4  # Assuming float32 data type
 
-            # # Create symlink for the main file
-            # main_file_path = os.path.join(args.output_dir, os.path.basename(os.path.splitext(hy_obj.file_name)[0]))
-            # print(main_file_path)
-            # symlink_name = os.path.join(args.output_dir, os.path.basename(os.path.splitext(hy_obj.file_name)[0]) + f"_{log_entry}")
-            # if not os.path.exists(symlink_name):
-            #     os.symlink(main_file_path, symlink_name)
+        output_name = f"{args.output_dir}{os.path.basename(os.path.splitext(hy_obj.file_name)[0])}_ancillary"
+        writer = WriteENVI(output_name, anc_header)
+        
+        # Write bands
+        writer.write_band(path_length_data, 0)
+        writer.write_band(to_sensor_azimuth_angle_data, 1)
+        writer.write_band(to_sensor_zenith_angle_data, 2)
+        writer.write_band(solar_azimuth_angle, 3)
+        writer.write_band(solar_zenith_angle, 4)
+        writer.write_band(slope_data, 5)
+        writer.write_band(aspect_data, 6)
+        writer.write_band(illumination_factor, 7)
+        # Add other bands as needed
+        
+        writer.close()
 
-            # # Create symlink for the main hdr file
-            # main_hdr_file_path = os.path.join(args.output_dir, os.path.basename(os.path.splitext(hy_obj.file_name)[0]) + ".hdr")
-            # print(main_hdr_file_path)
-            # symlink_name_hdr = os.path.join(args.output_dir, os.path.basename(os.path.splitext(hy_obj.file_name)[0]) + f"_{log_entry}.hdr")
-            # if not os.path.exists(symlink_name_hdr):
-            #     os.symlink(main_hdr_file_path, symlink_name_hdr)
 
 def main():
+    """
+    Main function to convert NEON AOP H5 files to ENVI format and optionally export ancillary data.
+
+    This function uses command line arguments to specify input images and output directory. It supports parallel processing using Ray for efficiency.
+    """
     parser = argparse.ArgumentParser(description = "Convert NEON AOP H5 to ENVI format")
     parser.add_argument('images', help="Input image pathnames", nargs='*')
     parser.add_argument('output_dir', help="Output directory", type=str)
@@ -121,3 +141,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

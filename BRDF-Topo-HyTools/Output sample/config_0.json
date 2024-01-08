@@ -19,44 +19,44 @@
    ],
    "file_type": "envi",
    "input_files": [
-      "output/neon"
+      "C:\\Users\\JANUSHI SHASTRI\\Desktop\\CIRES_PROJECT\\Single Tile Data\\NIWO\\NEON_refl-surf-dir-ortho-line\\TOPO_BRDF_CORR\\output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance"
    ],
    "anc_files": {
-      "output/neon": {
+      "C:\\Users\\JANUSHI SHASTRI\\Desktop\\CIRES_PROJECT\\Single Tile Data\\NIWO\\NEON_refl-surf-dir-ortho-line\\TOPO_BRDF_CORR\\output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance": {
          "path_length": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             0
          ],
          "sensor_az": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             1
          ],
          "sensor_zn": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             2
          ],
          "solar_az": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             3
          ],
          "solar_zn": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             4
          ],
          "phase": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             5
          ],
          "slope": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             6
          ],
          "aspect": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             7
          ],
          "cosine_i": [
-            "output\\neon_155845_ancillary",
+            "output\\NEON_D13_NIWO_DP1_20170906_175644_reflectance_ancillary",
             8
          ]
       }
@@ -179,18 +179,27 @@
       ],
       "diagnostic_plots": true,
       "diagnostic_waves": [
-         440,
-         550,
-         660,
-         850
+         448,
+         849,
+         1660,
+         2201
       ],
       "bin_type": "dynamic",
-      "num_bins": 18,
+      "num_bins": 25,
       "ndvi_bin_min": 0.05,
       "ndvi_bin_max": 1.0,
       "ndvi_perc_min": 10,
       "ndvi_perc_max": 95
    },
    "num_cpus": 1,
-   "resample": false
+   "resample": false,
+   "resampler": {
+      "type": "cubic",
+      "out_waves": [
+         450,
+         550,
+         650
+      ],
+      "out_fwhm": []
+   }
 }
