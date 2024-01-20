@@ -39,6 +39,7 @@ Locate your environment.yml file. This should include all dependencies from name
     ```conda activate cires-demo ``` 
     It's important to activate cires-demo to access the installed packages.
 
+```conda activate macrosystems```
 6.  Verify Installation
     To check if all packages are installed correctly:
     ``` conda list```
@@ -198,12 +199,16 @@ Run the script from the command line with the dataset path and output folder.
 Optional flag -anc to export ancillary data.
 Example:
 ```python neon2envi2.py <path-to-dataset_name> <path-to-output_folder> -anc```
+```python BRDF-Topo-HyTools/Topo-and-Brdf-Corr/neon2envi2.py NEON_D13_NIWO_DP1_20170904_181819_reflectance.h5 BRDF-Topo-HyTools/output -anc```
+
 2. config_generator.py: Configuration File Generation, code: [config_generator.py](https://github.com/earthlab/cross-sensor-cal/blob/janushi-main/BRDF-Topo-HyTools/Topo%20and%20Brdf%20Corr/config_generator.py)
 Functionality: Generates JSON configuration files for applying topographic (TOPO) and Bidirectional Reflectance Distribution Function (BRDF) corrections.
 Configuration Options: Includes settings for various correction types, wavelengths, and other parameters.
 Running the Script: Edit the script according to the desired corrections and run it to create config_<iteration>.json files.
 Example Command:
 ```python config_generator.py```
+```python BRDF-Topo-HyTools/Topo-and-Brdf-Corr/config_generator.py```
+
 3. image_correct.py: Applying Corrections, code: [image_correct.py](https://github.com/earthlab/cross-sensor-cal/blob/janushi-main/BRDF-Topo-HyTools/Topo%20and%20Brdf%20Corr/image_correct.py)
 Purpose: Reads the generated JSON configuration file and applies the specified TOPO and BRDF corrections to the imagery.
 Execution: Run the script with the configuration file as a command-line argument.
