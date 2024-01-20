@@ -213,7 +213,7 @@ Example Command:
 Purpose: Reads the generated JSON configuration file and applies the specified TOPO and BRDF corrections to the imagery.
 Execution: Run the script with the configuration file as a command-line argument.
 ```python image_correct.py <path-to-config-file>```
-
+```python BRDF-Topo-HyTools/Topo-and-Brdf-Corr/image_correct.py BRDF-Topo-HyTools/output/config_1.json``` 
 
 ### Overview for config_generator.py
 The config_generator.py script is designed to automate the creation of configuration files for topographic (TOPO) and Bidirectional Reflectance Distribution Function (BRDF) corrections of geospatial imagery. It allows customization to accommodate different correction methods and input formats.
