@@ -30,7 +30,7 @@ Locate your environment.yml file. This should include all dependencies from name
 
 4.  Create the Conda Environment: Run the following command to create the Conda environment:
 
-    ``` conda env create -f environment.yml ```
+    ``` conda env create -f environment.yaml ```
 
     This will set up an environment named cires-demo and install all necessary packages.
 
