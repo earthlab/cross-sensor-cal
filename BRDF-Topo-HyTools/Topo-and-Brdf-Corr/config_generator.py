@@ -38,17 +38,26 @@ Output:
 - JSON configuration files for each ancillary file, containing all necessary settings for TOPO and BRDF corrections.
 """
 
+import os
+
+# get the current working directory
+current_working_directory = os.getcwd()
+
+# print output to the console
+print(current_working_directory)
 
 # Only coefficients for good bands will be calculated
 bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
 
 # Input data settings for ENVI
 file_type = 'envi'
-main_image_file = r"C:\Users\JANUSHI SHASTRI\Desktop\CIRES_PROJECT\Single Tile Data\NIWO\NEON_refl-surf-dir-ortho-line\TOPO_BRDF_CORR\output\NEON_D13_NIWO_DP1_20170906_175644_reflectance"
+main_image_file = r"NEON_D13_NIWO_DP1_20170904_181819_reflectance.h5"
 
 # Assuming all ancillary files are in the same directory as the main file
-anc_files = glob.glob("output/neon_*_ancillary")
+anc_files = glob.glob("BRDF-Topo-HyTools/output/NEON_*_ancillary*")
 anc_files.sort()
+
+print(anc_files)
 
 # Ancillary files related to each image file
 aviris_anc_names = ['path_length', 'sensor_az', 'sensor_zn',
@@ -147,7 +156,7 @@ for i, anc_file in enumerate(anc_files):
     config_dict['num_cpus'] = 1
     
     # Output path for configuration file
-    config_file = f"output/config_{i}.json"
+    config_file = f"BRDF-Topo-HyTools/output/config_{i}.json"
 
     config_dict["resample"]  = False
     config_dict["resampler"]  = {}
