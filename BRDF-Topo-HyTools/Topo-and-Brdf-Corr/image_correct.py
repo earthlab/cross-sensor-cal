@@ -50,12 +50,19 @@ def main():
     """
 
     config_file = sys.argv[1]
+    print(config_file)
+    
 
     with open(config_file, 'r') as outfile:
         config_dict = json.load(outfile)
 
+    print(config_dict)
+    
     images = config_dict["input_files"]
 
+    print(images)
+    print(config_dict['file_type'])
+    
     if ray.is_initialized():
         ray.shutdown()
     print("Using %s CPUs." % config_dict['num_cpus'])
@@ -66,6 +73,9 @@ def main():
 
     if config_dict['file_type'] == 'envi':
         anc_files = config_dict["anc_files"]
+        
+        print([(image,config_dict['file_type'], anc_files[image]) for a,image in zip(actors,images)])
+        
         _ = ray.get([a.read_file.remote(image,config_dict['file_type'],
                                          anc_files[image]) for a,image in zip(actors,images)])
 
@@ -128,6 +138,7 @@ def export_coeffs(hy_obj,export_dict):
     for correction in hy_obj.corrections:
         coeff_file = export_dict['output_dir']
         coeff_file += os.path.splitext(os.path.basename(hy_obj.file_name))[0]
+        print(coeff_file)
         coeff_file += "_%s_coeffs_%s.json" % (correction,export_dict["suffix"])
 
         with open(coeff_file, 'w') as outfile:
