@@ -207,13 +207,12 @@ Configuration Options: Includes settings for various correction types, wavelengt
 Running the Script: Edit the script according to the desired corrections and run it to create config_<iteration>.json files.
 Example Command:
 ```python config_generator.py```
-```python BRDF-Topo-HyTools/Topo-and-Brdf-Corr/config_generator.py```
 
 3. image_correct.py: Applying Corrections, code: [image_correct.py](https://github.com/earthlab/cross-sensor-cal/blob/janushi-main/BRDF-Topo-HyTools/Topo%20and%20Brdf%20Corr/image_correct.py)
 Purpose: Reads the generated JSON configuration file and applies the specified TOPO and BRDF corrections to the imagery.
 Execution: Run the script with the configuration file as a command-line argument.
 ```python image_correct.py <path-to-config-file>```
-```python BRDF-Topo-HyTools/Topo-and-Brdf-Corr/image_correct.py BRDF-Topo-HyTools/output/config_1.json``` 
+```python image_correct.py output/config_0.json``` 
 
 ### Overview for config_generator.py
 The config_generator.py script is designed to automate the creation of configuration files for topographic (TOPO) and Bidirectional Reflectance Distribution Function (BRDF) corrections of geospatial imagery. It allows customization to accommodate different correction methods and input formats.
