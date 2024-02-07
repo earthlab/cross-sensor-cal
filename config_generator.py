@@ -51,10 +51,10 @@ bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
 
 # Input data settings for ENVI
 file_type = 'envi'
-main_image_file = r"NEON_D13_NIWO_DP1_20170904_181819_reflectance.h5"
+main_image_file = r"output/NEON_D13_NIWO_DP1_20170904_181819_reflectance"
 
 # Assuming all ancillary files are in the same directory as the main file
-anc_files = glob.glob("BRDF-Topo-HyTools/output/NEON_*_ancillary*")
+anc_files = glob.glob("output/NEON_*_ancillary*")
 anc_files.sort()
 
 print(anc_files)
@@ -156,7 +156,7 @@ for i, anc_file in enumerate(anc_files):
     config_dict['num_cpus'] = 1
     
     # Output path for configuration file
-    config_file = f"BRDF-Topo-HyTools/output/config_{i}.json"
+    config_file = f"output/config_{i}.json"
 
     config_dict["resample"]  = False
     config_dict["resampler"]  = {}

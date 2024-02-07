@@ -199,7 +199,7 @@ Run the script from the command line with the dataset path and output folder.
 Optional flag -anc to export ancillary data.
 Example:
 ```python neon2envi2.py <path-to-dataset_name> <path-to-output_folder> -anc```
-```python BRDF-Topo-HyTools/Topo-and-Brdf-Corr/neon2envi2.py NEON_D13_NIWO_DP1_20170904_181819_reflectance.h5 BRDF-Topo-HyTools/output -anc```
+```python neon2envi2.py NEON_D13_NIWO_DP1_20170904_181819_reflectance.h5 output -anc```
 
 2. config_generator.py: Configuration File Generation, code: [config_generator.py](https://github.com/earthlab/cross-sensor-cal/blob/janushi-main/BRDF-Topo-HyTools/Topo%20and%20Brdf%20Corr/config_generator.py)
 Functionality: Generates JSON configuration files for applying topographic (TOPO) and Bidirectional Reflectance Distribution Function (BRDF) corrections.
