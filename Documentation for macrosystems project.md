@@ -192,6 +192,9 @@ The application of topographic correction using the SCS+C method is vital in ens
 This documentation covers a comprehensive workflow for processing NEON data using Python scripts. The process involves converting NEON data to ENVI format, generating configuration files for topographic and BRDF corrections, and applying these corrections to the imagery.
 
 ### Python Scripts Description
+0. Copy over files
+```cp ~/data-store/data/iplant/home/shared/earthlab/macrosystems/Topo_Corr/NIWO_RMNP-Full-Data ~/data-store/cross-sensor-cal -r```
+
 1. neon2envi2.py: NEON to ENVI Conversion, code: [neon2envi.py](https://github.com/earthlab/cross-sensor-cal/blob/janushi-main/BRDF-Topo-HyTools/Topo%20and%20Brdf%20Corr/neon2envi2.py)
 Purpose: Converts NEON AOP H5 data files to ENVI format.
 Usage:
@@ -213,6 +216,9 @@ Purpose: Reads the generated JSON configuration file and applies the specified T
 Execution: Run the script with the configuration file as a command-line argument.
 ```python image_correct.py <path-to-config-file>```
 ```python image_correct.py output/config_0.json``` 
+
+4. Copy export files to data-store
+```cp ~/data-store/cross-sensor-cal/exports ~/data-store/data/iplant/home/shared/earthlab/macrosystems/Topo_Corr -r```
 
 ### Overview for config_generator.py
 The config_generator.py script is designed to automate the creation of configuration files for topographic (TOPO) and Bidirectional Reflectance Distribution Function (BRDF) corrections of geospatial imagery. It allows customization to accommodate different correction methods and input formats.
