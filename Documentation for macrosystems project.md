@@ -217,6 +217,9 @@ Execution: Run the script with the configuration file as a command-line argument
 ```python image_correct.py <path-to-config-file>```
 ```python image_correct.py output/config_0.json``` 
 
+```gdal_translate -of GTiff export/NEON_D13_NIWO_DP1_20170904_181819_reflectance__corrected_0 output_file.tif```
+```gdal_translate -of GTiff output/NEON_D13_NIWO_DP1_20170904_181819_reflectance output_file.tif```
+
 4. Copy export files to data-store
 ```cp ~/data-store/cross-sensor-cal/exports ~/data-store/data/iplant/home/shared/earthlab/macrosystems/Topo_Corr -r```
 
