@@ -57,7 +57,7 @@ main_image_file = r"output/ENVI"
 anc_files = glob.glob("output/*_ancillary*")
 anc_files.sort()
 
-print(anc_files)
+#print(anc_files)
 
 # Ancillary files related to each image file
 aviris_anc_names = ['path_length', 'sensor_az', 'sensor_zn',

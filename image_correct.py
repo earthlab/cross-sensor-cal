@@ -56,12 +56,12 @@ def main():
     with open(config_file, 'r') as outfile:
         config_dict = json.load(outfile)
 
-    print(config_dict)
+    #print(config_dict)
     
     images = config_dict["input_files"]
 
-    print(images)
-    print(config_dict['file_type'])
+    #print(images)
+    #print(config_dict['file_type'])
     
     if ray.is_initialized():
         ray.shutdown()
@@ -74,7 +74,7 @@ def main():
     if config_dict['file_type'] == 'envi':
         anc_files = config_dict["anc_files"]
         
-        print([(image,config_dict['file_type'], anc_files[image]) for a,image in zip(actors,images)])
+       # print([(image,config_dict['file_type'], anc_files[image]) for a,image in zip(actors,images)])
         
         _ = ray.get([a.read_file.remote(image,config_dict['file_type'],
                                          anc_files[image]) for a,image in zip(actors,images)])
