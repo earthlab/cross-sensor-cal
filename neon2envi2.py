@@ -76,7 +76,10 @@ def export_anc(hy_obj, args_and_image):
         anc_header['wavelength'] = np.nan
         anc_header['data type'] = 4  # Assuming float32 data type
 
-        output_name = f"{args.output_dir}{os.path.basename(os.path.splitext(hy_obj.file_name)[0])}_ancillary"
+        #output_name = f"{args.output_dir}{os.path.basename(os.path.splitext(hy_obj.file_name)[0])}_ancillary"
+
+        output_name = f"{args.output_dir}_ancillary"
+        
         writer = WriteENVI(output_name, anc_header)
         
         # Write bands
@@ -118,7 +121,8 @@ def main():
     _ = ray.get([a.read_file.remote(image, 'neon') for a, image in zip(actors, args.images)])
 
     def neon_to_envi(hy_obj):
-        basemame = os.path.basename(os.path.splitext(hy_obj.file_name)[0])
+        #basemame = os.path.basename(os.path.splitext(hy_obj.file_name)[0])
+        basemame = "ENVI"
         print("Exporting %s " % basemame)
         output_name = args.output_dir + basemame
         writer = WriteENVI(output_name, hy_obj.get_header())

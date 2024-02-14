@@ -44,17 +44,17 @@ import os
 current_working_directory = os.getcwd()
 
 # print output to the console
-print(current_working_directory)
+#print(current_working_directory)
 
 # Only coefficients for good bands will be calculated
 bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
 
 # Input data settings for ENVI
 file_type = 'envi'
-main_image_file = r"output/NEON_D13_NIWO_DP1_20170904_181819_reflectance"
+main_image_file = r"output/ENVI"
 
 # Assuming all ancillary files are in the same directory as the main file
-anc_files = glob.glob("output/NEON_*_ancillary*")
+anc_files = glob.glob("output/*_ancillary*")
 anc_files.sort()
 
 print(anc_files)
