@@ -48,6 +48,13 @@ Locate your environment.yml file. This should include all dependencies from name
 7.  Environment Ready
     After these steps, your environment is set up and ready for project work.
 
+
+## BASH
+```conda activate macrosystems```
+```bash correct.sh NEON_D13_NIWO_DP1_20170904_181819_reflectance.h5```
+
+
+
 ## Topographic Correction using methods for NIWO (multiple flightlines)
 **Data Product Name:** NEON_D13_NIWO_DP3_449000_4435000_reflectance.h5
 

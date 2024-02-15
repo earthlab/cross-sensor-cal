@@ -11,10 +11,10 @@ python config_generator.py
 
 python image_correct.py output/config_0.json
 
-output_after="${filename}__after_correction.tif"
+output_after="export/${filename}__after_correction.tif"
 
 gdal_translate -of GTiff export/ENVI__corrected_0 $output_after
 
-output_before="${filename}__before_correction.tif"
+output_before="export/${filename}__before_correction.tif"
 
 gdal_translate -of GTiff output/ENVI $output_before
