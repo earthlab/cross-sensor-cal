@@ -5,7 +5,7 @@
 This package contains two main files: `landsat_band_parameters.json` and `resampling_deom.py`. These are designed to facilitate the resampling of Landsat satellite data using the HyTools library.
 
 #### File Descriptions
-1. **landsat_band_parameters.json**: This JSON file contains parameters related to various Landsat missions (Landsat 5 TM, Landsat 7 ETM+, Landsat 8 OLI, and Landsat 9 OLI-2). For each mission, it lists the wavelengths (in nanometers) and full-width at half maximum (FWHM) values for different bands.
+1. **landsat_band_parameters.json**: This JSON file contains parameters related to various Landsat missions (Landsat 5 TM, Landsat 7 ETM+, Landsat 8 OLI, and Landsat 9 OLI-2). For each mission, it lists the center wavelengths (in nanometers) and full-width at half maximum (FWHM) values for different bands.
 
 2. **resampling_deom.py**: A Python script that implements a resampling process for Landsat imagery. It defines a class `resampler_hy_obj` that initializes with sensor type and the JSON file path. The script uses functions from the HyTools library to apply resampling to the satellite data.
 
