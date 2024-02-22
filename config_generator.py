@@ -136,8 +136,8 @@ for i, anc_file in enumerate(anc_files):
     config_dict["brdf"]['sample_perc'] = 0.1
     config_dict["brdf"]['geometric'] = 'li_dense_r'
     config_dict["brdf"]['volume'] = 'ross_thick'
-    config_dict["brdf"]["b/r"] = 10
-    config_dict["brdf"]["h/b"] = 2
+    config_dict["brdf"]["b/r"] = 10  #these may need updating. These constants pulled from literature. 
+    config_dict["brdf"]["h/b"] = 2  # These may need updating. These contanstants pulled from literature.
     config_dict["brdf"]['interp_kind'] = 'linear'
     config_dict["brdf"]['calc_mask'] = [["ndi", {'band_1': 850, 'band_2': 660, 'min': 0.1, 'max': 1.0}]]
     config_dict["brdf"]['apply_mask'] = [["ndi", {'band_1': 850, 'band_2': 660, 'min': 0.1, 'max': 1.0}]]
