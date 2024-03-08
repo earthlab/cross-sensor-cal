@@ -109,7 +109,7 @@ ggsave(grid.arrange(before_day_density, after_day_density, nrow = 2), file="day_
 
 ```{r}
 library(gbm)
-for_predict <- after_y %>% select(wavelength_nm)
+for_predict <- after_y |> select(wavelength_nm)
 
 boost_ants1 <- gbm(reflectance ~ wavelength_nm, data=after_y, 
                   n.trees=500, interaction.depth=15, shrinkage=0.09,
@@ -139,4 +139,56 @@ after_y |>
               aes(x=wavelength_nm, y=boosted_predictions),
               linetype=2, color="red")
 ```
+
+
+
+```{r}
+library(reshape)
+library("viridis")  
+library(RColorBrewer)
+
+
+
+quantiles_of_reflectance <- function(one_species_data){
+  
+ 
+for_predict <- one_species_data %>% select(wavelength_nm)
+to_fill <- data.frame(matrix(NA, ncol=100, nrow=nrow(one_species_data)))
+colnames(to_fill)<- paste0(rep("qt",100), seq(1,100))
+
+counter <- 1
+for(i in seq(0.01,0.99,by=0.01)){
+boost_me <- gbm(reflectance ~ wavelength_nm, data=one_species_data, 
+                  n.trees=2000, interaction.depth=49, shrinkage=0.01,
+                  bag.fraction=0.5,distribution=list(name = "quantile", alpha = i))
+to_fill[,counter] <- predict(boost_me, newdata=for_predict)
+counter <- counter + 1
+print(counter)
+}
+#to_fill <- to_fill[,1:10]
+
+
+melted_plot_data <- melt(to_fill, id.qt = "quantile")
+wv_repeat <- data.frame(matrix(for_predict[,1], nrow=nrow(for_predict)*10, ncol=1))
+  bound_quantiles <- cbind(wv_repeat, melted_plot_data)
+colnames(bound_quantiles) <- c("wavelength_nm","quantile","reflectance")
+prob_density <- bound_quantiles %>% 
+  mutate(probability_density = substring(quantile, 3))%>% 
+  mutate(probability_density_original = substring(quantile, 3))
+
+prob_density$probability_density <- as.numeric(prob_density$probability_density)/100
+prob_density$probability_density[which(prob_density$probability_density > 0.5)] <- 1 - prob_density$probability_density[which(prob_density$probability_density > 0.5)] 
+    
+prob_density$probability_density_original <- as.numeric(prob_density$probability_density_original)/100
+
+
+return(prob_density)
+}
+
+prob_density_model <- quantiles_of_reflectance(after_y)
+
+```
+
+
+
 
