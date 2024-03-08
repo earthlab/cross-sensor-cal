@@ -4,39 +4,51 @@ format: html
 editor: visual
 ---
 
-
-
 ```{r}
+library(tidyverse)
 library(terra)
+library(ggplot2)
+library(ggthemes)
+
+layer <- rast("NEON_D13_NIWO_DP1_20170904_181819_reflectance__before_correction.tif")
+df <- layer |> as.data.frame()
+getwd()
+
+strsplit(names(df), " ") |> as.data.frame() -> newnames  
+names(df) <- newnames[1,] |> as.numeric()
+before_df <- df |> rownames_to_column()
+
 layer <- rast("NEON_D13_NIWO_DP1_20170904_181819_reflectance__after_correction.tif")
 df <- layer |> as.data.frame()
 getwd()
 
 strsplit(names(df), " ") |> as.data.frame() -> newnames  
 names(df) <- newnames[1,] |> as.numeric()
-df <- df |> rownames_to_column()
-plot(df)
+after_df <- df |> rownames_to_column()
+
 ```
 
-
 ```{r}
-df |>
+before_df |>
   slice_sample(n=50000) |> # This is where we add the vegetation classification. 
    pivot_longer(!rowname, names_to = "wavelength_nm", values_to = "reflectance")|>
-  mutate(wavelength_nm = as.numeric(wavelength_nm)) -> y
+  mutate(wavelength_nm = as.numeric(wavelength_nm)) -> before_y
+
+after_df |>
+  slice_sample(n=50000) |> # This is where we add the vegetation classification. 
+   pivot_longer(!rowname, names_to = "wavelength_nm", values_to = "reflectance")|>
+  mutate(wavelength_nm = as.numeric(wavelength_nm)) -> after_y
 ```
 
-
 ```{r}
-library(ggplot2)
-library(ggthemes)
+
 our_yellow <- "yellow"
 our_green <- "green"
 our_grey <- "gray80"
 our_white <- "white"
 
 
-day_density <- ggplot(data=y, aes(x=wavelength_nm, y=reflectance))+ 
+before_day_density <- ggplot(data=before_y, aes(x=wavelength_nm, y=reflectance))+ 
   stat_smooth( color=our_green, fill="lightgrey")+
   geom_density2d(colour="black", bins=10, alpha=0.1)+
   stat_density2d(aes(alpha=..level.., fill=..level..), linewidth=2, 
@@ -58,15 +70,39 @@ day_density <- ggplot(data=y, aes(x=wavelength_nm, y=reflectance))+
 axis.title.y=element_blank())
 #day_density
   
+
+
+
+after_day_density <- ggplot(data=after_y, aes(x=wavelength_nm, y=reflectance))+ 
+  stat_smooth( color=our_green, fill="lightgrey")+
+  geom_density2d(colour="black", bins=10, alpha=0.1)+
+  stat_density2d(aes(alpha=..level.., fill=..level..), linewidth=2, 
+        bins=10, geom="polygon") + 
+    scale_fill_gradient(low = our_white, high = our_yellow) +
+  
+    scale_alpha(range = c(0.00, 0.8), guide = FALSE) +
+  
+  theme_tufte() +
+  xlab("wavelength") +
+  ylab("reflectance")+
+  ylim(0,16000)+
+  theme(aspect.ratio=5/14, axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,colour =c("darkblue","blue","green", "red", "darkred", "darkred","darkred", "darkred", "darkred", "black","black","black","black"))) +
+  scale_x_continuous(breaks=c(443,490,560,665,705,740,783,842,865,940,1610,2190)) + theme(axis.title.x=element_blank(),
+  plot.margin = margin(t = 30,  # Top margin
+                             r = 10,  # Right margin
+                             b = 40,  # Bottom margin
+                             l = 18),       
+axis.title.y=element_blank())
+
+
+
+
+
+
+
 ```
-
-
 
 ```{r}
-ggsave(day_density, file="day_density.png", dpi=600, width=11, height=8.5)
+library(gridExtra)
+ggsave(grid.arrange(before_day_density, after_day_density, ncol = 2), file="day_density_before.png", dpi=600, width=11, height=8.5)
 ```
-
-
-
-
-
