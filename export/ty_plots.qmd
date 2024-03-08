@@ -104,10 +104,13 @@ axis.title.y=element_blank())
 
 ```{r}
 library(gridExtra)
-ggsave(grid.arrange(before_day_density, after_day_density, nrow = 2), file="day_density_before.png", dpi=600, width=11, height=8.5)
+ggsave(grid.arrange(before_day_density, after_day_density, nrow = 2), file="day_density_before_and_after.png", dpi=600, width=11, height=8.5)
 ```
 
 ```{r}
+library(gbm)
+for_predict <- after_y %>% select(wavelength_nm)
+
 boost_ants1 <- gbm(reflectance ~ wavelength_nm, data=after_y, 
                   n.trees=500, interaction.depth=15, shrinkage=0.09,
                   bag.fraction=10,distribution=list(name = "quantile", alpha = 0.01))
@@ -124,7 +127,7 @@ preds2 <- cbind(ants, boosted_predictions = boost_preds)
 
 
 ```{r}
-after_y %>% 
+after_y |>
     ggplot() +
     # geom_line(data=ants, 
     #           aes(x=wavelength_nm, y=reflectance),
