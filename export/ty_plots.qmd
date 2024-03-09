@@ -115,14 +115,17 @@ boost_ants1 <- gbm(reflectance ~ wavelength_nm, data=after_y,
                   n.trees=500, interaction.depth=15, shrinkage=0.09,
                   bag.fraction=10,distribution=list(name = "quantile", alpha = 0.01))
 boost_preds <- predict(boost_ants1, newdata=for_predict)
-preds1 <- cbind(ants, boosted_predictions = boost_preds)
+preds1 <- cbind(after_y, boosted_predictions_01 = boost_preds)
 
-
-boost_ants1 <- gbm(reflectance ~ wavelength_nm, data=after_y, 
+time_a <- Sys.time()
+boost_ants2 <- gbm(reflectance ~ wavelength_nm, data=after_y, 
                   n.trees=500, interaction.depth=15, shrinkage=0.1,
                   bag.fraction=1,distribution=list(name = "quantile", alpha = 0.99))
-boost_preds <- predict(boost_ants1, newdata=for_predict)
-preds2 <- cbind(ants, boosted_predictions = boost_preds)
+boost_preds2 <- predict(boost_ants2, newdata=for_predict)
+preds2 <- cbind(after_y, boosted_predictions_99 = boost_preds2)
+
+time_b <- Sys.time()
+difftime(time_b, time_a)
 ```
 
 
