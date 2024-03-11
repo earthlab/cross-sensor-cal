@@ -3,6 +3,7 @@ from hytools.transform.resampling import apply_resampler
 import numpy as np
 import spectral
 import json 
+import matplotlib.pyplot as plt
 
 class resampler_hy_obj:
 
@@ -66,6 +67,7 @@ class resampler_hy_obj:
 
             If the wavelength information is not found in the header file, the method raises a ValueError, indicating the absence of this crucial data. This method is essential for processing spectral data as it provides the fundamental wavelength values needed for various analytical processes, such as resampling.
         """
+        
         header = spectral.envi.read_envi_header(hdr_path)
 
         # Extract wavelength information
@@ -136,21 +138,20 @@ class resampler_hy_obj:
         """
         spectral.envi.save_image(output_filename, data, metadata=header_info, force=True)
 
-
 def load_envi_data(filename):
-    """
-        Load hyperspectral data from an ENVI binary file.
+        """
+            Load hyperspectral data from an ENVI binary file.
 
-        :param filename: The filename of the ENVI binary file (without the .hdr extension).
-        :return: The loaded hyperspectral data as a spectral image object.
-    """
-    # Add .hdr extension to get the header file
-    hdr_filename = filename + '.hdr'
-    # Read the ENVI data
-    img = spectral.open_image(hdr_filename)
-    # Load the data into memory (optional, depends on the data size and memory capacity)
-    data = img.load()
-    return data
+            :param filename: The filename of the ENVI binary file (without the .hdr extension).
+            :return: The loaded hyperspectral data as a spectral image object.
+        """
+        # Add .hdr extension to get the header file
+        hdr_filename = filename + '.hdr'
+        # Read the ENVI data
+        img = spectral.open_image(hdr_filename)
+        # Load the data into memory (optional, depends on the data size and memory capacity)
+        data = img.load()
+        return data
 
 # Parsing command-line arguments
 parser = argparse.ArgumentParser(description='Landsat data resampling script')
@@ -173,13 +174,17 @@ resampler_config_obj = resampler_hy_obj(sensor_type, json_file, hdr_path)
 
 # Generate header information
 header_info = resampler_config_obj.create_header_info(hdr_path)
-
+print(header_info)
 # call the resampling code # Usage
 filename = resampling_file_path
+
+
 data = load_envi_data(filename)
 final_resampled_data = apply_resampler(resampler_config_obj, data)
 
+plt.plot(final_resampled_data,resample[0])
+plt.ylim(0,.6)
 
 output_file_path = output_path
 # save the data after resampling
-resampler_config_obj.save_envi_data(final_resampled_data, header_info, output_file_path + "output_file")
+resampler_config_obj.save_envi_data(data=final_resampled_data, header_info=header_info, output_filename = "output_file.hdr")
