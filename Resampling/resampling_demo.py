@@ -182,9 +182,9 @@ filename = resampling_file_path
 data = load_envi_data(filename)
 final_resampled_data = apply_resampler(resampler_config_obj, data)
 
-plt.plot(final_resampled_data,resample[0])
-plt.ylim(0,.6)
+#plt.plot(final_resampled_data)
+#plt.ylim(0,.6)
 
 output_file_path = output_path
 # save the data after resampling
-resampler_config_obj.save_envi_data(data=final_resampled_data, header_info=header_info, output_filename = "output_file.hdr")
+resampler_config_obj.save_envi_data(data=final_resampled_data, header_info=header_info, output_filename = "export/resampled_for_landsat.hdr")

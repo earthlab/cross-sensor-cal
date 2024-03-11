@@ -23,3 +23,8 @@ filename="${1%.h5}"
 #python Resampling/resampling_demo.py --json_file, --hdr_path, --sensor_type, --resampling_file_path, --output_path
 
 python Resampling/resampling_demo.py --resampling_file_path export/ENVI__corrected_0 --json_file Resampling/landsat_band_parameters.json --hdr_path export/ENVI__corrected_0.hdr  --sensor_type='Landsat 8 OLI' --output_path export/landsat_resample
+
+
+output_before="export/resample__after_correction.tif"
+
+gdal_translate -of GTiff output/ENVI $output_before
