@@ -187,4 +187,4 @@ final_resampled_data = apply_resampler(resampler_config_obj, data)
 
 output_file_path = output_path
 # save the data after resampling
-resampler_config_obj.save_envi_data(data=final_resampled_data, header_info=header_info, output_filename = "export/resampled_for_landsat.hdr")
+resampler_config_obj.save_envi_data(data=final_resampled_data, header_info=header_info, output_filename = output_path)
