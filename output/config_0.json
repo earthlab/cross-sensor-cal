@@ -19,44 +19,44 @@
    ],
    "file_type": "envi",
    "input_files": [
-      "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance"
+      "output/ENVI"
    ],
    "anc_files": {
-      "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance": {
+      "output/ENVI": {
          "path_length": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             0
          ],
          "sensor_az": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             1
          ],
          "sensor_zn": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             2
          ],
          "solar_az": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             3
          ],
          "solar_zn": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             4
          ],
          "phase": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             5
          ],
          "slope": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             6
          ],
          "aspect": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             7
          ],
          "cosine_i": [
-            "output/NEON_D13_NIWO_DP1_20170904_181819_reflectance_ancillary",
+            "output/_ancillary",
             8
          ]
       }
