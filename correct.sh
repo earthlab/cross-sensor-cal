@@ -1,6 +1,7 @@
 #!/bin/bash
 
 
+
 echo "$1"
 
 filename="${1%.h5}"

@@ -50,9 +50,13 @@ Locate your environment.yml file. This should include all dependencies from name
 
 
 ## BASH
-```conda activate macrosystems```
-```bash correct.sh NEON_D13_NIWO_DP1_20170904_181819_reflectance.h5```
-```pip install spectral```
+```
+conda activate macrosystems
+pip install spectral
+```
+
+```bash correct.sh NEON_D13_NIWO_DP1_20200801_161441_reflectance.h5```
+
 ```bash resample.sh export/ENVI__corrected_0```
 
 
