@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 import hytools as ht
 import numpy as np
+import numpy as np
+from sklearn.ensemble import GradientBoostingRegressor
 
 import random
 import hytools as ht
@@ -345,8 +347,6 @@ def plot_with_highlighted_sensors(concatenated_sensors, highlight_pixels, save_p
 
 pass
 
-import numpy as np
-from sklearn.ensemble import GradientBoostingRegressor
 
 def fit_models_with_different_alpha(data, n_levels=100):
     data['reflectance'] = data['reflectance'].replace(np.nan, 0)
