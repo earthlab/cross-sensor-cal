@@ -397,7 +397,7 @@ def plot_with_highlighted_sensors(concatenated_sensors, highlight_pixels, save_p
             for highlight_pixel in highlight_pixels:
                 highlighted_subset = concatenated_sensors[(concatenated_sensors['pixel'] == highlight_pixel) & (concatenated_sensors['sensor'] == sensor)]
                 if not highlighted_subset.empty:
-                    plt.plot(highlighted_subset['wavelength_nm'], highlighted_subset['0.50'], color='red', linewidth=10, label=sensor)
+                    plt.plot(highlighted_subset['wavelength_nm'], highlighted_subset['0.50'], linewidth=10, label=sensor)
     
     plt.xlabel('Wavelength (nm)')
     plt.ylabel('Reflectance')
