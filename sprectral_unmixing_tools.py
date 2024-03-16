@@ -56,6 +56,8 @@ def get_spectral_data_and_wavelengths(filename, row_step, col_step):
     return original, wavelengths
 pass
 
+###############################################################
+
 def load_spectra(filenames, row_step=6, col_step=1):
     results = {}
     for filename in filenames:
@@ -65,16 +67,6 @@ def load_spectra(filenames, row_step=6, col_step=1):
         except TypeError:
             print(f"Error processing file: {filename}")
     return results
-
-# Define your list of filenames
-filenames = [
-    "export/resample_landsat5.img",
-    "export/resample_landsat7.img",
-    "export/resample_landsat8.img",
-    "export/resample_landsat9.img",
-    "export/ENVI__corrected_0",
-    "output/ENVI"
-]
 
 pass
 
@@ -170,6 +162,335 @@ def rasterize_polygons_to_match_envi(gpkg_path, existing_raster_path, output_ras
     print(f"Rasterization complete. Output saved to {output_raster_path}")
 
 pass
+
+def prepare_spectral_data(spectral_data, wavelengths):
+    # Transpose and melt the spectral data to long format
+    long_df = pd.melt(pd.DataFrame(spectral_data).transpose(), var_name="band", value_name="reflectance")
+    
+    # Create a DataFrame for wavelengths and assign a 'band' column based on index
+    waves = pd.DataFrame(wavelengths, columns=["wavelength_nm"])
+    waves['band'] = range(len(waves))
+    
+    # Merge the spectral data with wavelengths using the 'band' column
+    merged_data = pd.merge(long_df, waves, on='band')
+    
+    # Convert 'wavelength_nm' to numeric, if necessary
+    merged_data["wavelength_nm"] = pd.to_numeric(merged_data["wavelength_nm"])
+    
+    return merged_data
+
+pass
+
+def reshape_spectra(results, index):
+    keys = list(results.keys())
+    if index < 0 or index >= len(keys):
+        print("Index out of range")
+        return None
+
+    first_key = keys[index]
+    spectral_data = results[first_key]['spectral_data']
+    wavelengths = results[first_key]['wavelengths']
+
+    if index < 4:
+        df_spectral_data = pd.DataFrame(spectral_data, columns=wavelengths.astype(str))
+        long_df = pd.melt(df_spectral_data, var_name="wavelength_nm", value_name="reflectance")
+        waves = pd.DataFrame(wavelengths, columns=["wavelength_nm"])
+        waves['band'] = range(len(waves))
+        long_df["wavelength_nm"] = pd.to_numeric(long_df["wavelength_nm"])
+        merged_data = pd.merge(long_df, waves, on='wavelength_nm')
+        # Add a label column to the merged data
+        first_key = keys[index].replace("export/resample_", "").replace(".img", "")  # Modified here to remove "export/"
+        merged_data['sensor'] = first_key
+        merged_data = merged_data.reindex(columns=['sensor', 'band', 'wavelength_nm', 'reflectance','pixel'])
+        
+        length = len(merged_data)
+        sequence = np.arange(0, 1071)  # Creates an array [1, 2, ..., 999]
+        repeated_sequence = np.resize(sequence, length)  # Resize the sequence to match the DataFrame's length
+
+        merged_data['pixel'] = repeated_sequence  # Add the column to your DataFrame
+        merged_data['sensor_band'] = merged_data['sensor'].astype(str) + '_' + merged_data['band'].astype(str)
+        return merged_data
+    else:
+        merged_data = prepare_spectral_data(spectral_data, wavelengths)
+        # Add a label column to the merged data
+        first_key = keys[index].replace("export/ENVI__corrected_0", "hyperspectral_corrected")
+        first_key = first_key.replace("output/ENVI", "hyperspectral_original")
+        merged_data['sensor'] = first_key
+        merged_data = merged_data.reindex(columns=['sensor', 'band', 'wavelength_nm', 'reflectance','pixel'])
+        length = len(merged_data)
+        sequence = np.arange(0, 1071)  # Creates an array [1, 2, ..., 999]
+        repeated_sequence = np.resize(sequence, length)  # Resize the sequence to match the DataFrame's length
+
+        merged_data['pixel'] = repeated_sequence  # Add the column to your DataFrame
+        merged_data['sensor_band'] = merged_data['sensor'].astype(str) + '_' + merged_data['band'].astype(str)
+        return merged_data
+
+
+
+pass
+
+def concatenate_sensors(reshape_spectra_function, spectra, sensors_range):
+    all_spectra = []
+    for sensor in sensors_range:  # Typically range(6) for sensors 0 to 5
+        reshaped_spectra = reshape_spectra_function(spectra, sensor)
+        all_spectra.append(reshaped_spectra)
+    
+    # Concatenate all reshaped spectra DataFrames into one, preserving columns
+    concatenated_spectra = pd.concat(all_spectra, ignore_index=True)
+    return concatenated_spectra
+
+
+
+pass
+
+def plot_spectral_data(df, highlight_pixel):
+    df = df[df['wavelength_nm'] > 0]  # Exclude negative wavelength_nm values
+    df['reflectance'] = df['reflectance'].replace(-9999, np.nan)
+    unique_indices = df['pixel'].unique()
+
+    for idx in unique_indices:
+        subset = df[df['pixel'] == idx]
+        plt.plot(subset['wavelength_nm'], subset['reflectance'], alpha=0.05, color="blue")
+
+    # Highlight a specific pixel
+    highlighted_subset = df[df['pixel'] == highlight_pixel]
+    # Inside the plot_spectral_data function, after highlighting the specific pixel
+
+
+    if (highlighted_subset['reflectance'] == -9999).all() or highlighted_subset['reflectance'].isna().all():
+        print(f"Warning: Pixel {highlight_pixel} data is entirely -9999 or NaN.")
+
+    plt.plot(highlighted_subset['wavelength_nm'], highlighted_subset['reflectance'], color='red', linewidth=10, label=f'Pixel {highlight_pixel}')
+    
+    plt.xlabel('Wavelength (nm)')
+    plt.ylabel('Reflectance')
+    plt.legend()
+    plt.tight_layout()
+    plt.ylim(0, 10000)
+    plt.show()
+
+
+pass
+
+def plot_each_sensor_with_highlight(concatenated_sensors, highlight_pixel, save_path=None):
+    sensors = concatenated_sensors['sensor'].unique()
+    fig, axs = plt.subplots(len(sensors), 1, figsize=(10, 5 * len(sensors)))
+    
+    for i, sensor in enumerate(sensors):
+        df = concatenated_sensors[concatenated_sensors['sensor'] == sensor]
+        pixels = df['pixel'].unique()
+        
+        for pixel in pixels:
+            subset = df[df['pixel'] == pixel]
+            axs[i].plot(subset['wavelength_nm'], subset['reflectance'], alpha=0.05, color="blue")
+        
+        highlighted_subset = df[df['pixel'] == highlight_pixel]
+        if not highlighted_subset.empty and not highlighted_subset['reflectance'].isna().all():
+            axs[i].plot(highlighted_subset['wavelength_nm'], highlighted_subset['reflectance'], color='red', linewidth=2, label=f'Pixel {highlight_pixel}')
+        
+        axs[i].set_title(sensor)
+        axs[i].set_xlabel('Wavelength (nm)')
+        axs[i].set_ylabel('Reflectance')
+        axs[i].set_ylim(0, 10000)
+        axs[i].set_xlim(350, 2550)
+        axs[i].legend()
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, format=save_path.split('.')[-1])
+    plt.show()
+
+
+
+
+pass
+
+def plot_with_highlighted_sensors(concatenated_sensors, highlight_pixels, save_path=None):
+    plt.figure(figsize=(10, 5))
+    
+    # Ensure highlight_pixels is a list for iteration
+    if not isinstance(highlight_pixels, list):
+        highlight_pixels = [highlight_pixels]
+    
+    # Apply initial data cleaning
+    concatenated_sensors = concatenated_sensors[concatenated_sensors['wavelength_nm'] > 0]
+    concatenated_sensors['reflectance'] = concatenated_sensors['reflectance'].replace(-9999, np.nan)
+    
+    # Plotting hyperspectral corrected data in blue
+    hyperspectral_corrected = concatenated_sensors[concatenated_sensors['sensor'] == 'hyperspectral_corrected']
+    for pixel in hyperspectral_corrected['pixel'].unique():
+        subset = hyperspectral_corrected[hyperspectral_corrected['pixel'] == pixel]
+        plt.plot(subset['wavelength_nm'], subset['reflectance'], alpha=0.05, color="blue")
+    
+    # Overlaying highlighted lines from each sensor in red
+    for sensor in concatenated_sensors['sensor'].unique():
+        if sensor != 'hyperspectral_corrected':  # Exclude hyperspectral corrected data from red lines
+            for highlight_pixel in highlight_pixels:
+                highlighted_subset = concatenated_sensors[(concatenated_sensors['pixel'] == highlight_pixel) & (concatenated_sensors['sensor'] == sensor)]
+                if not highlighted_subset.empty:
+                    plt.plot(highlighted_subset['wavelength_nm'], highlighted_subset['reflectance'], color='red', linewidth=2, label=sensor)
+    
+    plt.xlabel('Wavelength (nm)')
+    plt.ylabel('Reflectance')
+    plt.ylim(0, None)  # Adjusted to auto-scale based on data
+    plt.xlim(350, 2550)
+    plt.legend()
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, format=save_path.split('.')[-1])
+    plt.show()
+
+
+
+pass
+
+import numpy as np
+from sklearn.ensemble import GradientBoostingRegressor
+
+def fit_models_with_different_alpha(data, n_levels=100):
+    data['reflectance'] = data['reflectance'].replace(np.nan, 0)
+    
+    X = data[['wavelength_nm']]
+    y = data['reflectance']
+    
+    # Store models and predictions
+    models = []
+    alphas = np.linspace(0.01, 0.99, n_levels)
+    
+    for alpha in alphas:
+        model = GradientBoostingRegressor(n_estimators=500, max_depth=15, learning_rate=0.09,
+                                          subsample=0.1, loss='quantile', alpha=alpha)
+        model.fit(X, y)
+        models.append(model)
+        
+        # You can also store predictions if needed
+        data[f'{alpha:.2f}'] = model.predict(X)
+    
+    return models, data
+
+
+pass
+
+
+def plot_with_highlighted_sensors(concatenated_sensors, highlight_pixels, save_path=None):
+    plt.figure(figsize=(10, 5))
+    
+    # Ensure highlight_pixels is a list for iteration
+    if not isinstance(highlight_pixels, list):
+        highlight_pixels = [highlight_pixels]
+    
+    # Apply initial data cleaning
+    concatenated_sensors = concatenated_sensors[concatenated_sensors['wavelength_nm'] > 0]
+    #concatenated_sensors['boosted_predictions_01'] = concatenated_sensors['boosted_predictions_01'].replace(-9999, np.nan)
+    concatenated_sensors['reflectance'] = concatenated_sensors['reflectance'].replace(-9999, np.nan)
+    
+    # Plotting hyperspectral corrected data in blue
+    hyperspectral_corrected = concatenated_sensors[concatenated_sensors['sensor'] == 'hyperspectral_corrected']
+    for pixel in hyperspectral_corrected['pixel'].unique():
+        subset = hyperspectral_corrected[hyperspectral_corrected['pixel'] == pixel]
+        plt.plot(subset['wavelength_nm'], subset['reflectance'], alpha=0.05, color="blue")
+    
+    # Overlaying highlighted lines from each sensor in red
+    for sensor in concatenated_sensors['sensor'].unique():
+        if sensor != 'hyperspectral_corrected':  # Exclude hyperspectral corrected data from red lines
+            for highlight_pixel in highlight_pixels:
+                highlighted_subset = concatenated_sensors[(concatenated_sensors['pixel'] == highlight_pixel) & (concatenated_sensors['sensor'] == sensor)]
+                if not highlighted_subset.empty:
+                    plt.plot(highlighted_subset['wavelength_nm'], highlighted_subset['0.50'], color='red', linewidth=10, label=sensor)
+    
+    plt.xlabel('Wavelength (nm)')
+    plt.ylabel('Reflectance')
+    plt.ylim(0, 10000)  # Adjusted to auto-scale based on data
+    plt.xlim(350, 2550)
+    plt.legend()
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, format=save_path.split('.')[-1])
+    plt.show()
+
+
+
+
+pass
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def boosted_quantile_plot(data, num_lines=10, title='Hyperspectral Corrected Predictions by Alpha', save_path=None):
+    plt.figure(figsize=(10, 6))
+    total_alphas = 100
+    step = total_alphas // num_lines
+
+# Plotting hyperspectral corrected data in blue
+    hyperspectral_corrected = concatenated_sensors[concatenated_sensors['sensor'] == 'hyperspectral_corrected']
+    for pixel in hyperspectral_corrected['pixel'].unique():
+        subset = hyperspectral_corrected[hyperspectral_corrected['pixel'] == pixel]
+        plt.plot(subset['wavelength_nm'], subset['reflectance'], alpha=0.04, color="blue", linewidth=0.3)
+    
+    alpha_values = np.linspace(0.01, 0.99, total_alphas)[::step]
+    for alpha_value in alpha_values:
+        alpha_col = f'{alpha_value:.2f}'
+        adjusted_alpha = 1 - alpha_value if alpha_value > 0.5 else alpha_value
+        plt.plot(data['wavelength_nm'], data[alpha_col], label=f'Probability {alpha_col}', alpha=adjusted_alpha ,color="red", linewidth=adjusted_alpha*6)
+    
+    plt.xlabel('Wavelength (nm)')
+    plt.ylabel('Predicted Reflectance')
+    plt.title(title)
+    plt.ylim(0, 10000)
+    plt.xlim(350, 2550)
+    plt.legend(loc='best', fontsize='small')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+    plt.show()
+
+
+pass
+
+def boosted_quantile_plot_by_sensor(data, num_lines=10, title='Hyperspectral Corrected Predictions by Alpha', save_path=None):
+    sensors = data['sensor'].unique()[:6]  # Limit to the first 6 sensors
+    total_alphas = 100
+    step = total_alphas // num_lines
+    num_sensors = len(sensors)
+    
+    plt.figure(figsize=(10, 40))  # Adjusting the figure size
+    
+    for i, sensor in enumerate(sensors, 1):
+        plt.subplot(num_sensors, 1, i)  # Creating a subplot for each sensor
+        sensor_data = data[data['sensor'] == sensor]
+        
+        # Plotting data specific to each sensor
+        for pixel in sensor_data['pixel'].unique():
+            subset = sensor_data[sensor_data['pixel'] == pixel]
+            plt.plot(subset['wavelength_nm'], subset['reflectance'], alpha=0.04, color="blue", linewidth=0.3)
+        
+        alpha_values = np.linspace(0.01, 0.99, total_alphas)[::step]
+        for alpha_value in alpha_values:
+            alpha_col = f'{alpha_value:.2f}'
+            adjusted_alpha = 1 - alpha_value if alpha_value > 0.5 else alpha_value
+            adjusted_label = f'{adjusted_alpha:.2f}'  # Label reflects adjusted alpha
+            plt.plot(sensor_data['wavelength_nm'], sensor_data[alpha_col], label=f'Probability {adjusted_label}', alpha=adjusted_alpha, color="red", linewidth=adjusted_alpha*6)
+        
+        plt.xlabel('Wavelength (nm)')
+        plt.ylabel(f'Predicted Reflectance for {sensor}')
+        plt.title(f'{title} - {sensor}')
+        plt.ylim(0, 10000)
+        plt.xlim(350, 2550)
+        plt.legend(loc='best', fontsize='small')
+        plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+    plt.show()
+
+
+
+pass
+
+
 
 # If module-level execution is needed, guard it:
 if __name__ == "__main__":
