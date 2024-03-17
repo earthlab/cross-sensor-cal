@@ -21,6 +21,29 @@ from rasterio.plot import show
 from rasterio.features import rasterize
 from shapely.geometry import box
 import numpy as np
+import requests
+import os
+
+def download_neon_files_by_name(file_patterns, site_code, product_code, year_month):
+    server = 'http://data.neonscience.org/api/v0/'
+    # Updated to include year and month in the request URL
+    data_url = f'{server}data/{product_code}/{site_code}/{year_month}'
+
+    response = requests.get(data_url)
+    if response.status_code == 200:
+        print("Data retrieved successfully!")
+        data_json = response.json()
+        # Iterate through files in the JSON response
+        for file_info in data_json['data']['files']:
+            for pattern in file_patterns:
+                if pattern in file_info['name']:
+                    print(f"Downloading {file_info['name']} from {file_info['url']}")
+                    os.system(f'wget --no-check-certificate "{file_info["url"]}" -O "{file_info["name"]}"')
+                    break  # Move to the next file after a successful match and download
+    else:
+        print(f"Failed to retrieve data. Status code: {response.status_code}, Response: {response.text}")
+
+pass
 
 
 def get_spectral_data_and_wavelengths(filename, row_step, col_step):
