@@ -10,7 +10,8 @@ import hytools as ht
 import numpy as np
 import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
-
+import subprocess
+import h5py
 import random
 import hytools as ht
 import numpy as np
@@ -54,6 +55,28 @@ def download_neon_file(site_code, product_code, year_month, flight_line):
 
 pass
 
+
+import subprocess
+
+def process_hdf5_with_neon2envi(image_path, site_code):
+    command = [
+        "/opt/conda/envs/macrosystems/bin/python", "neon2envi2.py",
+        "--output_dir", "output/",
+        "--site_code", site_code,
+        "-anc",
+        image_path
+    ]
+
+    try:
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
+            for line in proc.stdout:
+                print(line, end='')  # Print each line of output in real-time
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing command: {e}")
+
+
+
+pass
 
 def get_spectral_data_and_wavelengths(filename, row_step, col_step):
     """

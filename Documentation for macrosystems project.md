@@ -57,7 +57,7 @@ pip install spectral
 
 ```
 conda activate macrosystems
-bash correct.sh NEON_D13_NIWO_DP1_20200801_161441_reflectance.h5 NIWO
+bash correct.sh NEON_D13_NIWO_DP1_20200801_161441_reflectance.h5 "NIWO"
 ```
 
 ```bash resample.sh export/ENVI__corrected_0```

@@ -24,39 +24,39 @@
    "anc_files": {
       "output/ENVI": {
          "path_length": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             0
          ],
          "sensor_az": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             1
          ],
          "sensor_zn": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             2
          ],
          "solar_az": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             3
          ],
          "solar_zn": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             4
          ],
          "phase": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             5
          ],
          "slope": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             6
          ],
          "aspect": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             7
          ],
          "cosine_i": [
-            "output/_ancillary",
+            "output/NEON_D13_NIWO_DP1_20200801_161441_reflectance_ancillary.envi",
             8
          ]
       }

@@ -1,10 +1,14 @@
 #!/bin/bash
 
+
+
 echo "Processing file: $1"
 filename="${1%.h5}"
 
 # Assuming $2 is the site code
 site_code=$2
+
+
 
 # Pass the required arguments to the Python script.
 # Note the placement of "$1" at the end for the [images ...] positional argument(s).
