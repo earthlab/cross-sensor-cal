@@ -24,24 +24,32 @@ import numpy as np
 import requests
 import os
 
-def download_neon_files_by_name(file_patterns, site_code, product_code, year_month):
+def download_neon_file(site_code, product_code, year_month, flight_line):
     server = 'http://data.neonscience.org/api/v0/'
-    # Updated to include year and month in the request URL
     data_url = f'{server}data/{product_code}/{site_code}/{year_month}'
 
+    # Make the API request
     response = requests.get(data_url)
     if response.status_code == 200:
-        print("Data retrieved successfully!")
+        print(f"Data retrieved successfully for {year_month}!")
         data_json = response.json()
-        # Iterate through files in the JSON response
+        
+        # Initialize a flag to check if the file was found
+        file_found = False
+        
+        # Iterate through files in the JSON response to find the specific flight line
         for file_info in data_json['data']['files']:
-            for pattern in file_patterns:
-                if pattern in file_info['name']:
-                    print(f"Downloading {file_info['name']} from {file_info['url']}")
-                    os.system(f'wget --no-check-certificate "{file_info["url"]}" -O "{file_info["name"]}"')
-                    break  # Move to the next file after a successful match and download
+            file_name = file_info['name']
+            if flight_line in file_name:
+                print(f"Downloading {file_name} from {file_info['url']}")
+                os.system(f'wget --no-check-certificate "{file_info["url"]}" -O "{file_name}"')
+                file_found = True
+                break
+        
+        if not file_found:
+            print(f"Flight line {flight_line} not found in the data for {year_month}.")
     else:
-        print(f"Failed to retrieve data. Status code: {response.status_code}, Response: {response.text}")
+        print(f"Failed to retrieve data for {year_month}. Status code: {response.status_code}, Response: {response.text}")
 
 
 pass
