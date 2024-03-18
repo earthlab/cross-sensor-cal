@@ -12,7 +12,6 @@ site_code=$2
 # Make sure neon2envi2.py is executable or use "python neon2envi2.py" if necessary.
 python neon2envi2_generic.py --images $1 --output_dir output -anc
 
-echo "Subprocess finished. "
 
 #python config_generator.py
 
