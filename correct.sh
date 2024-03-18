@@ -1,26 +1,23 @@
 #!/bin/bash
 
-echo "Passing $1 to subprocess in terminal"
+echo "Passing $1 to subprocess."
 echo "This takes a few minutes...."
 
 filename="${1%.h5}"
 
-# Assuming $2 is the site code
-site_code=$2
+# Initialize a variable for additional flags
+#additional_flags=""
 
-# Pass the required arguments to the Python script.
-# Make sure neon2envi2.py is executable or use "python neon2envi2.py" if necessary.
-python neon2envi2_generic.py --images $1 --output_dir output -anc
+# Loop through all arguments starting from the second one
+#for arg in "${@:2}"; do
+#    case "$arg" in
+#        -anc ) additional_flags="$additional_flags -anc" ;;
+#        # Add more cases here if you have more flags to handle
+#    esac
+#done
 
+# Call the Python script with conditional flags
+python neon2envi2.py  "$1"  output -anc
 
-#python config_generator.py
+#python neon2envi2_generic.py  --images "$1"  --output_dir output -anc
 
-#python image_correct.py output/config_0.json
-
-#output_after="export/${filename}__after_correction.tif"
-
-#gdal_translate -of GTiff export/ENVI__corrected_0 $output_after
-
-#output_before="export/${filename}__before_correction.tif"
-
-#gdal_translate -of GTiff output/ENVI $output_before
