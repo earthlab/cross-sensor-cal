@@ -7,9 +7,20 @@ import hytools as ht
 from hytools.io.envi import WriteENVI
 import re
 
+def get_all_keys(group):
+    if isinstance(group, Dataset):
+        return [group.name]
+
+    all_keys = []
+    for key in group.keys():
+        all_keys += get_all_keys(group[key])
+
+    return all_keys
+
+
 def get_actual_key(h5_file, expected_key):
     """Attempt to find a key in the HDF5 file that matches the expected key, regardless of case sensitivity."""
-    actual_keys = {key.lower(): key for key in h5_file.keys()}
+    actual_keys = {key.lower(): key for key in get_all_keys(h5_file)}
     return actual_keys.get(expected_key.lower())
 
 def get_all_solar_angles(logs_group):
@@ -31,10 +42,6 @@ def print_all_keys(h5_file, indent=0):
         if isinstance(h5_file[key], h5py.Group):
             print_all_keys(h5_file[key], indent + 1)
 
-def get_actual_key(h5_file, expected_key):
-    """Attempt to find a key in the HDF5 file that matches the expected key, regardless of case sensitivity."""
-    actual_keys = {key.lower(): key for key in h5_file.keys()}
-    return actual_keys.get(expected_key.lower())
 
 def extract_site_code_from_filename(filename):
     """Extracts the NEON site code from the given filename."""
