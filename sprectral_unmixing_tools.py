@@ -30,6 +30,109 @@ import glob
 import numpy as np
 import os
 
+import json
+import glob
+import numpy as np
+import os
+
+from shapely.geometry import box
+
+def generate_correction_configs(main_image_file, output_dir):
+    # Ensure the output directory exists
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    
+    base_name = os.path.basename(main_image_file).split('.')[0]
+    input_dir = os.path.dirname(main_image_file)
+    
+    # Define the bad bands, file type, and names for the ancillary datasets
+    bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
+    file_type = 'envi'
+    aviris_anc_names = ['path_length', 'sensor_az', 'sensor_zn', 'solar_az', 'solar_zn', 'phase', 'slope', 'aspect', 'cosine_i']
+
+    # Find ancillary files related to the main image file
+    anc_files_pattern = os.path.join(input_dir, f"{base_name}_ancillary*")
+    anc_files = glob.glob(anc_files_pattern)
+    anc_files.sort()
+
+    files_to_process = [main_image_file] + anc_files
+
+    for file_path in files_to_process:
+        is_ancillary = '_ancillary' in file_path
+        config_type = 'ancillary' if is_ancillary else ''
+        config_filename = f"{base_name}_{config_type}.json"
+        config_file_path = os.path.join(output_dir, config_filename)
+
+        config_dict = {
+            'bad_bands': bad_bands,
+            'file_type': file_type,
+            "input_files": [main_image_file],
+            "export": {
+                "coeffs": True,
+                "image": True,
+                "masks": True,
+                "subset_waves": [],
+                "output_dir": output_dir,
+                "suffix": f"_corrected_{config_type}"
+            },
+            "corrections": ['topo','brdf'],
+            "topo": {
+                'type': 'scs+c',
+                'calc_mask': [
+                    ["ndi", {'band_1': 850, 'band_2': 660, 'min': 0.1, 'max': 1.0}],
+                    ['ancillary', {'name': 'slope', 'min': np.radians(5), 'max': '+inf'}],
+                    ['ancillary', {'name': 'cosine_i', 'min': 0.12, 'max': '+inf'}],
+                    ['cloud', {'method': 'zhai_2018', 'cloud': True, 'shadow': True, 'T1': 0.01, 't2': 1/10, 't3': 1/4, 't4': 1/2, 'T7': 9, 'T8': 9}]
+                ],
+                'apply_mask': [
+                    ["ndi", {'band_1': 850, 'band_2': 660, 'min': 0.1, 'max': 1.0}],
+                    ['ancillary', {'name': 'slope', 'min': np.radians(5), 'max': '+inf'}],
+                    ['ancillary', {'name': 'cosine_i', 'min': 0.12, 'max': '+inf'}]
+                ],
+                'c_fit_type': 'nnls'
+            },
+            "brdf": {
+                'solar_zn_type': 'scene',
+                'type': 'flex',
+                'grouped': True,
+                'sample_perc': 0.1,
+                'geometric': 'li_dense_r',
+                'volume': 'ross_thick',
+                "b/r": 10,  
+                "h/b": 2,
+                'interp_kind': 'linear',
+                'calc_mask': [["ndi", {'band_1': 850, 'band_2': 660, 'min': 0.1, 'max': 1.0}]],
+                'apply_mask': [["ndi", {'band_1': 850, 'band_2': 660, 'min': 0.1, 'max': 1.0}]],
+                'diagnostic_plots': True,
+                'diagnostic_waves': [448, 849, 1660, 2201],
+                'bin_type': 'dynamic',
+                'num_bins': 25,
+                'ndvi_bin_min': 0.05,
+                'ndvi_bin_max': 1.0,
+                'ndvi_perc_min': 10,
+                'ndvi_perc_max': 95
+            },
+            'num_cpus': 1,
+            "resample": False,
+            "resampler": {
+                'type': 'cubic',
+                'out_waves': [],
+                'out_fwhm': []
+            }
+        }
+
+        # Adjust the ancillary settings as needed for your process
+        if is_ancillary:
+            print("ancillary extras")
+            # Example: Populate config_dict["anc_files"] as necessary
+
+        with open(config_file_path, 'w') as outfile:
+            json.dump(config_dict, outfile, indent=3)
+        print(f"Configuration saved to {config_file_path}")
+
+pass
+
+
 def generate_configurations(input_dir):
     """
     Generates configuration files for main and ancillary image data in the same directory as the input files.
@@ -162,7 +265,7 @@ def get_spectral_data_and_wavelengths(filename, row_step, col_step):
     return original, wavelengths
 pass
 
-###############################################################
+
 
 def load_spectra(filenames, row_step=6, col_step=1):
     results = {}
@@ -178,7 +281,6 @@ pass
 
 
 
-from shapely.geometry import box
 
 def extract_overlapping_layers_to_2d_dataframe(raster_path, gpkg_path):
     # Load polygons
