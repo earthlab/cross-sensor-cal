@@ -121,8 +121,8 @@ def main():
     _ = ray.get([a.read_file.remote(image, 'neon') for a, image in zip(actors, args.images)])
 
     def neon_to_envi(hy_obj):
-        #basemame = os.path.basename(os.path.splitext(hy_obj.file_name)[0])
-        basemame = "ENVI"
+        basemame = os.path.basename(os.path.splitext(hy_obj.file_name)[0])
+        #basemame = "ENVI"
         print("Exporting %s " % basemame)
         output_name = args.output_dir + basemame
         writer = WriteENVI(output_name, hy_obj.get_header())
