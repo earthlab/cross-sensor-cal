@@ -1,23 +1,17 @@
 #!/bin/bash
 
-
-
 echo "Processing file: $1"
 filename="${1%.h5}"
 
 # Assuming $2 is the site code
 site_code=$2
 
+# Pass the required arguments to the Python script, ensuring --images is correctly used.
+python neon2envi2.py --output_dir "output/" --site_code "$site_code" -anc --images "$1"
 
+#python config_generator.py
 
-# Pass the required arguments to the Python script.
-# Note the placement of "$1" at the end for the [images ...] positional argument(s).
-python neon2envi2.py --output_dir "output/" --site_code "$site_code" -anc "$1"
-
-
-python config_generator.py
-
-python image_correct.py output/config_0.json
+#python image_correct.py output/config_0.json
 
 #output_after="export/${filename}__after_correction.tif"
 
