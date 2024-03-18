@@ -47,8 +47,8 @@ def extract_site_code_from_filename(filename):
 def export_anc(h5_file_path, site_code, output_dir):
     """Exports ancillary data from an HDF5 file to ENVI format."""
     with h5py.File(h5_file_path, 'r') as h5_file:
-        base_path = f"/{site_code}/Reflectance/Metadata/Ancillary_Imagery/"
-        
+        base_path = f"{site_code}/Reflectance/Metadata/Ancillary_Imagery/"
+
         # Use get_actual_key to handle potential case sensitivity issues
         path_length_key = get_actual_key(h5_file, f"{base_path}Path_Length")
         slope_key = get_actual_key(h5_file, f"{base_path}Slope")
@@ -58,14 +58,23 @@ def export_anc(h5_file_path, site_code, output_dir):
         slope_data = h5_file[slope_key][...] if slope_key else np.array([])
         aspect_data = h5_file[aspect_key][...] if aspect_key else np.array([])
 
+        # Get the shape of the data
+        path_length_shape = path_length_data.shape if path_length_data.size > 0 else (0, 0)
+        slope_shape = slope_data.shape if slope_data.size > 0 else (0, 0)
+        aspect_shape = aspect_data.shape if aspect_data.size > 0 else (0, 0)
+
+        # Determine the maximum shape among the three datasets
+        max_shape = max([path_length_shape, slope_shape, aspect_shape], key=lambda x: x[0] * x[1])
+
         # Prepare ancillary header
-        bands = 3  # Number of datasets to write as bands
         header = {
             'description': f'Ancillary data for {site_code}',
-            'bands': bands,
-            'band names': ['Path Length', 'Slope', 'Aspect'],
+            'samples': max_shape[1],  # Number of columns in your data
+            'lines': max_shape[0],  # Number of rows in your data
+            'bands': 3,  # Number of bands
             'data type': 4,  # Assuming float32 data type
             'interleave': 'bil',
+            'band names': ['Path Length', 'Slope', 'Aspect'],
         }
 
         # Ensure output directory exists
@@ -82,6 +91,7 @@ def export_anc(h5_file_path, site_code, output_dir):
         
         writer.close()
         print(f"Ancillary data exported to {output_name}")
+
 
 def neon_to_envi(image_path, output_dir):
     # Create HyTools object and load the image
@@ -111,6 +121,7 @@ def main():
     """
     Main function to convert NEON AOP H5 files to ENVI format and optionally export ancillary data.
     """
+    print("Here we GO!")
     parser = argparse.ArgumentParser(description="Convert NEON AOP H5 to ENVI format and optionally export ancillary data.")
     parser.add_argument('--images', nargs='+', required=True, help="Input image pathnames")
     parser.add_argument('--output_dir', required=True, help="Output directory")
@@ -130,15 +141,15 @@ def main():
             os.makedirs(specific_output_dir, exist_ok=True)
         
         # Process image to ENVI format
+        print(f"Converting {image_path} for site {site_code} to ENVI: {specific_output_dir}")
         neon_to_envi(image_path, specific_output_dir)
-        print(f"Processed {image_path} for site {site_code} with output in {specific_output_dir}")
+        print(f"Finished processing {image_path} conversion to {specific_output_dir}")
 
         # If ancillary data flag is set, export ancillary data
         if args.anc:
-            # Here you would call your function to export ancillary data
-            # Make sure to define or import `export_anc` function appropriately
-            export_anc({'h5_file_path': image_path, 'site_code': site_code, 'output_dir': specific_output_dir})
-            print(f"Exported ancillary data for {image_path}")
+            print(f"Processing ancillary data for {image_path}")
+            export_anc(image_path, site_code, specific_output_dir)
+            print(f"Finished processing ancillary data for {image_path}")
 
     print("Processing complete.")
 

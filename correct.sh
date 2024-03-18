@@ -1,6 +1,8 @@
 #!/bin/bash
 
-echo "Processing file: $1"
+echo "Passing $1 to subprocess in terminal"
+echo "This takes a few minutes...."
+
 filename="${1%.h5}"
 
 # Assuming $2 is the site code
@@ -8,8 +10,9 @@ site_code=$2
 
 # Pass the required arguments to the Python script.
 # Make sure neon2envi2.py is executable or use "python neon2envi2.py" if necessary.
-python neon2envi2.py $1 output -anc
+python neon2envi2_generic.py --images $1 --output_dir output -anc
 
+echo "Subprocess finished. "
 
 #python config_generator.py
 
