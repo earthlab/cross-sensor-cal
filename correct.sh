@@ -6,8 +6,10 @@ filename="${1%.h5}"
 # Assuming $2 is the site code
 site_code=$2
 
-# Pass the required arguments to the Python script, ensuring --images is correctly used.
-python neon2envi2.py --output_dir "output/" --site_code "$site_code" -anc --images "$1"
+# Pass the required arguments to the Python script.
+# Make sure neon2envi2.py is executable or use "python neon2envi2.py" if necessary.
+python neon2envi2.py $1 output -anc
+
 
 #python config_generator.py
 
