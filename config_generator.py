@@ -44,7 +44,7 @@ bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
 
 # Input data settings for ENVI
 file_type = 'envi'
-main_image_file = r"output/ENVI"
+main_image_file = r"output/NEON_D13_NIWO_DP1_20200801_161441_reflectance"
 
 # Assuming all ancillary files are in the same directory as the main file
 anc_files = glob.glob("output/*_ancillary*")
