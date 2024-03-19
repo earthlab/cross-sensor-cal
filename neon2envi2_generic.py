@@ -1,11 +1,13 @@
 import argparse
 import os
 import h5py
+from h5py import Dataset
 import ray
 import numpy as np
 import hytools as ht
 from hytools.io.envi import WriteENVI
 import re
+
 
 def get_all_keys(group):
     if isinstance(group, Dataset):
@@ -23,16 +25,17 @@ def get_actual_key(h5_file, expected_key):
     actual_keys = {key.lower(): key for key in get_all_keys(h5_file)}
     return actual_keys.get(expected_key.lower())
 
+
 def get_all_solar_angles(logs_group):
     angles = []
     for log_entry in logs_group.keys():
         angles.append((logs_group[log_entry]["Solar_Azimuth_Angle"][()], logs_group[log_entry]["Solar_Zenith_Angle"][()]))
     return np.array(angles)
 
+
 def ensure_directory_exists(directory_path):
     if not os.path.exists(directory_path):
         os.makedirs(directory_path, exist_ok=True)
-
 
 
 def print_all_keys(h5_file, indent=0):
@@ -50,6 +53,7 @@ def extract_site_code_from_filename(filename):
         return match.group(1)
     else:
         raise ValueError(f"Site code not found in filename: {filename}")
+
 
 def neon_to_envi(image_path, output_dir):
     # Create HyTools object and load the image
@@ -74,7 +78,8 @@ def neon_to_envi(image_path, output_dir):
             writer.close()
 
     print(f"Exported {basename} to ENVI format.")
-    
+
+
 def envi_header_for_ancillary(hy_obj, ancillary_attributes, interleave='bil'):
     """
     Create an ENVI header dictionary specifically for ancillary data derived from NEON metadata.
@@ -87,7 +92,7 @@ def envi_header_for_ancillary(hy_obj, ancillary_attributes, interleave='bil'):
     Returns:
         dict: Populated ENVI header dictionary for ancillary data.
     """
-    header_dict = {}
+    header_dict = dict()
     header_dict["ENVI description"] = "Ancillary data"
     header_dict["samples"] = ancillary_attributes['samples']  # Expected to be provided
     header_dict["lines"] = ancillary_attributes['lines']  # Expected to be provided
@@ -108,13 +113,19 @@ def envi_header_for_ancillary(hy_obj, ancillary_attributes, interleave='bil'):
 
 
 def export_anc(h5_file_path, site_code, output_dir):
+    print("EXP ANC")
+    print(h5_file_path)
     """Exports ancillary data from an HDF5 file to ENVI format."""
     with h5py.File(h5_file_path, 'r') as h5_file:
-        base_path = f"{site_code}/Reflectance/Metadata/Ancillary_Imagery/"
+        base_path = f"/{site_code}/Reflectance/Metadata/Ancillary_Imagery/"
+        print(base_path)
 
         path_length_key = get_actual_key(h5_file, f"{base_path}Path_Length")
+        print(path_length_key)
         slope_key = get_actual_key(h5_file, f"{base_path}Slope")
+        print(slope_key)
         aspect_key = get_actual_key(h5_file, f"{base_path}Aspect")
+        print(aspect_key)
 
         path_length_data = h5_file[path_length_key][...] if path_length_key else np.array([], dtype=np.float32)
         slope_data = h5_file[slope_key][...] if slope_key else np.array([], dtype=np.float32)
@@ -143,6 +154,7 @@ def export_anc(h5_file_path, site_code, output_dir):
         output_name = os.path.join(output_dir, os.path.splitext(os.path.basename(h5_file_path))[0] + "_ancillary")
         
         # Initialize the ENVI writer with the generated header
+        print(header)
         writer = WriteENVI(output_name + ".hdr", header)
         
         # Write the data as separate bands, ensuring data is the correct type
@@ -152,6 +164,7 @@ def export_anc(h5_file_path, site_code, output_dir):
         
         writer.close()
         print(f"Ancillary data exported to {output_name}")
+
 
 def main():
     """
@@ -188,6 +201,7 @@ def main():
             print(f"Finished processing ancillary data for {image_path}")
 
     print("Processing complete.")
+
 
 if __name__ == "__main__":
     main()

@@ -11,6 +11,7 @@ from hytools.brdf import calc_brdf_coeffs
 from hytools.glint import set_glint_parameters
 from hytools.masks import mask_create
 
+
 warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
 
