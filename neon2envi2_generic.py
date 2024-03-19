@@ -55,14 +55,20 @@ def extract_site_code_from_filename(filename):
         raise ValueError(f"Site code not found in filename: {filename}")
 
 
-def neon_to_envi(image_path, output_dir):
-    # Create HyTools object and load the image
-    hy_obj = ht.HyTools()
-    hy_obj.read_file(image_path, 'neon')
+def neon_to_envi(hy_obj, output_dir):
+    # Extract site code from filename
+    site_code = extract_site_code_from_filename(hy_obj.file_name)
+
+    # Construct specific output directory for each image
+    specific_output_dir = os.path.join(output_dir, os.path.splitext(os.path.basename(hy_obj.file_name))[0])
+
+    # Ensure the specific output directory exists
+    if not os.path.exists(specific_output_dir):
+        os.makedirs(specific_output_dir, exist_ok=True)
 
     # Construct output file name
-    basename = os.path.basename(os.path.splitext(image_path)[0])
-    output_name = os.path.join(output_dir, basename)
+    basename = os.path.basename(os.path.splitext(hy_obj.file_name)[0])
+    output_name = os.path.join(specific_output_dir, basename)
     
     # Initialize ENVI writer with header from HyTools object
     writer = WriteENVI(output_name, hy_obj.get_header())
@@ -112,11 +118,10 @@ def envi_header_for_ancillary(hy_obj, ancillary_attributes, interleave='bil'):
     return header_dict
 
 
-def export_anc(h5_file_path, site_code, output_dir):
-    print("EXP ANC")
-    print(h5_file_path)
-    """Exports ancillary data from an HDF5 file to ENVI format."""
-    with h5py.File(h5_file_path, 'r') as h5_file:
+def export_anc(hy_obj, output_dir):
+    site_code = extract_site_code_from_filename(hy_obj.file_name)
+
+    with h5py.File(hy_obj.file_name, 'r') as h5_file:
         base_path = f"/{site_code}/Reflectance/Metadata/Ancillary_Imagery/"
         print(base_path)
 
@@ -131,10 +136,6 @@ def export_anc(h5_file_path, site_code, output_dir):
         slope_data = h5_file[slope_key][...] if slope_key else np.array([], dtype=np.float32)
         aspect_data = h5_file[aspect_key][...] if aspect_key else np.array([], dtype=np.float32)
 
-        # Initialize the HyTools object and read the NEON file for metadata
-        hy_obj = ht.HyTools()
-        hy_obj.read_file(h5_file_path, 'neon')
-
         # Define ancillary attributes based on the specific datasets
         ancillary_attributes = {
             'samples': max([d.shape[1] for d in [path_length_data, slope_data, aspect_data] if d.size > 0], default=0),
@@ -148,10 +149,14 @@ def export_anc(h5_file_path, site_code, output_dir):
         header = envi_header_for_ancillary(hy_obj, ancillary_attributes, interleave='bil')
 
         # Ensure output directory exists
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
+        specific_output_dir = os.path.join(output_dir, os.path.splitext(os.path.basename(hy_obj.file_name))[0])
 
-        output_name = os.path.join(output_dir, os.path.splitext(os.path.basename(h5_file_path))[0] + "_ancillary")
+        # Ensure the specific output directory exists
+        if not os.path.exists(specific_output_dir):
+            os.makedirs(specific_output_dir, exist_ok=True)
+
+        output_name = os.path.join(specific_output_dir, os.path.splitext(os.path.basename(hy_obj.file_name))[0]
+                                   + "_ancillary")
         
         # Initialize the ENVI writer with the generated header
         print(header)
@@ -178,27 +183,18 @@ def main():
 
     args = parser.parse_args()
 
-    for image_path in args.images:
-        # Extract site code from filename
-        site_code = extract_site_code_from_filename(image_path)
-        
-        # Construct specific output directory for each image
-        specific_output_dir = os.path.join(args.output_dir, os.path.splitext(os.path.basename(image_path))[0])
-        
-        # Ensure the specific output directory exists
-        if not os.path.exists(specific_output_dir):
-            os.makedirs(specific_output_dir, exist_ok=True)
-        
-        # Process image to ENVI format
-        print(f"Converting {image_path} for site {site_code} to ENVI: {specific_output_dir}")
-        neon_to_envi(image_path, specific_output_dir)
-        print(f"Finished processing {image_path} conversion to {specific_output_dir}")
+    if ray.is_initialized():
+        ray.shutdown()
+    ray.init(num_cpus=len(args.images))
 
-        # If ancillary data flag is set, export ancillary data
-        if args.anc:
-            print(f"Processing ancillary data for {image_path}")
-            export_anc(image_path, site_code, specific_output_dir)
-            print(f"Finished processing ancillary data for {image_path}")
+    hytool = ray.remote(ht.HyTools)
+    actors = [hytool.remote() for image in args.images]
+    _ = ray.get([a.read_file.remote(image, 'neon') for a, image in zip(actors, args.images)])
+    _ = ray.get([a.do.remote(neon_to_envi, args.output_dir) for a in actors])
+
+    if args.anc:
+        print("\nExporting ancillary data")
+        _ = ray.get([a.do.remote(export_anc, args.output_dir) for a in actors])
 
     print("Processing complete.")
 
