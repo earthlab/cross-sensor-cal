@@ -554,8 +554,6 @@ def plot_with_highlighted_sensors(concatenated_sensors, highlight_pixels, save_p
         plt.savefig(save_path, format=save_path.split('.')[-1])
     plt.show()
 
-
-
 pass
 
 
