@@ -725,6 +725,30 @@ def run_bash_script_in_conda_env(conda_env_path, bash_script, script_args, use_a
 
 pass
 
+def show_rgb(hy_obj,r=660,g=550,b=440, correct= []):
+
+    rgb=  np.stack([hy_obj.get_wave(r,corrections= correct),
+                    hy_obj.get_wave(g,corrections= correct),
+                    hy_obj.get_wave(b,corrections= correct)])
+    rgb = np.moveaxis(rgb,0,-1).astype(float)
+    rgb[rgb ==hy_obj.no_data] = np.nan
+
+    bottom = np.nanpercentile(rgb,5,axis = (0,1))
+    top = np.nanpercentile(rgb,95,axis = (0,1))
+    rgb = np.clip(rgb,bottom,top)
+
+    rgb = (rgb-np.nanmin(rgb,axis=(0,1)))/(np.nanmax(rgb,axis= (0,1))-np.nanmin(rgb,axis= (0,1)))
+
+    height = int(hy_obj.lines/hy_obj.columns)
+
+    fig  = plt.figure(figsize = (7,7) )
+    plt.imshow(rgb)
+    plt.show()
+    plt.close()
+
+
+pass
+
 # If module-level execution is needed, guard it:
 if __name__ == "__main__":
     filenames = [ ... ]  # Define filenames here
