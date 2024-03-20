@@ -699,27 +699,23 @@ def boosted_quantile_plot_by_sensor(data, num_lines=10, title='Hyperspectral Cor
 
 pass
 
-def run_bash_script_in_conda_env(conda_env_path, bash_script, script_args, use_ancillary=False):
-    """
-    Run a bash script in a specific Conda environment and optionally include the -anc flag.
-    """
-    if use_ancillary and "-anc" not in script_args:
-        script_args.append("-anc")
-    elif not use_ancillary:
-        script_args = [arg for arg in script_args if arg != "-anc"]
-
-    command = f"conda activate {conda_env_path} && bash {bash_script} {' '.join(script_args)}"
-    terminal_command = ["bash", "-c", command]
-
-    with subprocess.Popen(terminal_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1) as process:
-        for line in process.stdout:
-            print(line, end='')
-        for line in process.stderr:
-            print(line, end='')
+def neon_to_envi(directory='./', script_path='neon2envi2_generic.py', output_dir='output/', conda_env_path='/opt/conda/envs/macrosystems'):
+    # Construct the full path to the Python executable in the specified Conda environment
+    python_executable = os.path.join(conda_env_path, "bin", "python")
     
-
-    process.wait()
-    print("Subprocess closed")
+    h5_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.h5')]
+    for h5_file in h5_files:
+        print(f"Processing: {h5_file}")
+        command = f"{python_executable} {script_path} --images '{h5_file}' --output_dir '{output_dir}' -anc"
+        process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, universal_newlines=True)
+        
+        if process.returncode != 0:
+            print(f"Error executing command: {command}")
+            print(f"Standard Output: {process.stdout}")
+            print(f"Error Output: {process.stderr}")
+        else:
+            print("Command executed successfully")
+            print(f"Standard Output: {process.stdout}")
 
 pass
 
