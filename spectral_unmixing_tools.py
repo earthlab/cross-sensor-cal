@@ -743,6 +743,28 @@ def show_rgb(hy_obj,r=660,g=550,b=440, correct= []):
 
 pass
 
+def download_flight_lines(site_code, product_code, year_month, flight_lines):
+    """
+    Downloads NEON flight line files given a site code, product code, year, month, and flight line(s).
+    
+    Args:
+    - site_code (str): The site code.
+    - product_code (str): The product code.
+    - year_month (str): The year and month of interest in 'YYYY-MM' format.
+    - flight_lines (str or list): A single flight line identifier or a list of flight line identifiers.
+    """
+    
+    # Check if flight_lines is a single string (flight line), if so, convert it to a list
+    if isinstance(flight_lines, str):
+        flight_lines = [flight_lines]
+    
+    # Iterate through each flight line and download the corresponding file
+    for flight_line in flight_lines:
+        print(f"Processing flight line: {flight_line}")
+        download_neon_file(site_code, product_code, year_month, flight_line)
+        print("Download completed.\n")
+pass
+
 # If module-level execution is needed, guard it:
 if __name__ == "__main__":
     filenames = [ ... ]  # Define filenames here
