@@ -44,10 +44,11 @@ bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
 
 # Input data settings for ENVI
 file_type = 'envi'
-main_image_file = r"output/NEON_D13_NIWO_DP1_20200801_161441_reflectance"
+
+main_image_file = r"output/NEON_D13_NIWO_DP1_20200731_155024_reflectance"
 
 # Assuming all ancillary files are in the same directory as the main file
-anc_files = glob.glob("output/*_ancillary*")
+anc_files = glob.glob("output/NEON_D13_NIWO_DP1_20200731_155024_reflectance/*_ancillary*")
 anc_files.sort()
 
 #print(anc_files)
@@ -78,7 +79,7 @@ for i, anc_file in enumerate(anc_files):
     config_dict['export']['image'] = True
     config_dict['export']['masks'] = True
     config_dict['export']['subset_waves'] = []
-    config_dict['export']['output_dir'] = "export/"
+    config_dict['export']['output_dir'] = main_image_file
     config_dict['export']["suffix"] = f'_corrected_{i}'
 
 
@@ -149,7 +150,11 @@ for i, anc_file in enumerate(anc_files):
     config_dict['num_cpus'] = 1
     
     # Output path for configuration file
-    config_file = f"output/config_{i}.json"
+    # Assuming you want to include the suffix in the filename:
+    suffix = config_dict['export']["suffix"]
+    output_dir = config_dict['export']['output_dir']
+    config_file_name = f"{suffix}.json"
+    config_file_path = os.path.join(output_dir, config_file_name)
 
     config_dict["resample"]  = False
     config_dict["resampler"]  = {}
@@ -166,6 +171,7 @@ for i, anc_file in enumerate(anc_files):
             config_dict["resampler"]['out_waves'].append(wavelength)
 
     # Save the configuration to a JSON file
-    with open(config_file, 'w') as outfile:
+    with open(config_file_path, 'w') as outfile:
         json.dump(config_dict, outfile, indent=3)
+
 
