@@ -57,7 +57,7 @@ def generate_correction_configs_for_directory(directory):
     file_type = 'envi'
 
     main_image_name = os.path.basename(directory)
-    main_image_file = os.path.join(directory, main_image_name + ".h5")  # Assuming the main image file has .h5 extension
+    main_image_file = os.path.join(directory, main_image_name )  # Assuming the main image file has .h5 extension
 
     # Glob pattern to find ancillary files within the same directory
     anc_files_pattern = os.path.join(directory, "*_ancillary*")
