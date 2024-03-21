@@ -46,6 +46,7 @@ bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
 file_type = 'envi'
 
 main_image_file = r"output/NEON_D13_NIWO_DP1_20200731_155024_reflectance"
+main_image_name = os.path.basename(main_image_file).split('.')[0]  # Removes the file extension
 
 # Assuming all ancillary files are in the same directory as the main file
 anc_files = glob.glob("output/NEON_D13_NIWO_DP1_20200731_155024_reflectance/*_ancillary*")
@@ -63,6 +64,15 @@ aviris_anc_names = ['path_length', 'sensor_az', 'sensor_zn',
 
 # Loop through each ancillary file and create a separate config file
 for i, anc_file in enumerate(anc_files):
+    if i == 0:
+        suffix_label = f"{main_image_name}_corrected_envi"
+    elif i == 1:
+        suffix_label = f"{main_image_name}_corrected_anc"
+    else:
+        suffix_label = f"{main_image_name}_corrected_{i}"  # Fallback for unexpected 'i' values
+
+    
+    
     config_dict = {}
 
     config_dict['bad_bands'] = bad_bands
@@ -80,7 +90,7 @@ for i, anc_file in enumerate(anc_files):
     config_dict['export']['masks'] = True
     config_dict['export']['subset_waves'] = []
     config_dict['export']['output_dir'] = main_image_file
-    config_dict['export']["suffix"] = f'_corrected_{i}'
+    config_dict['export']["suffix"] = suffix_label
 
 
 
