@@ -64,7 +64,7 @@ def generate_correction_configs_for_directory(directory):
     anc_files = glob.glob(anc_files_pattern)
     anc_files.sort()
 
-    aviris_anc_names = ['path_length', 'sensor_az', 'sensor_zn', 'solar_az', 'solar_zn', 'phase', 'slope', 'aspect', 'cosine_i']
+    aviris_anc_names = ['path_length', 'sensor_az', 'sensor_zn', 'solar_az', 'solar_zn',  'slope', 'aspect', 'phase', 'cosine_i']
 
     suffix_labels = ["envi", "anc"]  # Define suffixes for different types of files
 
@@ -763,8 +763,7 @@ def plot_with_highlighted_sensors(concatenated_sensors, highlight_pixels, save_p
 
 pass
 
-import matplotlib.pyplot as plt
-import numpy as np
+
 
 def boosted_quantile_plot(data, num_lines=10, title='Hyperspectral Corrected Predictions by Alpha', save_path=None):
     plt.figure(figsize=(10, 6))
