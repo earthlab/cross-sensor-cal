@@ -50,6 +50,55 @@ import os
 import glob
 import ray
 
+def resample_translation_to_other_sensors(base_folder, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
+    # List all subdirectories in the base folder
+    subdirectories = [os.path.join(base_folder, d) for d in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, d))]
+
+    for folder in subdirectories:
+        print(f"Processing folder: {folder}")
+        translate_to_other_sensors(folder, conda_env_path)
+        
+def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
+    # List of sensor types to loop through
+    sensor_types = [
+        'Landsat 5 TM',
+        'Landsat 7 ETM+',
+        'Landsat 8 OLI',
+        'Landsat 9 OLI-2'
+    ]
+
+    base_name = os.path.basename(os.path.normpath(folder_path))
+    resampling_file_path = os.path.join(folder_path, base_name)
+    json_file = os.path.join('Resampling', 'landsat_band_parameters.json')
+
+    for sensor_type in sensor_types:
+        hdr_path = f"{resampling_file_path}.hdr"
+        output_path = os.path.join(folder_path, f"{base_name}_resample_{sensor_type.replace(' ', '_').replace('+', 'plus')}.hdr")
+
+        command = [
+            conda_env_path, 'Resampling/resampling_demo.py',
+            '--resampling_file_path', resampling_file_path,
+            '--json_file', json_file,
+            '--hdr_path', hdr_path,
+            '--sensor_type', sensor_type,
+            '--output_path', output_path
+        ]
+
+        # Run the command
+        process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # Check for errors
+        if process.returncode != 0:
+            print(f"Error executing command: {' '.join(command)}")
+            print(f"Standard Output: {process.stdout}")
+            print(f"Error Output: {process.stderr}")
+        else:
+            print(f"Command executed successfully for sensor type: {sensor_type}")
+            print(f"Standard Output: {process.stdout}")
+
+pass
+
+
 def apply_topo_and_brdf_corrections(base_folder_path, conda_env_path='/opt/conda/envs/macrosystems'):
     # Construct the full path to the Python executable in the specified Conda environment
     python_executable = os.path.join(conda_env_path, "bin", "python")
