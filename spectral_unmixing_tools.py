@@ -188,7 +188,7 @@ def generate_correction_configs_for_directory(directory):
     
 
         # Construct the filename for the configuration JSON
-        config_filename = f"{main_image_name}_corrected_{suffix}.json"
+        config_filename = f"{main_image_name}_config_{suffix}.json"
         config_file_path = os.path.join(directory, config_filename)
 
         # Save the configuration to a JSON file
@@ -837,7 +837,7 @@ def boosted_quantile_plot_by_sensor(data, num_lines=10, title='Hyperspectral Cor
 
 pass
 
-def neon_to_envi(directory='./', script_path='neon2envi2_generic.py', output_dir='output/', conda_env_path='/opt/conda/envs/macrosystems'):
+def flight_lines_to_envi(directory='./', script_path='neon2envi2_generic.py', output_dir='output/', conda_env_path='/opt/conda/envs/macrosystems'):
     # Construct the full path to the Python executable in the specified Conda environment
     python_executable = os.path.join(conda_env_path, "bin", "python")
     
@@ -857,31 +857,60 @@ def neon_to_envi(directory='./', script_path='neon2envi2_generic.py', output_dir
 
 pass
 
-def show_rgb(hy_obj,r=660,g=550,b=440, correct= []):
+def show_rgb(file_paths, r=660, g=550, b=440):
+    # Ensure file_paths is a list to simplify processing
+    if not isinstance(file_paths, list):
+        file_paths = [file_paths]
+    
+    # Determine the number of files to set the layout accordingly
+    n_files = len(file_paths)
+    # Set the figure size larger if more images, adjust width & height as needed
+    fig_width = 7 * n_files  # Increase the width for each additional image
+    fig_height = 100  # Adjust the height as needed
 
-    rgb=  np.stack([hy_obj.get_wave(r,corrections= correct),
-                    hy_obj.get_wave(g,corrections= correct),
-                    hy_obj.get_wave(b,corrections= correct)])
-    rgb = np.moveaxis(rgb,0,-1).astype(float)
-    rgb[rgb ==hy_obj.no_data] = np.nan
+     # Warning message
+    warning_message = ("WARNING: The images displayed are part of a panel and "
+                       "the flight lines are not presented on the same map. "
+                       "Spatial relationships between panels may not be accurate.")
+    print(warning_message)
+    
+    # Create the figure with adjusted dimensions
+    fig, axs = plt.subplots(1, n_files, figsize=(fig_width, fig_height), squeeze=False)
 
-    bottom = np.nanpercentile(rgb,5,axis = (0,1))
-    top = np.nanpercentile(rgb,95,axis = (0,1))
-    rgb = np.clip(rgb,bottom,top)
+    for file_path, ax in zip(file_paths, axs.flatten()):
+        # Initialize the HyTools object and read the file
+        hy_obj = ht.HyTools()
+        hy_obj.read_file(file_path, 'envi')
+        
+        # Extract RGB bands based on specified wavelengths (or band indices)
+        rgb = np.stack([
+            hy_obj.get_wave(r),
+            hy_obj.get_wave(g),
+            hy_obj.get_wave(b)
+        ])
+        rgb = np.moveaxis(rgb, 0, -1).astype(float)
+        rgb[rgb == hy_obj.no_data] = np.nan
+        
+        # Apply percentile stretch
+        bottom = np.nanpercentile(rgb, 5, axis=(0, 1))
+        top = np.nanpercentile(rgb, 95, axis=(0, 1))
+        rgb = np.clip(rgb, bottom, top)
+        
+        # Normalize
+        rgb = (rgb - np.nanmin(rgb, axis=(0, 1))) / (np.nanmax(rgb, axis=(0, 1)) - np.nanmin(rgb, axis=(0, 1)))
+        
+        # Plotting
+        ax.imshow(rgb)
+        ax.axis('off')  # Hide axis
+        ax.set_title(f"RGB Composite: {file_path.split('/')[-1]}")
 
-    rgb = (rgb-np.nanmin(rgb,axis=(0,1)))/(np.nanmax(rgb,axis= (0,1))-np.nanmin(rgb,axis= (0,1)))
-
-    height = int(hy_obj.lines/hy_obj.columns)
-
-    fig  = plt.figure(figsize = (7,7) )
-    plt.imshow(rgb)
+    plt.subplots_adjust(wspace=0, hspace=0)  # Remove any white space between subplots
     plt.show()
-    plt.close()
 
 
 pass
 
-def download_flight_lines(site_code, product_code, year_month, flight_lines):
+def download_neon_flight_lines(site_code, product_code, year_month, flight_lines):
     """
     Downloads NEON flight line files given a site code, product code, year, month, and flight line(s).
     
