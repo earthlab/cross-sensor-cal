@@ -45,6 +45,43 @@ import glob
 import numpy as np
 import os
 
+import subprocess
+import os
+import glob
+import ray
+
+def apply_topo_and_brdf_corrections(base_folder_path, conda_env_path='/opt/conda/envs/macrosystems'):
+    # Construct the full path to the Python executable in the specified Conda environment
+    python_executable = os.path.join(conda_env_path, "bin", "python")
+    
+    # Find all subfolders in the base folder
+    subfolders = glob.glob(os.path.join(base_folder_path, '*/'))
+    
+    for folder in subfolders:
+        folder_name = os.path.basename(os.path.normpath(folder))
+        json_file_name = f"{folder_name}_config__envi.json"
+        json_file_path = os.path.join(folder, json_file_name)
+        
+        # Check if the JSON file exists
+        if os.path.isfile(json_file_path):
+            # Call the script with the JSON file path
+            command = f"{python_executable} image_correct.py {json_file_path}"
+            process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            print(f"Processed {json_file_path}")
+            if process.returncode != 0:
+                print(f"Error executing command: {command}")
+                print(f"Standard Output: {process.stdout}")
+                print(f"Error Output: {process.stderr}")
+            else:
+                print("Command executed successfully")
+                print(f"Standard Output: {process.stdout}")
+        else:
+            print(f"JSON file not found: {json_file_path}")
+
+    print("All done!")
+
+pass
+
 def generate_correction_configs_for_directory(directory):
     """
     Generates configuration files for TOPO and BRDF corrections for all ancillary files in a given directory.
