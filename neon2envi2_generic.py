@@ -186,7 +186,7 @@ def main():
     hytool = ray.remote(ht.HyTools)
     actors = [hytool.remote() for image in args.images]
     _ = ray.get([a.read_file.remote(image, 'neon') for a, image in zip(actors, args.images)])
-    # _ = ray.get([a.do.remote(neon_to_envi, args.output_dir) for a in actors])
+    _ = ray.get([a.do.remote(neon_to_envi, args.output_dir) for a in actors])
     if args.anc:
         print("\nExporting ancillary data")
         _ = ray.get([a.do.remote(export_anc, args.output_dir) for a in actors])
