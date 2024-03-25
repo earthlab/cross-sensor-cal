@@ -1,6 +1,6 @@
 
 
-
+import time
 import geopandas as gpd
 import rasterio
 from rasterio.mask import mask
@@ -50,6 +50,38 @@ import os
 import glob
 import ray
 
+def go_forth_and_multiply(base_folder="output", **kwargs):
+    #start_time = time.time()  # Capture start time
+    
+    # Create the base folder if it doesn't exist
+    os.makedirs(base_folder, exist_ok=True)
+    
+    # Step 1: Download NEON flight lines with kwargs passed to this step
+    download_neon_flight_lines(**kwargs)
+
+    # Step 2: Convert flight lines to ENVI format
+    flight_lines_to_envi(output_dir = base_folder)
+
+    # Step 3: Generate configuration JSON
+    generate_config_json(base_folder)
+
+    # Step 4: Apply topographic and BRDF corrections
+    apply_topo_and_brdf_corrections(base_folder)
+
+    # Step 5: Resample and translate data to other sensor formats
+    resample_translation_to_other_sensors(base_folder)
+
+    #end_time = time.time()  # Capture end time
+    #elapsed_time = end_time - start_time  # Calculate elapsed time
+    #hours, rem = divmod(elapsed_time, 3600)
+   # minutes, seconds = divmod(rem, 60)
+    
+    print("Processing complete.")
+    #print(f"Total time taken: {int(hours)} hours, {int(minutes)} minutes, {int(seconds)} seconds.")
+
+pass
+
+
 def resample_translation_to_other_sensors(base_folder, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
     # List all subdirectories in the base folder
     subdirectories = [os.path.join(base_folder, d) for d in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, d))]
@@ -57,7 +89,9 @@ def resample_translation_to_other_sensors(base_folder, conda_env_path='/opt/cond
     for folder in subdirectories:
         print(f"Processing folder: {folder}")
         translate_to_other_sensors(folder, conda_env_path)
-        
+
+pass
+
 def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
     # List of sensor types to loop through
     sensor_types = [
