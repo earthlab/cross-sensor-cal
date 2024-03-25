@@ -119,7 +119,7 @@ class resampler_hy_obj:
             'samples': samples,  # Replace with actual number of samples in your data
             'header offset': 0,
             'data type': 4,  # Data type (e.g., 4 for float32)
-            'interleave': 'bsq',
+            'interleave': 'bil',
             'byte order': 0,
             'wavelength units': 'Nanometers',
             'wavelength': self.out_wave,
