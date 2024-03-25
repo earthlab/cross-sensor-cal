@@ -135,20 +135,25 @@ def export_coeffs(hy_obj,export_dict):
     - The function currently skips exporting coefficients for 'glint' correction.
     """
 
-    for correction in hy_obj.corrections:
+     for correction in hy_obj.corrections:
         coeff_file = export_dict['output_dir']
-        coeff_file += os.path.splitext(os.path.basename(hy_obj.file_name))[0]
-        print(coeff_file)
-        coeff_file += "_%s_coeffs_%s.json" % (correction,export_dict["suffix"])
+        coeff_file_base = os.path.splitext(os.path.basename(hy_obj.file_name))[0]
+
+        # Check for and remove '_corrected_envi' if it is part of the filename
+        if coeff_file_base.endswith('_corrected_envi'):
+            coeff_file_base = coeff_file_base.replace('_corrected_envi', '')
+
+        # Reconstruct the filename correctly by appending the necessary parts
+        coeff_file += coeff_file_base + f"_{correction}_coeffs_{export_dict['suffix']}.json"
 
         with open(coeff_file, 'w') as outfile:
             if correction == 'topo':
                 corr_dict = hy_obj.topo
             elif correction == 'glint':
-                continue
+                continue  # Currently skipping glint
             else:
                 corr_dict = hy_obj.brdf
-            json.dump(corr_dict,outfile)
+            json.dump(corr_dict, outfile)
 
 def apply_corrections(hy_obj,config_dict):
     """
