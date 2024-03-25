@@ -89,7 +89,7 @@ def resample_translation_to_other_sensors(base_folder, conda_env_path='/opt/cond
     for folder in subdirectories:
         print(f"Processing folder: {folder}")
         translate_to_other_sensors(folder, conda_env_path)
-
+    print("done resampling")
 pass
 
 def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
