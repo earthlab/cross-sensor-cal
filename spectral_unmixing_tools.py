@@ -165,6 +165,10 @@ def control_function(directory):
     folder_name = os.path.basename(os.path.normpath(directory))
     output_csv_name = f"{folder_name}_spectral_data_all_sensors.csv"
     output_csv_path = os.path.join(directory, output_csv_name)  # Define output CSV path
+    if os.path.exists(output_csv_path):
+        print(f"CSV already exists: {output_csv_path}. Skipping processing.")
+        return
+        
     clean_data_and_write_to_csv(df_processed, output_csv_path)  # Clean data and write to CSV
 
     print(f"Processed and cleaned data saved to {output_csv_path}")
