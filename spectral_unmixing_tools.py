@@ -101,13 +101,21 @@ def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macr
         'Landsat 9 OLI-2'
     ]
 
-    base_name = os.path.basename(os.path.normpath(folder_path))
-    resampling_file_path = os.path.join(folder_path, base_name)
+    # Find all files ending with '_envi' but not with 'config_envi' or '.json'
+    pattern = os.path.join(folder_path, '*_envi')
+    envi_files = [file for file in glob.glob(pattern) if not file.endswith('config_envi') and not file.endswith('.json')]
+    
+    # Check if we found exactly one file that matches our criteria
+    if len(envi_files) != 1:
+        print(f"Error: Expected to find exactly one file with '_envi' but found {len(envi_files)}: {envi_files}")
+        return
+
+    resampling_file_path = envi_files[0]  # Use the file found
     json_file = os.path.join('Resampling', 'landsat_band_parameters.json')
 
     for sensor_type in sensor_types:
         hdr_path = f"{resampling_file_path}.hdr"
-        output_path = os.path.join(folder_path, f"{base_name}_resample_{sensor_type.replace(' ', '_').replace('+', 'plus')}.hdr")
+        output_path = os.path.join(folder_path, f"{os.path.basename(resampling_file_path)}_resample_{sensor_type.replace(' ', '_').replace('+', 'plus')}.hdr")
 
         command = [
             conda_env_path, 'Resampling/resampling_demo.py',
@@ -215,7 +223,7 @@ def generate_correction_configs_for_directory(directory):
         config_dict['export']['image'] = True
         config_dict['export']['masks'] = True
         config_dict['export']['subset_waves'] = []
-        config_dict['export']['output_dir'] = os.path.join(directory, main_image_name)
+        config_dict['export']['output_dir'] = os.path.join(directory)
         config_dict['export']["suffix"] = suffix_label
     
     
