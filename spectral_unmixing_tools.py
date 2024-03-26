@@ -50,6 +50,265 @@ import os
 import glob
 import ray
 
+import numpy as np
+import rasterio
+import pandas as pd
+import numpy as np
+
+import os
+import glob
+import pandas as pd
+
+import os
+
+def jefe(base_folder, site_code, product_code, year_month, flight_lines):
+    """
+    A control function that orchestrates the processing of spectral data.
+    It first calls go_forth_and_multiply to generate necessary data and structures,
+    then processes all subdirectories within the base_folder.
+
+    Parameters:
+    - base_folder (str): The base directory for both operations.
+    - site_code (str): Site code for go_forth_and_multiply.
+    - product_code (str): Product code for go_forth_and_multiply.
+    - year_month (str): Year and month for go_forth_and_multiply.
+    - flight_lines (list): A list of flight lines for go_forth_and_multiply.
+    """
+    # First, call go_forth_and_multiply with the provided parameters
+    go_forth_and_multiply(
+        base_folder=base_folder,
+        site_code=site_code,
+        product_code=product_code,
+        year_month=year_month,
+        flight_lines=flight_lines
+    )
+    
+    # Next, process all subdirectories within the base_folder
+    process_all_subdirectories(base_folder)
+
+pass
+
+def process_all_subdirectories(parent_directory):
+    """
+    Searches for all subdirectories within the given parent directory, excluding non-directory files,
+    and applies raster file processing to each subdirectory found.
+
+    Parameters:
+    - parent_directory (str): The parent directory containing subdirectories to be processed.
+    """
+    # Iterate over all items in the parent directory
+    for item in os.listdir(parent_directory):
+        # Construct the full path of the item
+        full_path = os.path.join(parent_directory, item)
+        # Check if the item is a directory
+        if os.path.isdir(full_path):
+            # Apply the control function to process raster files within the subdirectory
+            control_function(full_path)
+            print(f"Finished processing for directory: {full_path}")
+        else:
+            print(f"Skipping non-directory item: {full_path}")
+
+pass
+
+def find_raster_files(directory):
+    """
+    Searches for raster files in the given directory, capturing files that match
+    specific conditions while excluding those ending with '.hdr'.
+
+    Parameters:
+    - directory (str): The directory to search in.
+
+    Returns:
+    - list: A list of unique file paths that match the specified patterns, excluding '.hdr' files.
+    """
+    pattern = "*"
+    full_pattern = os.path.join(directory, pattern)
+    all_files = glob.glob(full_pattern)
+    
+    filtered_files = [
+        file for file in all_files
+        if (file.endswith('_envi.img') or
+            file.endswith('_envi') and not file.endswith('.hdr') or
+            file.endswith('_reflectance.img') or
+            file.endswith('_reflectance') and not file.endswith('.hdr') or
+            "_envi_resample_Landsat" in file) and not file.endswith('.hdr')
+    ]
+    
+    found_files_set = set(filtered_files)
+    found_files = list(found_files_set)
+    found_files.sort()
+    
+    return found_files
+
+def control_function(directory):
+    """
+    Orchestrates the finding, loading, processing of raster files found in a specified directory,
+    cleans the processed data, and saves it to a CSV file in the same directory.
+
+    Parameters:
+    - directory (str): The directory to search for raster files and save the output CSV.
+    """
+    raster_paths = find_raster_files(directory)
+    
+    if not raster_paths:
+        print("No matching raster files found.")
+        return
+
+    # Implement your raster processing here:
+    # Assuming load_and_combine_rasters, process_and_flatten_array, and clean_data_and_write_to_csv
+    # are functions you've defined to handle the specific steps of processing your raster data.
+    
+    # Example placeholder steps:
+    combined_array = load_and_combine_rasters(raster_paths)  # Load and combine raster data
+    df_processed = process_and_flatten_array(combined_array)  # Process combined data into a DataFrame
+    # Extract the folder name from the directory path
+    folder_name = os.path.basename(os.path.normpath(directory))
+    output_csv_name = f"{folder_name}_spectral_data_all_sensors.csv"
+    output_csv_path = os.path.join(directory, output_csv_name)  # Define output CSV path
+    clean_data_and_write_to_csv(df_processed, output_csv_path)  # Clean data and write to CSV
+
+    print(f"Processed and cleaned data saved to {output_csv_path}")
+
+
+pass
+
+
+def clean_data_and_write_to_csv(df, output_csv_path, chunk_size=100000):
+    """
+    Cleans the DataFrame in chunks to minimize memory usage and writes the cleaned
+    chunks directly to a CSV file to avoid memory overload. It replaces values approximately
+    equal to -9999 (within a tolerance of 1) with NaN in columns not starting with 'Pixel', and
+    then drops rows where all such columns are NaN.
+    
+    Parameters:
+    - df: pandas DataFrame to clean.
+    - output_csv_path: Path to the output CSV file.
+    - chunk_size: Number of rows in each chunk.
+    
+    Returns:
+    - None. The cleaned data is written directly to the specified CSV file.
+    """
+    total_rows = df.shape[0]
+    num_chunks = (total_rows // chunk_size) + (1 if total_rows % chunk_size else 0)
+
+    print(f"Starting cleaning process, total rows: {total_rows}, chunk size: {chunk_size}, total chunks: {num_chunks}")
+
+    # Initialize CSV file writing
+    first_chunk = True
+
+    for i, start_row in enumerate(range(0, total_rows, chunk_size)):
+        chunk = df.iloc[start_row:start_row + chunk_size].copy()
+
+        # Replace values close to -9999 with NaN
+        for col in chunk.columns:
+            if not col.startswith('Pixel'):
+                chunk[col] = np.where(np.isclose(chunk[col], -9999, atol=1), np.nan, chunk[col])
+
+        # Drop rows where all non-'Pixel' columns are NaN
+        non_pixel_columns = [col for col in chunk.columns if not col.startswith('Pixel')]
+        chunk.dropna(subset=non_pixel_columns, how='all', inplace=True)
+        
+        # Write processed chunk to CSV
+        if first_chunk:
+            chunk.to_csv(output_csv_path, mode='w', header=True, index=False)
+            first_chunk = False
+        else:
+            chunk.to_csv(output_csv_path, mode='a', header=False, index=False)
+        
+        print(f"Processed and wrote chunk {i+1}/{num_chunks} to CSV.")
+
+    print("Cleaning process completed and data written to CSV.")
+    
+pass
+
+
+def process_and_flatten_array(array, landsat_versions=[5, 7, 8, 9], bands_per_landsat=6):
+    """
+    Processes a 3D numpy array to a DataFrame, renames columns, and adds Pixel_id.
+    
+    Parameters:
+    - array: A 3D numpy array of shape (bands, rows, cols).
+    - landsat_versions: A list of Landsat versions to use for naming.
+    - bands_per_landsat: Number of bands per Landsat version.
+    
+    Returns:
+    - A pandas DataFrame with processed and renamed columns and added Pixel_id.
+    """
+    if len(array.shape) != 3:
+        raise ValueError("Input array must be 3-dimensional.")
+    
+    # Flatten the array
+    bands, rows, cols = array.shape
+    reshaped_array = array.reshape(bands, -1).T  # Transpose to make bands as columns
+    pixel_indices = np.indices((rows, cols)).reshape(2, -1).T  # Row and col indices
+    
+    # Create DataFrame
+    df = pd.DataFrame(reshaped_array, columns=[f'Band_{i+1}' for i in range(bands)])
+    df.insert(0, 'Pixel_Col', pixel_indices[:, 1])
+    df.insert(0, 'Pixel_Row', pixel_indices[:, 0])
+    df.insert(0, 'Pixel_id', np.arange(len(df)))
+
+    # Renaming columns
+    total_bands = bands
+    original_and_corrected_bands = total_bands - bands_per_landsat * len(landsat_versions)
+    band_per_version = original_and_corrected_bands // 2  # Assuming equal original and corrected bands
+    
+    new_names = ([f"Original_band_{i}" for i in range(1, band_per_version + 1)] +
+                 [f"Corrected_band_{i}" for i in range(1, band_per_version + 1)])
+    
+    for version in landsat_versions:
+        new_names.extend([f"Landsat_{version}_band_{i}" for i in range(1, bands_per_landsat + 1)])
+    
+    # Apply new column names for band columns
+    df.columns = ['Pixel_id', 'Pixel_Row', 'Pixel_Col'] + new_names
+
+    return df
+
+pass
+
+class ENVIProcessor:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.data = None  # This will hold the raster data array
+        self.file_type = "envi"
+
+    def load_data(self):
+        """Loads the raster data from the file_path into self.data"""
+        with rasterio.open(self.file_path) as src:
+            self.data = src.read()  # Read all bands
+
+    def get_chunk_from_extent(self, corrections=[], resample=False):
+        self.load_data()  # Ensure data is loaded
+        with rasterio.open(self.file_path) as src:
+            bounds = src.bounds
+            width, height = src.width, src.height
+            col_start, line_start = 0, 0
+            col_end, line_end = width, height
+
+            # Assuming self.data is a 3D numpy array with dimensions [bands, rows, cols]
+            chunk = self.data[:, line_start:line_end, col_start:col_end]
+
+            # Apply any processing to chunk here...
+            # For example, to demonstrate, flip chunk vertically
+            chunk = np.flip(chunk, axis=1)
+
+            return chunk
+
+def load_and_combine_rasters(raster_paths):
+    """
+    Loads and combines raster data from a list of file paths.
+    """
+    chunks = []
+    for path in raster_paths:
+        processor = ENVIProcessor(path)
+        chunk = processor.get_chunk_from_extent(corrections=['some_correction'], resample=False)
+        chunks.append(chunk)
+
+    combined_array = np.concatenate(chunks, axis=0)  # Combine along the first axis (bands)
+    return combined_array
+
+pass
+
 def go_forth_and_multiply(base_folder="output", **kwargs):
     #start_time = time.time()  # Capture start time
     
