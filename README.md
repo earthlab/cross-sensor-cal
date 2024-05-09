@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/647048266.svg)](https://zenodo.org/doi/10.5281/zenodo.11167876)
+
 # cross-sensor-cal
 Python tool for cross-sensor calibration (This tool development is part of the NSF Award #DEB 2017889)
 
