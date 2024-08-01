@@ -1,0 +1,252 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+library(readr)
+polygon_spectra <- read_csv("data-store/polygon_spectra.csv")
+names(polygon_spectra)
+```
+
+
+```{r}
+library(ggplot2)
+
+polygon_spectra$Corrected_band_1
+
+ggplot(data=polygon_spectra)+
+  geom_point(aes(x= Original_band_1, y=Corrected_band_1)) +
+  geom_abline(slope=1, intersect=0) +
+  ylim(0.01, 15000)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Step 1: Initialize an empty list to store data frames
+long_data_list <- list()
+
+# Step 2: Loop through each band, convert 0s and values > 10000 to NA, and add the corresponding pairs to the list
+for (i in 1:426) {
+  long_data_list[[i]] <- polygon_spectra %>%
+    select(Original_band = paste0("Original_band_", i),
+           Corrected_band = paste0("Corrected_band_", i)) %>%
+    mutate(Original_band = ifelse(Original_band == 0 | Original_band > 10000, NA, Original_band),
+           Corrected_band = ifelse(Corrected_band == 0 | Corrected_band > 10000, NA, Corrected_band)) %>%
+    mutate(Band = paste0("Band_", i))
+}
+
+# Step 3: Combine all the long data frames into one
+polygon_spectra_long <- bind_rows(long_data_list)
+
+# Step 4: Calculate slope coefficients and add them to the plot
+slope_data <- polygon_spectra_long %>%
+  group_by(Band) %>%
+  summarise(
+    slope = tryCatch({
+      round(coef(lm(Corrected_band ~ Original_band, na.action = na.omit))[2], 2)
+    }, error = function(e) { NA })
+  )
+
+# Step 5: Plot with faceting, linear model, and fixed slope annotation
+plot <- ggplot(data = polygon_spectra_long, aes(x = Original_band, y = Corrected_band)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue", na.rm = TRUE) +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ylim(0.01, 15000) +
+  facet_wrap(~ Band, scales = "free") +
+  geom_text(
+    data = slope_data,
+    aes(x = 10, y = 13000, label = paste("Slope:", slope)),
+    size = 5, color = "black"
+  )
+
+# Step 6: Save the plot to a PDF
+ggsave("data-store/faceted_plot_with_slopes.pdf", plot = plot, width = 40, height = 40, units = "in")
+
+
+
+```
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Step 1: Convert 0s and values > 10000 to NA
+polygon_spectra_cleaned <- polygon_spectra %>%
+  mutate(across(everything(), ~ ifelse(. == 0 | . > 10000, NA, .)))
+
+# Step 2: Calculate slope coefficients for each band pair
+slope_table <- bind_rows(lapply(1:426, function(i) {
+  data <- polygon_spectra_cleaned %>%
+    select(Original_band = paste0("Original_band_", i),
+           Corrected_band = paste0("Corrected_band_", i))
+  
+  slope <- tryCatch({
+    coef(lm(Corrected_band ~ Original_band, data = data, na.action = na.omit))[2]
+  }, error = function(e) { NA })
+  
+  data.frame(
+    Original_Band = paste0("Original_band_", i),
+    Corrected_Band = paste0("Corrected_band_", i),
+    Slope_Coefficient = round(slope, 2)
+  )
+}))
+
+# Step 3: View the table
+print(slope_table)
+
+# Optional: Save the table to a CSV file
+write.csv(slope_table, "band_comparison_table.csv", row.names = FALSE)
+
+```
+
+```{r}
+library(ggplot2)
+
+# Extract the band number from the 'Original_Band' column for plotting
+slope_table <- slope_table %>%
+  mutate(Band_Number = as.numeric(gsub("Original_band_", "", Original_Band)))
+
+# Plotting the slope coefficients
+slope_plot <- ggplot(slope_table, aes(x = Band_Number, y = Slope_Coefficient)) +
+  geom_point(color = "blue") +
+  geom_line(color = "blue") +
+  labs(title = "Slope Coefficients Original vs. Corrected 426 band",
+       x = "Band Number",
+       y = "Slope Coefficient") +
+  theme_minimal()
+
+# Display the plot
+print(slope_plot)
+
+# Optional: Save the slope plot to a file
+ggsave("data-store/slope_coefficients_plot.pdf", plot = slope_plot, width = 10, height = 6, units = "in")
+
+```
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Assuming 'polygon_spectra' is your data frame with all the relevant columns
+
+# List of band numbers and sensor names
+bands <- 1:6
+sensors <- c("Landsat_5", "Landsat_7", "Landsat_8", "Landsat_9")
+
+# Initialize an empty list to store the results
+slope_table_list <- list()
+
+# Loop through each band
+for (band in bands) {
+  # Step 1: Subset the data for the current band across all sensors
+  band_data <- polygon_spectra %>%
+    select(contains(paste0("_band_", band)))
+  
+  # Step 2: Reshape to long format
+  band_data_long <- band_data %>%
+    pivot_longer(cols = everything(), names_to = "Sensor", values_to = "Value") %>%
+    mutate(Sensor = gsub("_band_.*", "", Sensor))  # Remove band info from sensor names
+  
+  # Step 3: Perform pairwise comparisons and calculate slopes
+  slopes <- expand.grid(Sensor1 = sensors, Sensor2 = sensors) %>%
+    filter(Sensor1 != Sensor2) %>%  # Remove self-comparisons
+    rowwise() %>%
+    mutate(Slope_Coefficient = tryCatch({
+      coef(lm(Value ~ Sensor, data = band_data_long %>% 
+               filter(Sensor %in% c(Sensor1, Sensor2)) %>%
+               mutate(Sensor = as.factor(Sensor))))[2]
+    }, error = function(e) { NA })) %>%
+    mutate(Band = paste0("Band_", band))
+  
+  # Step 4: Store results in list
+  slope_table_list[[band]] <- slopes
+}
+
+# Combine all the results into one data frame
+slope_table <- bind_rows(slope_table_list)
+
+# View the slope table
+print(slope_table)
+
+# Step 5: Plot the slope coefficients
+slope_plot <- ggplot(slope_table, aes(x = interaction(Sensor1, Sensor2), y = Slope_Coefficient, color = Band)) +
+  geom_point() +
+  geom_line(aes(group = Band)) +
+  labs(title = "Slope Coefficients for Each Band Comparison Across Sensors",
+       x = "Sensor Pair",
+       y = "Slope Coefficient") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the plot
+slope_plot
+
+# Optional: Save the slope plot to a file
+ggsave("data-store/slope_coefficients_across_sensors.pdf", plot = slope_plot, width = 12, height = 8, units = "in")
+
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# List of Landsat sensors and bands
+sensors <- c("Landsat_5", "Landsat_7", "Landsat_8", "Landsat_9")
+bands <- 1:6
+
+# Step 1: Initialize an empty list to store data frames
+long_data_list <- list()
+
+# Step 2: Loop through each band, convert 0s and values > 10000 to NA, and add the corresponding pairs to the list
+for (band in bands) {
+  long_data_list[[band]] <- polygon_spectra %>%
+    select(all_of(paste0(sensors, "_band_", band))) %>%
+    pivot_longer(cols = everything(), names_to = "Sensor", values_to = "Value") %>%
+    mutate(Sensor = gsub("_band_.*", "", Sensor),
+           Value = ifelse(Value == 0 | Value > 10000, NA, Value),
+           Band = paste0("Band_", band))
+}
+
+# Step 3: Combine all the long data frames into one
+landsat_data_long <- bind_rows(long_data_list)
+
+# Step 4: Calculate slope coefficients and add them to the plot
+slope_data <- landsat_data_long %>%
+  group_by(Band) %>%
+  summarise(
+    slope = tryCatch({
+      round(coef(lm(Value ~ Sensor, na.action = na.omit))[2], 2)
+    }, error = function(e) { NA })
+  )
+
+# Step 5: Plot with faceting, linear model, and fixed slope annotation
+plot <- ggplot(data = landsat_data_long, aes(x = Sensor, y = Value)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue", na.rm = TRUE) +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ylim(0.01, 15000) +
+  facet_wrap(~ Band, scales = "free") +
+  geom_text(
+    data = slope_data,
+    aes(x = 1.5, y = 13000, label = paste("Slope:", slope)),
+    size = 5, color = "black"
+  )
+
+# Step 6: Save the plot to a PDF
+ggsave("landsat_faceted_plot_with_slopes.pdf", plot = plot, width = 40, height = 40, units = "in")
+
+```
+
