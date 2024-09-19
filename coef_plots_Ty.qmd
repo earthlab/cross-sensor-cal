@@ -6,10 +6,9 @@ editor: visual
 
 ```{r}
 library(readr)
-polygon_spectra <- read_csv("data-store/polygon_spectra.csv")
+polygon_spectra <- read_csv("/home/jovyan/data-store/cross-sensor-cal/polygon_spectra.csv")
 names(polygon_spectra)
 ```
-
 
 ```{r}
 library(ggplot2)
@@ -66,13 +65,11 @@ plot <- ggplot(data = polygon_spectra_long, aes(x = Original_band, y = Corrected
   )
 
 # Step 6: Save the plot to a PDF
-ggsave("data-store/faceted_plot_with_slopes.pdf", plot = plot, width = 40, height = 40, units = "in")
+ggsave("faceted_plot_with_slopes.pdf", plot = plot, width = 40, height = 40, units = "in")
 
 
 
 ```
-
-
 
 ```{r}
 library(dplyr)
@@ -127,11 +124,9 @@ slope_plot <- ggplot(slope_table, aes(x = Band_Number, y = Slope_Coefficient)) +
 print(slope_plot)
 
 # Optional: Save the slope plot to a file
-ggsave("data-store/slope_coefficients_plot.pdf", plot = slope_plot, width = 10, height = 6, units = "in")
+ggsave("slope_coefficients_plot.pdf", plot = slope_plot, width = 10, height = 6, units = "in")
 
 ```
-
-
 
 ```{r}
 library(dplyr)
@@ -193,10 +188,9 @@ slope_plot <- ggplot(slope_table, aes(x = interaction(Sensor1, Sensor2), y = Slo
 slope_plot
 
 # Optional: Save the slope plot to a file
-ggsave("data-store/slope_coefficients_across_sensors.pdf", plot = slope_plot, width = 12, height = 8, units = "in")
+ggsave("slope_coefficients_across_sensors.pdf", plot = slope_plot, width = 12, height = 8, units = "in")
 
 ```
-
 
 ```{r}
 library(dplyr)
@@ -250,3 +244,73 @@ ggsave("landsat_faceted_plot_with_slopes.pdf", plot = plot, width = 40, height =
 
 ```
 
+```{r}
+# Load necessary libraries
+library(rstac)
+library(terra)
+library(dplyr)
+
+# Step 1: Define the AOI Polygon (example coordinates)
+aoi <- ext(-105.1, -105.0, 39.7, 39.8)
+
+# Step 2: Define the STAC API endpoint for Planetary Computer
+stac_api_url <- "https://planetarycomputer.microsoft.com/api/stac/v1"
+
+# Step 3: Initialize the STAC client and perform the search
+client <- stac(stac_api_url)
+search <- client %>%
+  stac_search(collections = "landsat-8-c2-l2",
+              bbox = as.vector(aoi), 
+              datetime = "2021-01-01/2021-12-31") %>%
+  get_request()
+
+# Check if there are any items in the search result
+if (length(search$features) == 0) {
+  stop("No items found.")
+}
+
+# Step 4: Retrieve the first item
+item <- search$features[[1]]
+
+# Step 5: Define the bands you want to retrieve
+bands <- c("SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7")
+
+# Step 6: Prepare to store reflectance data
+data_list <- list()
+
+# Loop through each band, download, and process the data
+for (band in bands) {
+  if (!is.null(item$assets[[band]])) {
+    # Get the asset URL (no need for access token)
+    asset_url <- item$assets[[band]]$href
+
+    # Load the raster data using terra
+    raster_data <- rast(asset_url)
+
+    # Extract reflectance values and flatten them
+    band_values <- as.data.frame(values(raster_data))
+    band_values$band <- band
+
+    # Append to the list
+    data_list[[band]] <- band_values
+  } else {
+    print(paste("Band", band, "not found in the item."))
+  }
+}
+
+# Combine all the data into a single dataframe
+df <- bind_rows(data_list)
+
+# Step 7: Display the DataFrame
+print(df)
+
+# Step 8: Plot the distribution of reflectance values per band
+library(ggplot2)
+
+ggplot(df, aes(x = band, y = SR_B1)) + 
+  geom_violin() +
+  labs(title = "Distribution of Reflectance Values per Band", x = "Band", y = "Reflectance") +
+  theme_minimal()
+
+
+```
