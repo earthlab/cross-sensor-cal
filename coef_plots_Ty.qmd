@@ -339,3 +339,77 @@ NIWO_landsat8_compare <- NIWO_landsat8_compare %>%
 
 head(NIWO_landsat8_compare)
 ```
+
+```{r}
+# Install and load necessary packages
+#install.packages(c("ggplot2", "tidyr", "dplyr"))  # Skip if already installed
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Load the CSV file
+#NIWO_landsat8_compare <- read.csv("NIWO_landsat8_compare.csv", stringsAsFactors = FALSE)
+
+# Inspect the dataframe
+#head(NIWO_landsat8_compare)
+#str(NIWO_landsat8_compare)
+#summary(NIWO_landsat8_compare)
+
+# Reshape the dataframe from wide to long format
+long_df <- NIWO_landsat8_compare %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Band_Type",
+    values_to = "Reflectance"
+  ) %>%
+  separate(Band_Type, into = c("Source", "Band"), sep = "_band_") %>%
+  mutate(
+    Band = as.integer(Band),
+    Source = ifelse(grepl("real", Source, ignore.case = TRUE), "Real", "Sampled")
+  )
+
+# Inspect the reshaped dataframe
+head(long_df)
+str(long_df)
+sum(is.na(long_df$Reflectance))
+
+# Combined Density Plot for All Bands and Sources
+ggplot(long_df, aes(x = Reflectance, color = interaction(Source, Band), fill = interaction(Source, Band))) +
+  geom_density(alpha = 0.3) +
+  labs(
+    title = "Density Distribution of Landsat8 Real and Sampled Bands",
+    x = "Reflectance",
+    y = "Density",
+    color = "Source and Band",
+    fill = "Source and Band"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+# Faceted Density Plot by Band
+ggplot(long_df, aes(x = Reflectance, fill = Source, color = Source)) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~ Band, ncol = 3) +
+  labs(
+    title = "Density Distribution of Landsat8 Bands: Real vs. Sampled",
+    x = "Reflectance",
+    y = "Density",
+    fill = "Source",
+    color = "Source"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+# Save the combined density plot
+ggsave("Combined_Density_Plot.png", width = 10, height = 6, dpi = 300)
+
+# Save the faceted density plot by band
+ggsave("Faceted_Density_Plot_by_Band.png", width = 12, height = 8, dpi = 300)
+
+```
