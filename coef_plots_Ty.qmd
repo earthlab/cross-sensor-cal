@@ -314,3 +314,28 @@ ggplot(df, aes(x = band, y = SR_B1)) +
 
 
 ```
+
+```{r}
+
+# Install readr if not already installed
+#install.packages("readr")
+
+# Load the readr package
+library(readr)
+library(dplyr)
+
+NIWO_landsat8_compare <- read_csv("NIWO_landsat8_compare.csv")
+
+
+
+
+```
+
+```{r}
+# Round all 'sampled' columns to whole numbers
+NIWO_landsat8_compare <- NIWO_landsat8_compare %>%
+  mutate(across(contains("sampled"), ~ round(.)))
+
+
+head(NIWO_landsat8_compare)
+```
