@@ -19,9 +19,14 @@
         "wavelengths": [444, 475, 531, 560, 650, 668, 705, 717, 740, 842],
         "fwhms": [28, 32, 14, 27, 16, 14, 10, 12, 18, 57] 
             },
-    "MicaSense-to-match": {
-        "wavelengths": [444, 475, 531, 560, 650, 668, 705, 717, 740, 842],
-        "fwhms": [28, 32, 14, 27, 16, 14, 10, 12, 18, 57] 
+    "MicaSense-to-match TM and ETM+": {
+        "wavelengths": [475, 560, 668, 842],
+        "fwhms": [32, 27, 14, 57] 
+        },
+    "MicaSense-to-match OLI and OLI-2": {
+        "wavelengths": [444, 475, 560, 668, 842],
+        "fwhms": [28, 32, 27, 14, 57] 
+        }
 }
 
 
