@@ -358,11 +358,14 @@ pass
 def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
     # List of sensor types to loop through
     sensor_types = [
-        'Landsat 5 TM',
-        'Landsat 7 ETM+',
-        'Landsat 8 OLI',
-        'Landsat 9 OLI-2'
-    ]
+    'Landsat 5 TM',
+    'Landsat 7 ETM+',
+    'Landsat 8 OLI',
+    'Landsat 9 OLI-2',
+    'MicaSense',
+    'MicaSense-to-match TM and ETM+',
+    'MicaSense-to-match OLI and OLI-2'
+]
 
     # Find all files ending with '_envi' but not with 'config_envi' or '.json'
     pattern = os.path.join(folder_path, '*_envi')
