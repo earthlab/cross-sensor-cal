@@ -718,6 +718,9 @@ pass
 
 
 
+import requests
+import subprocess
+
 def download_neon_file(site_code, product_code, year_month, flight_line):
     server = 'http://data.neonscience.org/api/v0/'
     data_url = f'{server}data/{product_code}/{site_code}/{year_month}'
@@ -736,7 +739,24 @@ def download_neon_file(site_code, product_code, year_month, flight_line):
             file_name = file_info['name']
             if flight_line in file_name:
                 print(f"Downloading {file_name} from {file_info['url']}")
-                os.system(f'wget --no-check-certificate "{file_info["url"]}" -O "{file_name}"')
+                
+                # Use subprocess.run to handle output
+                try:
+                    result = subprocess.run(
+                        ['wget', '--no-check-certificate', file_info["url"], '-O', file_name],
+                        stdout=subprocess.PIPE,  # Capture standard output
+                        stderr=subprocess.PIPE,  # Capture standard error
+                        text=True  # Decode to text
+                    )
+                    
+                    # Check for errors
+                    if result.returncode != 0:
+                        print(f"Error downloading file: {result.stderr}")
+                    else:
+                        print(f"Download completed for {file_name}")
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                
                 file_found = True
                 break
         
@@ -745,8 +765,8 @@ def download_neon_file(site_code, product_code, year_month, flight_line):
     else:
         print(f"Failed to retrieve data for {year_month}. Status code: {response.status_code}, Response: {response.text}")
 
-
 pass
+
 
 
 
