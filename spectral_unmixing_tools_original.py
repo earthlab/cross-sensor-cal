@@ -141,7 +141,7 @@ def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macr
     'MicaSense-to-match TM and ETM+',
     'MicaSense-to-match OLI and OLI-2'
 ]
-
+("All done!")
     # Find all files ending with '_envi' but not with 'config_envi' or '.json'
     pattern = os.path.join(folder_path, '*_envi')
     envi_files = [file for file in glob.glob(pattern) if not file.endswith('config_envi') and not file.endswith('.json')]
@@ -412,7 +412,7 @@ pass
 def apply_topo_and_brdf_corrections(base_folder_path, conda_env_path='/opt/conda/envs/macrosystems'):
     # Construct the full path to the Python executable in the specified Conda environment
     python_executable = os.path.join(conda_env_path, "bin", "python")
-    
+    print("Starting topo and brdf correction. This takes a long time. ")
     # Find all subfolders in the base folder
     subfolders = glob.glob(os.path.join(base_folder_path, '*/'))
     
