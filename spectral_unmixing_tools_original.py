@@ -419,7 +419,7 @@ def apply_topo_and_brdf_corrections(base_folder_path, conda_env_path='/opt/conda
     for folder in subfolders:
         folder_name = os.path.basename(os.path.normpath(folder))
         json_file_name = f"{folder_name}_config__envi.json"
-        json_file_path = os.path.join(folder, json_file_name)
+        json_file_path = os.path.join(folder, "/",json_file_name)
         
         # Check if the JSON file exists
         if os.path.isfile(json_file_path):
