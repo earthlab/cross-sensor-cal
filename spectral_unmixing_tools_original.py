@@ -123,7 +123,7 @@ pass
 def resample_translation_to_other_sensors(base_folder, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
     # List all subdirectories in the base folder
     subdirectories = [os.path.join(base_folder, d) for d in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, d))]
-
+    print("Starting tranlation to other sensors")
     for folder in subdirectories:
         print(f"Processing folder: {folder}")
         translate_to_other_sensors(folder, conda_env_path)
@@ -141,7 +141,7 @@ def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macr
     'MicaSense-to-match TM and ETM+',
     'MicaSense-to-match OLI and OLI-2'
 ]
-("All done!")
+    
     # Find all files ending with '_envi' but not with 'config_envi' or '.json'
     pattern = os.path.join(folder_path, '*_envi')
     envi_files = [file for file in glob.glob(pattern) if not file.endswith('config_envi') and not file.endswith('.json')]
