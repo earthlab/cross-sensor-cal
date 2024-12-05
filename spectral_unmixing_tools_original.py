@@ -409,6 +409,10 @@ pass
 
 
 
+import os
+import glob
+import subprocess
+
 def apply_topo_and_brdf_corrections(base_folder_path, conda_env_path='/opt/conda/envs/macrosystems'):
     # Construct the full path to the Python executable in the specified Conda environment
     python_executable = os.path.join(conda_env_path, "bin", "python")
