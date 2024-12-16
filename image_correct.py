@@ -136,10 +136,11 @@ def export_coeffs(hy_obj,export_dict):
     """
 
     for correction in hy_obj.corrections:
-        coeff_file = export_dict['output_dir']
-        coeff_file += os.path.splitext(os.path.basename(hy_obj.file_name))[0]
-        print(coeff_file)
-        coeff_file += "_%s_coeffs_%s.json" % (correction,export_dict["suffix"])
+        coeff_file = os.path.join(
+            export_dict['output_dir'],
+            os.path.splitext(os.path.basename(hy_obj.file_name))[0] +
+            "_%s_coeffs_%s.json" % (correction, export_dict["suffix"])
+        )
 
         with open(coeff_file, 'w') as outfile:
             if correction == 'topo':
@@ -148,7 +149,7 @@ def export_coeffs(hy_obj,export_dict):
                 continue
             else:
                 corr_dict = hy_obj.brdf
-            json.dump(corr_dict,outfile)
+            json.dump(corr_dict, outfile)
 
 def apply_corrections(hy_obj,config_dict):
     """
@@ -184,28 +185,29 @@ def apply_corrections(hy_obj,config_dict):
     header_dict['data ignore value'] = hy_obj.no_data
     header_dict['data type'] = 4
 
-    output_name = config_dict['export']['output_dir']
-    output_name += os.path.splitext(os.path.basename(hy_obj.file_name))[0]
-    output_name +=  "_%s" % config_dict['export']["suffix"]
+    output_name = os.path.join(
+        config_dict['export']['output_dir'],
+        os.path.splitext(os.path.basename(hy_obj.file_name))[0] +
+        "_%s" % config_dict['export']["suffix"]
+    )
 
-    #Export all wavelengths
+    # Export all wavelengths
     if len(config_dict['export']['subset_waves']) == 0:
-
-        if config_dict["resample"] == True:
+        if config_dict["resample"]:
             hy_obj.resampler = config_dict['resampler']
-            waves= hy_obj.resampler['out_waves']
+            waves = hy_obj.resampler['out_waves']
         else:
             waves = hy_obj.wavelengths
 
         header_dict['bands'] = len(waves)
         header_dict['wavelength'] = waves
 
-        writer = WriteENVI(output_name,header_dict)
+        writer = WriteENVI(output_name, header_dict)
         iterator = hy_obj.iterate(by='line', corrections=hy_obj.corrections,
                                   resample=config_dict['resample'])
         while not iterator.complete:
             line = iterator.read_next()
-            writer.write_line(line,iterator.current_line)
+            writer.write_line(line, iterator.current_line)
         writer.close()
 
     #Export subset of wavelengths
@@ -223,16 +225,16 @@ def apply_corrections(hy_obj,config_dict):
             writer.write_band(band, b)
         writer.close()
 
-    #Export masks
-    if (config_dict['export']['masks']) and (len(config_dict["corrections"]) > 0):
+    # Export masks
+    if config_dict['export']['masks'] and len(config_dict["corrections"]) > 0:
         masks = []
         mask_names = []
-
+    
         for correction in config_dict["corrections"]:
             for mask_type in config_dict[correction]['apply_mask']:
                 mask_names.append(correction + '_' + mask_type[0])
                 masks.append(mask_create(hy_obj, [mask_type]))
-
+    
         header_dict['data type'] = 1
         header_dict['bands'] = len(masks)
         header_dict['band names'] = mask_names
@@ -242,20 +244,22 @@ def apply_corrections(hy_obj,config_dict):
         header_dict['fwhm'] = []
         header_dict['wavelength units'] = ''
         header_dict['data ignore value'] = 255
-
-
-        output_name = config_dict['export']['output_dir']
-        output_name += os.path.splitext(os.path.basename(hy_obj.file_name))[0]
-        output_name +=  "_%s_mask" % config_dict['export']["suffix"]
-
-        writer = WriteENVI(output_name,header_dict)
-
-        for band_num,mask in enumerate(masks):
+    
+        output_name = os.path.join(
+            config_dict['export']['output_dir'],
+            os.path.splitext(os.path.basename(hy_obj.file_name))[0] +
+            "_%s_mask" % config_dict['export']["suffix"]
+        )
+    
+        writer = WriteENVI(output_name, header_dict)
+    
+        for band_num, mask in enumerate(masks):
             mask = mask.astype(int)
             mask[~hy_obj.mask['no_data']] = 255
-            writer.write_band(mask,band_num)
-
+            writer.write_band(mask, band_num)
+    
         del masks
+
 
 if __name__== "__main__":
     main()

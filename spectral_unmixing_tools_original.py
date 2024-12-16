@@ -59,6 +59,10 @@ import os
 import glob
 import pandas as pd
 
+
+import os
+import glob
+import subprocess
 import os
 
 def jefe(base_folder, site_code, product_code, year_month, flight_lines):
@@ -409,41 +413,39 @@ pass
 
 
 
-import os
-import glob
-import subprocess
-
 def apply_topo_and_brdf_corrections(base_folder_path, conda_env_path='/opt/conda/envs/macrosystems'):
     # Construct the full path to the Python executable in the specified Conda environment
     python_executable = os.path.join(conda_env_path, "bin", "python")
-    print("Starting topo and brdf correction. This takes a long time. ")
+    print("Starting topo and BRDF correction. This takes a long time.")
+
     # Find all subfolders in the base folder
-    subfolders = glob.glob(os.path.join(base_folder_path, '*/'))
+    subfolders = [f for f in glob.glob(os.path.join(base_folder_path, '*')) if os.path.isdir(f)]
     
     for folder in subfolders:
         folder_name = os.path.basename(os.path.normpath(folder))
         json_file_name = f"{folder_name}_config__envi.json"
-        json_file_path = os.path.join(folder, "/",json_file_name)
+        json_file_path = os.path.join(folder, json_file_name)  
+        
+        print(f"Processing folder: {folder}")
+        print(f"Looking for JSON file: {json_file_path}")
         
         # Check if the JSON file exists
         if os.path.isfile(json_file_path):
             # Call the script with the JSON file path
             command = f"{python_executable} image_correct.py {json_file_path}"
             process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            print(f"Processed {json_file_path}")
+            
             if process.returncode != 0:
                 print(f"Error executing command: {command}")
                 print(f"Standard Output: {process.stdout}")
                 print(f"Error Output: {process.stderr}")
             else:
-                print("Command executed successfully")
+                print(f"Successfully processed: {json_file_path}")
                 print(f"Standard Output: {process.stdout}")
         else:
             print(f"JSON file not found: {json_file_path}")
-
+    
     print("All done!")
-
-pass
 
 def generate_correction_configs_for_directory(directory):
     """
@@ -563,7 +565,7 @@ def generate_correction_configs_for_directory(directory):
         config_dict["brdf"]['ndvi_perc_max'] = 95
     
         # Define the number of CPUs to be used (considering the number of image-ancillary pairs)
-        config_dict['num_cpus'] = 1
+        config_dict['num_cpus'] = 8
         
         # Output path for configuration file
         # Assuming you want to include the suffix in the filename:
