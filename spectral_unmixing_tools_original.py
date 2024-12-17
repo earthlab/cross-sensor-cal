@@ -59,7 +59,9 @@ import os
 import glob
 import pandas as pd
 
-
+import pandas as pd
+import numpy as np
+import json
 import os
 import glob
 import subprocess
@@ -324,45 +326,65 @@ def clean_data_and_write_to_csv(df, output_csv_path, chunk_size=100000):
 pass
 
 
-def process_and_flatten_array(array, landsat_versions=[5, 7, 8, 9], bands_per_landsat=6):
+
+
+def process_and_flatten_array(array, json_dir='Resampling', original_and_corrected=2):
     """
-    Processes a 3D numpy array to a DataFrame, renames columns, and adds Pixel_id.
-    
+    Processes a 3D numpy array to a DataFrame, renames columns dynamically based on JSON configuration,
+    and adds Pixel_id. Includes original, corrected, and resampled bands.
+
     Parameters:
     - array: A 3D numpy array of shape (bands, rows, cols).
-    - landsat_versions: A list of Landsat versions to use for naming.
-    - bands_per_landsat: Number of bands per Landsat version.
-    
+    - json_dir: Directory containing the landsat_band_parameters.json file.
+    - original_and_corrected: Number of original and corrected bands to include before resampled bands.
+
     Returns:
     - A pandas DataFrame with processed and renamed columns and added Pixel_id.
     """
     if len(array.shape) != 3:
         raise ValueError("Input array must be 3-dimensional.")
-    
+
+    # Locate the JSON configuration
+    json_file = os.path.join(json_dir, 'landsat_band_parameters.json')
+    if not os.path.isfile(json_file):
+        raise FileNotFoundError(f"JSON file not found: {json_file}")
+
+    # Load the JSON configuration
+    with open(json_file, 'r') as f:
+        config = json.load(f)
+
     # Flatten the array
     bands, rows, cols = array.shape
     reshaped_array = array.reshape(bands, -1).T  # Transpose to make bands as columns
     pixel_indices = np.indices((rows, cols)).reshape(2, -1).T  # Row and col indices
-    
+
     # Create DataFrame
     df = pd.DataFrame(reshaped_array, columns=[f'Band_{i+1}' for i in range(bands)])
     df.insert(0, 'Pixel_Col', pixel_indices[:, 1])
     df.insert(0, 'Pixel_Row', pixel_indices[:, 0])
     df.insert(0, 'Pixel_id', np.arange(len(df)))
 
-    # Renaming columns
-    total_bands = bands
-    original_and_corrected_bands = total_bands - bands_per_landsat * len(landsat_versions)
-    band_per_version = original_and_corrected_bands // 2  # Assuming equal original and corrected bands
-    
-    new_names = ([f"Original_band_{i}" for i in range(1, band_per_version + 1)] +
-                 [f"Corrected_band_{i}" for i in range(1, band_per_version + 1)])
-    
-    for version in landsat_versions:
-        new_names.extend([f"Landsat_{version}_band_{i}" for i in range(1, bands_per_landsat + 1)])
-    
-    # Apply new column names for band columns
-    df.columns = ['Pixel_id', 'Pixel_Row', 'Pixel_Col'] + new_names
+    # Build column names
+    band_names = []
+
+    # Add original and corrected bands
+    for i in range(1, original_and_corrected + 1):
+        band_names.append(f"Original_band_{i}")
+    for i in range(1, original_and_corrected + 1):
+        band_names.append(f"Corrected_band_{i}")
+
+    # Add resampled bands from JSON
+    for sensor, details in config.items():
+        wavelengths = details['wavelengths']
+        for i, wl in enumerate(wavelengths, start=1):
+            band_names.append(f"{sensor}_band_{i}_wl_{wl}nm")
+
+    # Validation
+    if len(band_names) != bands:
+        raise ValueError(f"Mismatch in total bands. Expected {bands}, but got {len(band_names)} from JSON + original/corrected bands.")
+
+    # Rename columns dynamically
+    df.columns = ['Pixel_id', 'Pixel_Row', 'Pixel_Col'] + band_names
 
     return df
 
