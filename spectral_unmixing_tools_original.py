@@ -188,250 +188,14 @@ def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macr
 pass
 
 
-def process_all_subdirectories(parent_directory):
-    """
-    Searches for all subdirectories within the given parent directory, excluding non-directory files,
-    and applies raster file processing to each subdirectory found.
-
-    Parameters:
-    - parent_directory (str): The parent directory containing subdirectories to be processed.
-    """
-    # Iterate over all items in the parent directory
-    for item in os.listdir(parent_directory):
-        # Construct the full path of the item
-        full_path = os.path.join(parent_directory, item)
-        # Check if the item is a directory
-        if os.path.isdir(full_path):
-            # Apply the control function to process raster files within the subdirectory
-            control_function(full_path)
-            print(f"Finished processing for directory: {full_path}")
-        else:
-            print(f"Skipping non-directory item: {full_path}")
-
-pass
-
-def find_raster_files(directory):
-    """
-    Searches for raster files in the given directory, capturing files that match
-    specific conditions while excluding those ending with '.hdr'.
-
-    Parameters:
-    - directory (str): The directory to search in.
-
-    Returns:
-    - list: A list of unique file paths that match the specified patterns, excluding '.hdr' files.
-    """
-    pattern = "*"
-    full_pattern = os.path.join(directory, pattern)
-    all_files = glob.glob(full_pattern)
-    
-    filtered_files = [
-        file for file in all_files
-        if (file.endswith('_envi.img') or
-            file.endswith('_envi') and not file.endswith('.hdr') or
-            file.endswith('_reflectance.img') or
-            file.endswith('_reflectance') and not file.endswith('.hdr') or
-            "_envi_resample_Landsat" in file) and not file.endswith('.hdr')
-    ]
-    
-    found_files_set = set(filtered_files)
-    found_files = list(found_files_set)
-    found_files.sort()
-    
-    return found_files
-
-def control_function(directory):
-    """
-    Orchestrates the finding, loading, processing of raster files found in a specified directory,
-    cleans the processed data, and saves it to a CSV file in the same directory.
-
-    Parameters:
-    - directory (str): The directory to search for raster files and save the output CSV.
-    """
-    raster_paths = find_raster_files(directory)
-    
-    if not raster_paths:
-        print("No matching raster files found.")
-        return
-
-    # Implement your raster processing here:
-    # Assuming load_and_combine_rasters, process_and_flatten_array, and clean_data_and_write_to_csv
-    # are functions you've defined to handle the specific steps of processing your raster data.
-    
-    # Example placeholder steps:
-    combined_array = load_and_combine_rasters(raster_paths)  # Load and combine raster data
-    df_processed = process_and_flatten_array(combined_array)  # Process combined data into a DataFrame
-    # Extract the folder name from the directory path
-    folder_name = os.path.basename(os.path.normpath(directory))
-    output_csv_name = f"{folder_name}_spectral_data_all_sensors.csv"
-    output_csv_path = os.path.join(directory, output_csv_name)  # Define output CSV path
-    if os.path.exists(output_csv_path):
-        print(f"CSV already exists: {output_csv_path}. Skipping processing.")
-        return
-        
-    clean_data_and_write_to_csv(df_processed, output_csv_path)  # Clean data and write to CSV
-
-    print(f"Processed and cleaned data saved to {output_csv_path}")
-
-
-pass
-
-
-def clean_data_and_write_to_csv(df, output_csv_path, chunk_size=100000):
-    """
-    Cleans the DataFrame in chunks to minimize memory usage and writes the cleaned
-    chunks directly to a CSV file to avoid memory overload. It replaces values approximately
-    equal to -9999 (within a tolerance of 1) with NaN in columns not starting with 'Pixel', and
-    then drops rows where all such columns are NaN.
-    
-    Parameters:
-    - df: pandas DataFrame to clean.
-    - output_csv_path: Path to the output CSV file.
-    - chunk_size: Number of rows in each chunk.
-    
-    Returns:
-    - None. The cleaned data is written directly to the specified CSV file.
-    """
-    total_rows = df.shape[0]
-    num_chunks = (total_rows // chunk_size) + (1 if total_rows % chunk_size else 0)
-
-    print(f"Starting cleaning process, total rows: {total_rows}, chunk size: {chunk_size}, total chunks: {num_chunks}")
-
-    # Initialize CSV file writing
-    first_chunk = True
-
-    for i, start_row in enumerate(range(0, total_rows, chunk_size)):
-        chunk = df.iloc[start_row:start_row + chunk_size].copy()
-
-        # Replace values close to -9999 with NaN
-        for col in chunk.columns:
-            if not col.startswith('Pixel'):
-                chunk[col] = np.where(np.isclose(chunk[col], -9999, atol=1), np.nan, chunk[col])
-
-        # Drop rows where all non-'Pixel' columns are NaN
-        non_pixel_columns = [col for col in chunk.columns if not col.startswith('Pixel')]
-        chunk.dropna(subset=non_pixel_columns, how='all', inplace=True)
-        
-        # Write processed chunk to CSV
-        if first_chunk:
-            chunk.to_csv(output_csv_path, mode='w', header=True, index=False)
-            first_chunk = False
-        else:
-            chunk.to_csv(output_csv_path, mode='a', header=False, index=False)
-        
-        print(f"Processed and wrote chunk {i+1}/{num_chunks} to CSV.")
-
-    print("Cleaning process completed and data written to CSV.")
-    
-pass
 
 
 
 
-def process_and_flatten_array(array, json_dir='Resampling', original_and_corrected=2):
-    """
-    Processes a 3D numpy array to a DataFrame, renames columns dynamically based on JSON configuration,
-    and adds Pixel_id. Includes original, corrected, and resampled bands.
 
-    Parameters:
-    - array: A 3D numpy array of shape (bands, rows, cols).
-    - json_dir: Directory containing the landsat_band_parameters.json file.
-    - original_and_corrected: Number of original and corrected bands to include before resampled bands.
 
-    Returns:
-    - A pandas DataFrame with processed and renamed columns and added Pixel_id.
-    """
-    if len(array.shape) != 3:
-        raise ValueError("Input array must be 3-dimensional.")
 
-    # Locate the JSON configuration
-    json_file = os.path.join(json_dir, 'landsat_band_parameters.json')
-    if not os.path.isfile(json_file):
-        raise FileNotFoundError(f"JSON file not found: {json_file}")
 
-    # Load the JSON configuration
-    with open(json_file, 'r') as f:
-        config = json.load(f)
-
-    # Flatten the array
-    bands, rows, cols = array.shape
-    reshaped_array = array.reshape(bands, -1).T  # Transpose to make bands as columns
-    pixel_indices = np.indices((rows, cols)).reshape(2, -1).T  # Row and col indices
-
-    # Create DataFrame
-    df = pd.DataFrame(reshaped_array, columns=[f'Band_{i+1}' for i in range(bands)])
-    df.insert(0, 'Pixel_Col', pixel_indices[:, 1])
-    df.insert(0, 'Pixel_Row', pixel_indices[:, 0])
-    df.insert(0, 'Pixel_id', np.arange(len(df)))
-
-    # Build column names
-    band_names = []
-
-    # Add original and corrected bands
-    for i in range(1, original_and_corrected + 1):
-        band_names.append(f"Original_band_{i}")
-    for i in range(1, original_and_corrected + 1):
-        band_names.append(f"Corrected_band_{i}")
-
-    # Add resampled bands from JSON
-    for sensor, details in config.items():
-        wavelengths = details['wavelengths']
-        for i, wl in enumerate(wavelengths, start=1):
-            band_names.append(f"{sensor}_band_{i}_wl_{wl}nm")
-
-    # Validation
-    if len(band_names) != bands:
-        raise ValueError(f"Mismatch in total bands. Expected {bands}, but got {len(band_names)} from JSON + original/corrected bands.")
-
-    # Rename columns dynamically
-    df.columns = ['Pixel_id', 'Pixel_Row', 'Pixel_Col'] + band_names
-
-    return df
-
-pass
-
-class ENVIProcessor:
-    def __init__(self, file_path):
-        self.file_path = file_path
-        self.data = None  # This will hold the raster data array
-        self.file_type = "envi"
-
-    def load_data(self):
-        """Loads the raster data from the file_path into self.data"""
-        with rasterio.open(self.file_path) as src:
-            self.data = src.read()  # Read all bands
-
-    def get_chunk_from_extent(self, corrections=[], resample=False):
-        self.load_data()  # Ensure data is loaded
-        with rasterio.open(self.file_path) as src:
-            bounds = src.bounds
-            width, height = src.width, src.height
-            col_start, line_start = 0, 0
-            col_end, line_end = width, height
-
-            # Assuming self.data is a 3D numpy array with dimensions [bands, rows, cols]
-            chunk = self.data[:, line_start:line_end, col_start:col_end]
-
-            # Apply any processing to chunk here...
-            # For example, to demonstrate, flip chunk vertically
-            chunk = np.flip(chunk, axis=1)
-
-            return chunk
-
-def load_and_combine_rasters(raster_paths):
-    """
-    Loads and combines raster data from a list of file paths.
-    """
-    chunks = []
-    for path in raster_paths:
-        processor = ENVIProcessor(path)
-        chunk = processor.get_chunk_from_extent(corrections=['some_correction'], resample=False)
-        chunks.append(chunk)
-
-    combined_array = np.concatenate(chunks, axis=0)  # Combine along the first axis (bands)
-    return combined_array
-
-pass
 
 
 
@@ -1376,7 +1140,363 @@ def download_neon_flight_lines(site_code, product_code, year_month, flight_lines
         print("Download completed.\n")
 pass
 
-# If module-level execution is needed, guard it:
-if __name__ == "__main__":
-    filenames = [ ... ]  # Define filenames here
-    # Any other code to run when script is executed directly
+
+
+
+
+
+import os
+import glob
+import numpy as np
+import pandas as pd
+import json
+import rasterio
+from spectral import open_image
+
+# ----- to a table -----
+
+class ENVIProcessor:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.data = None  # This will hold the raster data array
+        self.file_type = "envi"
+
+    def load_data(self):
+        """Loads the raster data from the file_path into self.data"""
+        with rasterio.open(self.file_path) as src:
+            self.data = src.read()  # Read all bands
+
+    def get_chunk_from_extent(self, corrections=[], resample=False):
+        self.load_data()  # Ensure data is loaded
+        return self.data
+
+
+def find_raster_files(directory):
+    """
+    Searches for raster files in the given directory, capturing both original and corrected ENVI files,
+    plus resampled ones, while excluding .hdr, .json, .csv, and any files containing '_mask' or '_ancillary'.
+    We'll look for filenames containing '_reflectance' (original) or '_envi' (corrected/resampled).
+    """
+    pattern = "*"
+    full_pattern = os.path.join(directory, pattern)
+    all_files = glob.glob(full_pattern)
+
+    filtered_files = [
+        file for file in all_files
+        if (
+            ('_reflectance' in os.path.basename(file) or '_envi' in os.path.basename(file)) and
+            '_mask' not in os.path.basename(file) and
+            '_ancillary' not in os.path.basename(file) and
+            not file.endswith('.hdr') and
+            not file.endswith('.json') and
+            not file.endswith('.csv')
+        )
+    ]
+
+    found_files_set = set(filtered_files)
+    found_files = list(found_files_set)
+    found_files.sort()
+
+    return found_files
+
+
+def load_and_combine_rasters(raster_paths):
+    """
+    Loads and combines raster data from a list of file paths.
+    Assumes each raster has shape (bands, rows, cols) and that
+    all rasters can be concatenated along the band dimension.
+    """
+    chunks = []
+    for path in raster_paths:
+        processor = ENVIProcessor(path)
+        chunk = processor.get_chunk_from_extent(corrections=['some_correction'], resample=False)
+        chunks.append(chunk)
+    combined_array = np.concatenate(chunks, axis=0)  # Combine along the first axis (bands)
+    return combined_array
+
+
+def process_and_flatten_array(array, json_dir='Resampling', original_bands=426, corrected_bands=426,
+                              original_wavelengths=None, corrected_wavelengths=None, folder_name=None,
+                              map_info=None):
+    """
+    Processes a 3D numpy array to a DataFrame, adds metadata columns, 
+    renames columns dynamically based on JSON configuration, and adds Pixel_id.
+    Uses provided wavelength lists to name original and corrected bands, and includes geocoordinates.
+
+    Parameters:
+    - array: A 3D numpy array of shape (bands, rows, cols).
+    - json_dir: Directory containing the landsat_band_parameters.json file.
+    - original_bands: Number of original bands expected.
+    - corrected_bands: Number of corrected bands expected.
+    - original_wavelengths: List of wavelengths for the original bands (floats).
+    - corrected_wavelengths: List of wavelengths for the corrected bands (floats).
+    - folder_name: Name of the subdirectory (flight line identifier).
+    - map_info: The map info array from the metadata for georeferencing.
+
+    Returns:
+    - A pandas DataFrame with additional metadata columns and renamed band columns.
+    """
+    if len(array.shape) != 3:
+        raise ValueError("Input array must be 3-dimensional. Expected (bands, rows, cols).")
+
+    json_file = os.path.join(json_dir, 'landsat_band_parameters.json')
+    if not os.path.isfile(json_file):
+        raise FileNotFoundError(f"JSON file not found: {json_file}")
+
+    with open(json_file, 'r') as f:
+        config = json.load(f)
+
+    bands, rows, cols = array.shape
+    print(f"[DEBUG] array shape: bands={bands}, rows={rows}, cols={cols}")
+
+    reshaped_array = array.reshape(bands, -1).T  # (pixels, bands)
+    pixel_indices = np.indices((rows, cols)).reshape(2, -1).T  # (pixels, 2)
+    df = pd.DataFrame(reshaped_array, columns=[f'Band_{i+1}' for i in range(bands)])
+
+    # Extract map info for georeferencing:
+    # Format: [projection, x_pixel_start, y_pixel_start, map_x, map_y, x_res, y_res, ...]
+    # Typically:
+    #   x_pixel_start, y_pixel_start = 1,1 for upper-left pixel
+    #   map_x, map_y = coordinates of that upper-left pixel
+    #   x_res, y_res = pixel sizes (y_res should be positive but we assume north-down in ENVI)
+    if map_info is not None and len(map_info) >= 7:
+        projection = map_info[0]
+        x_pixel_start = float(map_info[1])
+        y_pixel_start = float(map_info[2])
+        map_x = float(map_info[3])
+        map_y = float(map_info[4])
+        x_res = float(map_info[5])
+        y_res = float(map_info[6])
+    else:
+        # Fallback if map_info is not provided
+        projection = 'Unknown'
+        x_pixel_start, y_pixel_start = 1.0, 1.0
+        map_x, map_y = 0.0, 0.0
+        x_res, y_res = 1.0, 1.0
+
+    # Compute Easting, Northing
+    # Pixel_row and Pixel_col are zero-based. 
+    # According to ENVI conventions:
+    # Easting = map_x + (pixel_col - (x_pixel_start - 1)) * x_res
+    # Northing = map_y - (pixel_row - (y_pixel_start - 1)) * y_res
+    pixel_row = pixel_indices[:, 0]
+    pixel_col = pixel_indices[:, 1]
+    Easting = map_x + (pixel_col - (x_pixel_start - 1)) * x_res
+    Northing = map_y - (pixel_row - (y_pixel_start - 1)) * y_res
+
+    # Insert Pixel info and coordinates
+    df.insert(0, 'Pixel_Col', pixel_col)
+    df.insert(0, 'Pixel_Row', pixel_row)
+    df.insert(0, 'Pixel_id', np.arange(len(df)))
+    df.insert(3, 'Easting', Easting)
+    df.insert(4, 'Northing', Northing)
+
+    # Check we have enough bands
+    if bands < (original_bands + corrected_bands):
+        raise ValueError(
+            f"Not enough bands. Expected at least {original_bands + corrected_bands} (original+corrected), but got {bands}."
+        )
+
+    # Determine Corrected and Resampled flags
+    remaining_bands = bands - (original_bands + corrected_bands)
+    corrected_flag = "Yes" if corrected_bands > 0 else "No"
+    resampled_flag = "Yes" if remaining_bands > 0 else "No"
+
+    # Metadata columns: Subdirectory, Data_Source, Sensor_Type, Corrected, Resampled
+    # Insert these at the very front
+    df.insert(0, 'Resampled', resampled_flag)
+    df.insert(0, 'Corrected', corrected_flag)
+    df.insert(0, 'Sensor_Type', 'Hyperspectral')
+    df.insert(0, 'Data_Source', 'Flight line')
+    df.insert(0, 'Subdirectory', folder_name if folder_name else 'Unknown')
+
+    # Rename bands with wavelengths
+    band_names = []
+    # Original bands
+    if original_wavelengths is not None and len(original_wavelengths) >= original_bands:
+        for i in range(original_bands):
+            wl = original_wavelengths[i]
+            band_names.append(f"Original_band_{i+1}_wl_{wl}nm")
+    else:
+        for i in range(1, original_bands + 1):
+            band_names.append(f"Original_band_{i}")
+
+    # Corrected bands
+    if corrected_wavelengths is not None and len(corrected_wavelengths) >= corrected_bands:
+        for i in range(corrected_bands):
+            wl = corrected_wavelengths[i]
+            band_names.append(f"Corrected_band_{i+1}_wl_{wl}nm")
+    elif original_wavelengths is not None and len(original_wavelengths) >= corrected_bands:
+        for i in range(corrected_bands):
+            wl = original_wavelengths[i]
+            band_names.append(f"Corrected_band_{i+1}_wl_{wl}nm")
+    else:
+        for i in range(1, corrected_bands + 1):
+            band_names.append(f"Corrected_band_{i}")
+
+    print(f"[DEBUG] remaining_bands for resampled sensors: {remaining_bands}")
+
+    sensor_bands_assigned = 0
+    for sensor, details in config.items():
+        wavelengths = details.get('wavelengths', [])
+        for i, wl in enumerate(wavelengths, start=1):
+            if sensor_bands_assigned < remaining_bands:
+                band_names.append(f"{sensor}_band_{i}_wl_{wl}nm")
+                sensor_bands_assigned += 1
+            else:
+                break
+        if sensor_bands_assigned >= remaining_bands:
+            break
+
+    if sensor_bands_assigned < remaining_bands:
+        extra = remaining_bands - sensor_bands_assigned
+        print(f"[DEBUG] {extra} leftover bands have no matching sensors/wavelengths in JSON. Naming them generically.")
+        for i in range(1, extra + 1):
+            band_names.append(f"Unassigned_band_{i}")
+
+    # Now we have Pixel_id, Pixel_Row, Pixel_Col, Easting, Northing, and multiple metadata columns.
+    # Determine how many leading metadata columns we have before bands:
+    # Currently: Subdirectory, Data_Source, Sensor_Type, Corrected, Resampled, Pixel_id, Pixel_Row, Pixel_Col, Easting, Northing
+    # That's 10 columns before bands start.
+    metadata_count = 10
+
+    new_columns = list(df.columns[:metadata_count]) + band_names
+    if len(new_columns) != df.shape[1]:
+        raise ValueError(
+            f"Band naming mismatch: {len(new_columns)} columns assigned vs {df.shape[1]} in df. Check indexing."
+        )
+
+    df.columns = new_columns
+
+    print(f"[DEBUG] Final DataFrame shape: {df.shape}")
+    print("[DEBUG] Columns assigned successfully.")
+
+    return df
+
+
+def clean_data_and_write_to_csv(df, output_csv_path, chunk_size=100000):
+    """
+    Cleans a large DataFrame by processing it in chunks and then writes it to a CSV file.
+    """
+    total_rows = df.shape[0]
+    num_chunks = (total_rows // chunk_size) + (1 if total_rows % chunk_size else 0)
+
+    print(f"Cleaning data and writing to CSV in {num_chunks} chunk(s).")
+
+    first_chunk = True
+    for i, start_row in enumerate(range(0, total_rows, chunk_size)):
+        chunk = df.iloc[start_row:start_row + chunk_size].copy()
+        non_pixel_cols = [col for col in chunk.columns if not col.startswith('Pixel') and 
+                          col not in ['Subdirectory','Data_Source','Sensor_Type','Corrected','Resampled',
+                                      'Easting','Northing']]
+
+        # Replace -9999 values with NaN
+        chunk[non_pixel_cols] = chunk[non_pixel_cols].apply(
+            lambda x: np.where(np.isclose(x, -9999, atol=1), np.nan, x)
+        )
+
+        # Drop rows with all NaNs in non-pixel columns (spectral data)
+        chunk.dropna(subset=non_pixel_cols, how='all', inplace=True)
+
+        mode = 'w' if first_chunk else 'a'
+        header = True if first_chunk else False
+        chunk.to_csv(output_csv_path, mode=mode, header=header, index=False)
+
+        print(f"Chunk {i+1}/{num_chunks} processed and written.")
+        first_chunk = False
+
+    print(f"Data cleaning complete. Output written to: {output_csv_path}")
+
+
+def control_function(directory):
+    """
+    Orchestrates the finding, loading, processing of raster files found in a specified directory,
+    cleans the processed data, and saves it to a CSV file in the same directory.
+    """
+    raster_paths = find_raster_files(directory)
+
+    if not raster_paths:
+        print(f"No matching raster files found in {directory}.")
+        return
+
+    # Assume original file name (without _envi etc.) is the directory name
+    base_name = os.path.basename(os.path.normpath(directory))
+    hdr_file = os.path.join(os.path.dirname(directory), base_name + '.hdr')
+    if not os.path.isfile(hdr_file):
+        hdr_file = os.path.join(directory, base_name + '.hdr')
+
+    original_wavelengths = None
+    map_info = None
+    if os.path.isfile(hdr_file):
+        img = open_image(hdr_file)
+        original_wavelengths = img.metadata.get('wavelength', [])
+        # Convert to float if they are strings
+        original_wavelengths = [float(w) for w in original_wavelengths]
+        map_info = img.metadata.get('map info', None)
+    else:
+        print(f"No HDR file found at {hdr_file}. Will use generic band names and no geocoords.")
+
+    corrected_wavelengths = original_wavelengths
+
+    # Load and combine raster data
+    combined_array = load_and_combine_rasters(raster_paths)  
+    print(f"Combined array shape for directory {directory}: {combined_array.shape}")
+
+    # Attempt to process and flatten the array into a DataFrame
+    try:
+        df_processed = process_and_flatten_array(
+            combined_array,
+            json_dir='Resampling',
+            original_bands=426,
+            corrected_bands=426,
+            original_wavelengths=original_wavelengths,
+            corrected_wavelengths=corrected_wavelengths,
+            folder_name=base_name,
+            map_info=map_info
+        )  
+        print(f"DataFrame shape after flattening for directory {directory}: {df_processed.shape}")
+    except ValueError as e:
+        print(f"ValueError encountered during processing of {directory}: {e}")
+        print("Check the number of bands vs. the expected column names in process_and_flatten_array().")
+        return
+    except Exception as e:
+        print(f"An unexpected error occurred while processing {directory}: {e}")
+        return
+
+    # Extract the folder name from the directory path
+    folder_name = os.path.basename(os.path.normpath(directory))
+    output_csv_name = f"{folder_name}_spectral_data_all_sensors.csv"
+    output_csv_path = os.path.join(directory, output_csv_name)
+
+    # Always overwrite if CSV exists
+    if os.path.exists(output_csv_path):
+        print(f"CSV {output_csv_path} already exists and will be overwritten.")
+
+    # Clean data and write to CSV
+    clean_data_and_write_to_csv(df_processed, output_csv_path)  
+    print(f"Processed and cleaned data saved to {output_csv_path}")
+
+
+def process_all_subdirectories(parent_directory):
+    """
+    Searches for all subdirectories within the given parent directory, excluding non-directory files,
+    and applies raster file processing to each subdirectory found.
+    """
+    for item in os.listdir(parent_directory):
+        full_path = os.path.join(parent_directory, item)
+        if os.path.isdir(full_path):
+            try:
+                control_function(full_path)
+                print(f"Finished processing for directory: {full_path}")
+            except Exception as e:
+                print(f"Error processing directory '{full_path}': {e}")
+        else:
+            print(f"Skipping non-directory item: {full_path}")
+
+
+
+
+
+
+
+
