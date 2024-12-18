@@ -126,6 +126,85 @@ def go_forth_and_multiply(base_folder="output", **kwargs):
 pass
 
 
+
+
+import requests
+import subprocess
+
+def download_neon_file(site_code, product_code, year_month, flight_line):
+    server = 'http://data.neonscience.org/api/v0/'
+    data_url = f'{server}data/{product_code}/{site_code}/{year_month}'
+
+    # Make the API request
+    response = requests.get(data_url)
+    if response.status_code == 200:
+        print(f"Data retrieved successfully for {year_month}!")
+        data_json = response.json()
+        
+        # Initialize a flag to check if the file was found
+        file_found = False
+        
+        # Iterate through files in the JSON response to find the specific flight line
+        for file_info in data_json['data']['files']:
+            file_name = file_info['name']
+            if flight_line in file_name:
+                print(f"Downloading {file_name} from {file_info['url']}")
+                
+                # Use subprocess.run to handle output
+                try:
+                    result = subprocess.run(
+                        ['wget', '--no-check-certificate', file_info["url"], '-O', file_name],
+                        stdout=subprocess.PIPE,  # Capture standard output
+                        stderr=subprocess.PIPE,  # Capture standard error
+                        text=True  # Decode to text
+                    )
+                    
+                    # Check for errors
+                    if result.returncode != 0:
+                        print(f"Error downloading file: {result.stderr}")
+                    else:
+                        print(f"Download completed for {file_name}")
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                
+                file_found = True
+                break
+        
+        if not file_found:
+            print(f"Flight line {flight_line} not found in the data for {year_month}.")
+    else:
+        print(f"Failed to retrieve data for {year_month}. Status code: {response.status_code}, Response: {response.text}")
+
+pass
+
+
+def download_neon_flight_lines(site_code, product_code, year_month, flight_lines):
+    """
+    Downloads NEON flight line files given a site code, product code, year, month, and flight line(s).
+    
+    Args:
+    - site_code (str): The site code.
+    - product_code (str): The product code.
+    - year_month (str): The year and month of interest in 'YYYY-MM' format.
+    - flight_lines (str or list): A single flight line identifier or a list of flight line identifiers.
+    """
+    
+    # Check if flight_lines is a single string (flight line), if so, convert it to a list
+    if isinstance(flight_lines, str):
+        flight_lines = [flight_lines]
+    
+    # Iterate through each flight line and download the corresponding file
+    for flight_line in flight_lines:
+        print(f"Processing flight line: {flight_line}")
+        download_neon_file(site_code, product_code, year_month, flight_line)
+        print("Download completed.\n")
+pass
+
+
+
+
+
+
 def resample_translation_to_other_sensors(base_folder, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
     # List all subdirectories in the base folder
     subdirectories = [os.path.join(base_folder, d) for d in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, d))]
@@ -510,54 +589,6 @@ pass
 
 
 
-import requests
-import subprocess
-
-def download_neon_file(site_code, product_code, year_month, flight_line):
-    server = 'http://data.neonscience.org/api/v0/'
-    data_url = f'{server}data/{product_code}/{site_code}/{year_month}'
-
-    # Make the API request
-    response = requests.get(data_url)
-    if response.status_code == 200:
-        print(f"Data retrieved successfully for {year_month}!")
-        data_json = response.json()
-        
-        # Initialize a flag to check if the file was found
-        file_found = False
-        
-        # Iterate through files in the JSON response to find the specific flight line
-        for file_info in data_json['data']['files']:
-            file_name = file_info['name']
-            if flight_line in file_name:
-                print(f"Downloading {file_name} from {file_info['url']}")
-                
-                # Use subprocess.run to handle output
-                try:
-                    result = subprocess.run(
-                        ['wget', '--no-check-certificate', file_info["url"], '-O', file_name],
-                        stdout=subprocess.PIPE,  # Capture standard output
-                        stderr=subprocess.PIPE,  # Capture standard error
-                        text=True  # Decode to text
-                    )
-                    
-                    # Check for errors
-                    if result.returncode != 0:
-                        print(f"Error downloading file: {result.stderr}")
-                    else:
-                        print(f"Download completed for {file_name}")
-                except Exception as e:
-                    print(f"An error occurred: {e}")
-                
-                file_found = True
-                break
-        
-        if not file_found:
-            print(f"Flight line {flight_line} not found in the data for {year_month}.")
-    else:
-        print(f"Failed to retrieve data for {year_month}. Status code: {response.status_code}, Response: {response.text}")
-
-pass
 
 
 
@@ -1118,27 +1149,7 @@ def show_rgb(file_paths, r=660, g=550, b=440):
 
 pass
 
-def download_neon_flight_lines(site_code, product_code, year_month, flight_lines):
-    """
-    Downloads NEON flight line files given a site code, product code, year, month, and flight line(s).
-    
-    Args:
-    - site_code (str): The site code.
-    - product_code (str): The product code.
-    - year_month (str): The year and month of interest in 'YYYY-MM' format.
-    - flight_lines (str or list): A single flight line identifier or a list of flight line identifiers.
-    """
-    
-    # Check if flight_lines is a single string (flight line), if so, convert it to a list
-    if isinstance(flight_lines, str):
-        flight_lines = [flight_lines]
-    
-    # Iterate through each flight line and download the corresponding file
-    for flight_line in flight_lines:
-        print(f"Processing flight line: {flight_line}")
-        download_neon_file(site_code, product_code, year_month, flight_line)
-        print("Download completed.\n")
-pass
+
 
 
 
@@ -1170,6 +1181,7 @@ class ENVIProcessor:
         self.load_data()  # Ensure data is loaded
         return self.data
 
+pass
 
 def find_raster_files(directory):
     """
@@ -1199,6 +1211,7 @@ def find_raster_files(directory):
 
     return found_files
 
+pass
 
 def load_and_combine_rasters(raster_paths):
     """
@@ -1214,6 +1227,7 @@ def load_and_combine_rasters(raster_paths):
     combined_array = np.concatenate(chunks, axis=0)  # Combine along the first axis (bands)
     return combined_array
 
+pass
 
 def process_and_flatten_array(array, json_dir='Resampling', original_bands=426, corrected_bands=426,
                               original_wavelengths=None, corrected_wavelengths=None, folder_name=None,
@@ -1373,7 +1387,7 @@ def process_and_flatten_array(array, json_dir='Resampling', original_bands=426, 
 
     return df
 
-
+pass
 def clean_data_and_write_to_csv(df, output_csv_path, chunk_size=100000):
     """
     Cleans a large DataFrame by processing it in chunks and then writes it to a CSV file.
@@ -1407,7 +1421,7 @@ def clean_data_and_write_to_csv(df, output_csv_path, chunk_size=100000):
 
     print(f"Data cleaning complete. Output written to: {output_csv_path}")
 
-
+pass
 def control_function(directory):
     """
     Orchestrates the finding, loading, processing of raster files found in a specified directory,
@@ -1475,7 +1489,7 @@ def control_function(directory):
     # Clean data and write to CSV
     clean_data_and_write_to_csv(df_processed, output_csv_path)  
     print(f"Processed and cleaned data saved to {output_csv_path}")
-
+pass
 
 def process_all_subdirectories(parent_directory):
     """
