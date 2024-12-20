@@ -1,71 +1,30 @@
-
-
-import time
-import geopandas as gpd
-import rasterio
-from rasterio.mask import mask
-import pandas as pd
-import numpy as np
-import hytools as ht
-import numpy as np
-import numpy as np
-from sklearn.ensemble import GradientBoostingRegressor
-import subprocess
-import h5py
+# Standard Library Imports
+import glob
+import json
+import os
 import random
-import hytools as ht
-import numpy as np
+import subprocess
+import time
+
+# Third-Party Imports
 import geopandas as gpd
-import rasterio
+import h5py
 import matplotlib.pyplot as plt
-from rasterio.plot import show
-from rasterio.features import rasterize
-from shapely.geometry import box
 import numpy as np
-import requests
-import os
-
-import json
-import glob
-import numpy as np
-import os
-
-import json
-import glob
-import numpy as np
-import os
-
-import subprocess
-from shapely.geometry import box
-
-import subprocess
-
-import json
-import glob
-import numpy as np
-import os
-
-import subprocess
-import os
-import glob
-import ray
-
-import numpy as np
+import pandas as pd
 import rasterio
-import pandas as pd
-import numpy as np
+import requests
+import ray
+from rasterio.features import rasterize
+from rasterio.mask import mask
+from rasterio.plot import show
+from shapely.geometry import box
+from sklearn.ensemble import GradientBoostingRegressor
+from tqdm import tqdm
 
-import os
-import glob
-import pandas as pd
+# Local Application/Specific Imports
+import hytools as ht
 
-import pandas as pd
-import numpy as np
-import json
-import os
-import glob
-import subprocess
-import os
 
 def jefe(base_folder, site_code, product_code, year_month, flight_lines):
     """
@@ -92,6 +51,13 @@ def jefe(base_folder, site_code, product_code, year_month, flight_lines):
     # Next, process all subdirectories within the base_folder
     process_all_subdirectories(base_folder)
 
+    # Finally, clean the CSV files by removing rows with any NaN values
+    clean_csv_files_in_subfolders(base_folder)
+
+    validate_output_files(base_folder)
+
+    print("Jefe finished")
+    
 pass
 
 def go_forth_and_multiply(base_folder="output", **kwargs):
@@ -1510,6 +1476,185 @@ def process_all_subdirectories(parent_directory):
 
 
 
+
+
+def clean_csv_files_in_subfolders(base_folder, chunk_size=100000, suffix='_no_NaN'):
+    """
+    Cleans CSV files within each subdirectory of the given base folder by removing rows with any NaN values.
+    
+    The function searches for CSV files following a specific naming pattern within each subfolder,
+    processes them in chunks to handle large files efficiently, and saves the cleaned data to a new CSV file
+    with a specified suffix.
+    
+    Parameters:
+    - base_folder (str): The path to the base directory containing subdirectories with CSV files.
+    - chunk_size (int, optional): The number of rows per chunk to process. Defaults to 100,000.
+    - suffix (str, optional): Suffix to append to the cleaned CSV filenames. Defaults to '_no_NaN'.
+    
+    Raises:
+    - FileNotFoundError: If the original CSV file does not exist in a subdirectory.
+    - Exception: For any unexpected errors during processing.
+    """
+    print(f"Starting CSV cleaning in base folder: {base_folder}\n")
+    
+    # Iterate through each subdirectory in the base folder
+    subdirectories = [os.path.join(base_folder, d) for d in os.listdir(base_folder) 
+                      if os.path.isdir(os.path.join(base_folder, d))]
+    
+    if not subdirectories:
+        print(f"No subdirectories found in the base folder: {base_folder}\n")
+        return
+    
+    for subdir in subdirectories:
+        try:
+            # Define the pattern to identify the original CSV file
+            original_csv_pattern = os.path.join(subdir, '*_spectral_data_all_sensors.csv')
+            original_csv_files = glob.glob(original_csv_pattern)
+            
+            if not original_csv_files:
+                print(f"No original CSV files found in subdirectory: {subdir}\n")
+                continue  # Skip to the next subdirectory
+            
+            for original_csv in original_csv_files:
+                # Define the cleaned CSV file path
+                base_name = os.path.splitext(os.path.basename(original_csv))[0]
+                cleaned_csv = os.path.join(subdir, f"{base_name}{suffix}.csv")
+                
+                print(f"Processing file: {original_csv}")
+                print(f"Cleaned CSV will be saved to: {cleaned_csv}\n")
+                
+                # Determine the total number of lines in the file (minus the header)
+                with open(original_csv, 'r') as f:
+                    total_lines = sum(1 for _ in f) - 1  # Subtract 1 for the header
+                
+                if total_lines <= 0:
+                    print(f"The file {original_csv} is empty or has only a header. Skipping.\n")
+                    continue
+                
+                # Calculate the total number of chunks
+                num_chunks = (total_lines // chunk_size) + 1
+                
+                # Process the file in chunks with a progress bar
+                with pd.read_csv(original_csv, chunksize=chunk_size) as reader, open(cleaned_csv, 'w') as output_file:
+                    for i, chunk in enumerate(tqdm(reader, total=num_chunks, desc=f"Cleaning {base_name}")):
+                        # Drop rows with any NaN values
+                        chunk_cleaned = chunk.dropna()
+                        
+                        # Write to the output file
+                        mode = 'w' if i == 0 else 'a'  # Write mode for the first chunk, append for others
+                        header = i == 0  # Write the header only for the first chunk
+                        chunk_cleaned.to_csv(output_file, mode=mode, index=False, header=header)
+                
+                print(f"Cleaned CSV saved to: {cleaned_csv}\n")
+        
+        except FileNotFoundError as fnf_error:
+            print(f"File not found: {fnf_error}\n")
+        except pd.errors.EmptyDataError:
+            print(f"No data: The file {original_csv} is empty.\n")
+        except Exception as e:
+            print(f"An error occurred while processing {subdir}: {e}\n")
+    
+    print("CSV cleaning process completed.\n")
+pass
+
+
+def validate_output_files(base_folder):
+    """
+    Validates that all expected output files are present and valid within each subdirectory of the base folder.
+
+    Parameters:
+    - base_folder (str): The path to the base directory containing subdirectories with output files.
+
+    Returns:
+    - None: Prints a simplified validation summary directly.
+    """
+    # Define the exact expected file patterns
+    expected_files = [
+        '*_reflectance',
+        '*_envi',
+        '*_envi.hdr',
+        '*_envi_mask',
+        '*_envi_mask.hdr',
+        '*_resample_Landsat_5_TM.hdr',
+        '*_resample_Landsat_5_TM.img',
+        '*_resample_Landsat_7_ETMplus.hdr',
+        '*_resample_Landsat_7_ETMplus.img',
+        '*_resample_Landsat_8_OLI.hdr',
+        '*_resample_Landsat_8_OLI.img',
+        '*_resample_Landsat_9_OLI-2.hdr',
+        '*_resample_Landsat_9_OLI-2.img',
+        '*_resample_MicaSense.hdr',
+        '*_resample_MicaSense.img',
+        '*_ancillary',
+        '*_ancillary.hdr',
+        '*_brdf_coeffs__envi.json',
+        '*_config__anc.json',
+        '*_config__envi.json',
+        '*_spectral_data_all_sensors.csv',
+        '*_spectral_data_all_sensors_no_NaN.csv',
+        '*_topo_coeffs__envi.json',
+        '*.hdr'
+    ]
+    
+    subdirectories = [
+        os.path.join(base_folder, d) for d in os.listdir(base_folder) 
+        if os.path.isdir(os.path.join(base_folder, d)) and not d.startswith('.ipynb_checkpoints')
+    ]
+    
+    if not subdirectories:
+        print(f"No subdirectories found in the base folder: {base_folder}")
+        return
+    
+    print(f"Starting validation of output files in base folder: {base_folder}\n")
+    
+    for subdir in tqdm(subdirectories, desc="Validating subdirectories"):
+        subdir_name = os.path.basename(subdir)
+        missing_files = []
+        invalid_files = []
+        
+        # Validate each expected file pattern
+        for pattern in expected_files:
+            matched_files = glob.glob(os.path.join(subdir, pattern))
+            
+            if not matched_files:
+                missing_files.append(pattern)
+            else:
+                for file in matched_files:
+                    try:
+                        if file.endswith(('.hdr')):
+                            # Skip validation for .hdr files; just check if they exist
+                            pass
+                        elif file.endswith(('.img', '_envi', '_mask')):
+                            # Validate raster files
+                            with rasterio.open(file) as src:
+                                src.meta  # Access metadata to confirm file is valid
+                        elif file.endswith('.csv'):
+                            # Validate CSV files
+                            pd.read_csv(file, nrows=5)  # Read first few rows
+                        elif file.endswith('.json'):
+                            # Validate JSON files
+                            with open(file, 'r') as f:
+                                json.load(f)  # Try loading JSON
+                    except Exception:
+                        invalid_files.append(file)
+        
+        # Print summary for each subdirectory
+        if not missing_files and not invalid_files:
+            print(f"Subdirectory: {subdir_name}\n  All expected files are present and valid.\n")
+        else:
+            print(f"Subdirectory: {subdir_name}")
+            if missing_files:
+                print("  Missing Files:")
+                for missing in missing_files:
+                    print(f"    - {missing}")
+            if invalid_files:
+                print("  Invalid Files:")
+                for invalid in invalid_files:
+                    print(f"    - {invalid}")
+            print()  # Blank line for better readability
+
+
+pass
 
 
 
