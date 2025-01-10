@@ -10,6 +10,7 @@ from hytools.io.envi import WriteENVI
 import re
 
 
+
 def get_all_keys(group):
     if isinstance(group, Dataset):
         return [group.name]
@@ -55,6 +56,7 @@ def extract_site_code_from_filename(filename):
 
 
 def neon_to_envi(hy_obj, output_dir):
+    hy_obj.load_data()
     # Extract site code from filename
     site_code = extract_site_code_from_filename(hy_obj.file_name)
     # Construct specific output directory for each image

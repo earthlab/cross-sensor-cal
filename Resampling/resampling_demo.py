@@ -1,3 +1,5 @@
+conda_env_path = '/opt/conda/envs/macrosystems/bin/python'
+
 import argparse
 from hytools.transform.resampling import apply_resampler
 import numpy as np
