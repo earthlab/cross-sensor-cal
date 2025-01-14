@@ -181,6 +181,7 @@ def resample_translation_to_other_sensors(base_folder, conda_env_path='/opt/cond
     print("done resampling")
 pass
 
+
 def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macrosystems/bin/python'):
     # List of sensor types to loop through
     sensor_types = [
@@ -231,9 +232,6 @@ def translate_to_other_sensors(folder_path, conda_env_path='/opt/conda/envs/macr
             print(f"Standard Output: {process.stdout}")
 
 pass
-
-
-
 
 
 

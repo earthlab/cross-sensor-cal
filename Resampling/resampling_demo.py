@@ -1,11 +1,60 @@
 conda_env_path = '/opt/conda/envs/macrosystems/bin/python'
 
 import argparse
-from hytools.transform.resampling import apply_resampler
+from hytools.transform.resampling import calc_resample_coeffs
 import numpy as np
 import spectral
 import json 
 import matplotlib.pyplot as plt
+
+
+
+
+
+
+def apply_resampler(hy_obj,data):
+    ''' Apply SCSS correction to a slice of the data
+
+    Args:
+        hy_obj (TYPE): DESCRIPTION.
+        band (TYPE): DESCRIPTION.
+        index (TYPE): DESCRIPTION.
+
+    Returns:
+        band (TYPE): DESCRIPTION.
+
+    '''
+
+    interp_types = ['linear', 'nearest', 'nearest-up',
+                   'zero', 'slinear', 'quadratic',
+                   'cubic']
+
+    #Convert to float
+    data = data.astype(np.float32)
+
+    if hy_obj.resampler['type'] == 'gaussian':
+
+        # Load resampling coeffs to memory if needed
+        if 'resample_coeffs' not in hy_obj.ancillary.keys():
+            in_wave = hy_obj.wavelengths[~hy_obj.bad_bands]
+            in_fwhm =hy_obj.fwhm[~hy_obj.bad_bands]
+            resample_coeffs = calc_resample_coeffs(in_wave,in_fwhm,
+                                             hy_obj.resampler['out_waves'],
+                                             hy_obj.resampler['out_fwhm'])
+            hy_obj.ancillary['resample_coeffs'] = resample_coeffs
+
+        data = np.dot(data, hy_obj.ancillary['resample_coeffs'] )
+
+
+    elif hy_obj.resampler['type'] in interp_types:
+        interp_func =  interp1d(hy_obj.wavelengths[~hy_obj.bad_bands], data,
+                                kind=hy_obj.resampler['type'],
+                                axis=2, fill_value="extrapolate")
+        data = interp_func(hy_obj.resampler['out_waves'])
+
+    return data
+
+pass
 
 class resampler_hy_obj:
 
@@ -100,18 +149,22 @@ class resampler_hy_obj:
     
     def create_header_info(self, hdr_path):
         """
-            Create header information for the resampled data.
-            :param hdr_path: string
-                Path and file name of the hdr file
-            :return: dict
-                Dictionary containing header information for the ENVI file.
+        Create header information for the resampled data.
+        :param hdr_path: string
+            Path and file name of the hdr file
+        :return: dict
+            Dictionary containing header information for the ENVI file, including CRS.
         """
         header = spectral.envi.read_envi_header(hdr_path)
-
+    
         # Extract the number of lines and samples
         lines = header.get('lines')
         samples = header.get('samples')
-
+    
+        # Extract CRS information if available
+        map_info = header.get('map info', None)  # 'map info' contains georeferencing details
+        coordinate_system_string = header.get('coordinate system string', None)  # Optional CRS details
+    
         header_info = {
             'description': 'Resampled hyperspectral data',
             'file type': 'ENVI Standard',
@@ -126,8 +179,15 @@ class resampler_hy_obj:
             'wavelength units': 'Nanometers',
             'wavelength': self.out_wave,
         }
-
+    
+        # Add georeferencing and CRS details if available
+        if map_info:
+            header_info['map info'] = map_info
+        if coordinate_system_string:
+            header_info['coordinate system string'] = coordinate_system_string
+    
         return header_info
+
     
     @staticmethod    
     def save_envi_data(data, header_info, output_filename):
