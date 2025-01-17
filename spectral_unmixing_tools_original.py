@@ -2231,8 +2231,24 @@ def find_raster_files_for_extraction(directory):
     return filtered_files
 
 
-def process_raster_in_chunks(raster_path, output_csv_path, chunk_size=100000):
-    """Processes a raster file in chunks to handle memory constraints."""
+def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_size=100000):
+    """
+    Processes a raster file in chunks to handle memory constraints, including polygon attributes,
+    and saves the results to a CSV file.
+
+    Parameters:
+    - raster_path: str, path to the raster file.
+    - polygon_path: str, path to the polygon GeoJSON file.
+    - output_csv_path: str, path to save the output CSV.
+    - chunk_size: int, number of rows to process per chunk.
+    """
+    # Load polygons
+    polygons = gpd.read_file(polygon_path)
+
+    # Ensure polygons have unique identifiers
+    if 'polygon_id' not in polygons.columns:
+        polygons['polygon_id'] = range(len(polygons))
+
     with rasterio.open(raster_path) as src:
         total_bands, height, width = src.count, src.height, src.width
         pixel_count = height * width
@@ -2250,24 +2266,48 @@ def process_raster_in_chunks(raster_path, output_csv_path, chunk_size=100000):
                     window=((row_start, row_end), (0, width))
                 ).reshape(total_bands, -1).T  # Reshape to (pixels, bands)
 
-                # Create DataFrame and add pixel indices
-                pixel_indices = np.arange(row_start * width, row_end * width)
-                chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
-                chunk_df.insert(0, 'Pixel_Index', pixel_indices)
+                # Create geospatial coordinates for the chunk
+                transform = src.transform
+                x_coords, y_coords = rasterio.transform.xy(
+                    transform,
+                    rows=np.repeat(np.arange(row_start, row_end), width),
+                    cols=np.tile(np.arange(width), row_end - row_start),
+                    offset="center"
+                )
+
+                # Match each pixel to its polygon
+                pixel_points = gpd.GeoDataFrame({
+                    'x': x_coords,
+                    'y': y_coords,
+                    'geometry': gpd.points_from_xy(x_coords, y_coords)
+                }, crs=src.crs)
+
+                # Spatial join to associate polygons with pixels
+                pixel_with_polygons = gpd.sjoin(pixel_points, polygons, how="left", predicate="intersects")
+
+                # Add polygon attributes to the data chunk
+                polygon_attributes = polygons.columns.difference(['geometry']).to_list()
+                data_chunk = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
+                data_chunk = pd.concat([pixel_with_polygons[polygon_attributes].reset_index(drop=True), data_chunk], axis=1)
 
                 # Write the chunk to the CSV
                 mode = 'w' if first_chunk else 'a'
                 header = first_chunk
-                chunk_df.to_csv(output_csv_path, mode=mode, header=header, index=False)
+                data_chunk.to_csv(output_csv_path, mode=mode, header=header, index=False)
 
                 first_chunk = False
                 pbar.update(1)  # Update the progress bar
 
 
-def control_function_for_extraction(directory):
+
+def control_function_for_extraction(directory, polygon_path):
     """
     Orchestrates the finding, loading, processing of raster files found in a specified directory,
     processes data in chunks, and saves it to a CSV file in the same directory.
+
+    Parameters:
+    - directory: str, the directory containing raster files.
+    - polygon_path: str, the path to the polygon GeoJSON file.
     """
     raster_paths = find_raster_files_for_extraction(directory)
 
@@ -2281,15 +2321,19 @@ def control_function_for_extraction(directory):
             output_csv_name = f"{base_name}_spectral_data.csv"
             output_csv_path = os.path.join(directory, output_csv_name)
 
-            process_raster_in_chunks(raster_path, output_csv_path)
+            process_raster_in_chunks(raster_path, polygon_path, output_csv_path)
         except Exception as e:
             print(f"[ERROR] Error while processing raster file {raster_path}: {e}")
 
 
-def process_all_subdirectories(parent_directory):
+def process_all_subdirectories(parent_directory, polygon_path):
     """
     Searches for all subdirectories within the given parent directory, excluding non-directory files,
     and applies raster file processing to each subdirectory found.
+
+    Parameters:
+    - parent_directory: str, the parent directory containing subdirectories.
+    - polygon_path: str, the path to the polygon GeoJSON file.
     """
     subdirectories = [
         os.path.join(parent_directory, sub_dir)
@@ -2300,12 +2344,10 @@ def process_all_subdirectories(parent_directory):
     with tqdm(total=len(subdirectories), desc="Processing subdirectories", unit="directory") as pbar:
         for subdirectory in subdirectories:
             try:
-                control_function_for_extraction(subdirectory)
+                control_function_for_extraction(subdirectory, polygon_path)
                 pbar.update(1)
             except Exception as e:
                 print(f"[ERROR] Error processing directory '{subdirectory}': {e}")
-
-
 
 pass
 
