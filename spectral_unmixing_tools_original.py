@@ -2234,25 +2234,38 @@ def find_raster_files_for_extraction(directory):
 def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_size=100000):
     """
     Processes a raster file in chunks to handle memory constraints, including polygon attributes,
-    and saves the results to a CSV file.
-
-    Parameters:
-    - raster_path: str, path to the raster file.
-    - polygon_path: str, path to the polygon GeoJSON file.
-    - output_csv_path: str, path to save the output CSV.
-    - chunk_size: int, number of rows to process per chunk.
+    and renames band columns based on the raster file naming conventions.
     """
-    # Load polygons
-    polygons = gpd.read_file(polygon_path)
-
-    # Ensure polygons have unique identifiers
-    if 'polygon_id' not in polygons.columns:
-        polygons['polygon_id'] = range(len(polygons))
-
     with rasterio.open(raster_path) as src:
+        # Ensure CRS compatibility
+        polygons = gpd.read_file(polygon_path)
+        if polygons.crs != src.crs:
+            polygons = polygons.to_crs(src.crs)
+
+        # Rasterize the polygon layer
+        polygon_values = rasterize(
+            [(geom, idx + 1) for idx, geom in enumerate(polygons.geometry)],
+            out_shape=(src.height, src.width),
+            transform=src.transform,
+            fill=0,
+            dtype="int32"
+        ).ravel()
+
         total_bands, height, width = src.count, src.height, src.width
         pixel_count = height * width
         num_chunks = (pixel_count // chunk_size) + (1 if pixel_count % chunk_size else 0)
+
+        # Determine band naming convention
+        if "_reflectance" in raster_path and "_envi" not in raster_path:
+            band_prefix = "Original_band_"
+        elif "_reflectance__envi" in raster_path:
+            band_prefix = "Corrected_band_"
+        elif ".img" in raster_path:
+            # Extract the resample type from the filename
+            resample_type = raster_path.split("_resample_")[-1].split("_masked")[0]
+            band_prefix = f"{resample_type}_"
+        else:
+            band_prefix = "Unknown_band_"
 
         # Initialize progress bar
         with tqdm(total=num_chunks, desc=f"Processing {os.path.basename(raster_path)}", unit="chunk") as pbar:
@@ -2266,37 +2279,47 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
                     window=((row_start, row_end), (0, width))
                 ).reshape(total_bands, -1).T  # Reshape to (pixels, bands)
 
-                # Create geospatial coordinates for the chunk
-                transform = src.transform
-                x_coords, y_coords = rasterio.transform.xy(
-                    transform,
-                    rows=np.repeat(np.arange(row_start, row_end), width),
-                    cols=np.tile(np.arange(width), row_end - row_start),
-                    offset="center"
+                # Filter out rows with -9999 values
+                valid_mask = ~np.any(data_chunk == -9999, axis=1)
+                data_chunk = data_chunk[valid_mask]
+
+                # Combine with polygon data
+                polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
+                chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
+                chunk_df['Polygon_ID'] = polygon_chunk
+
+                # Rename band columns based on naming conventions
+                chunk_df.rename(
+                    columns={f"Band_{b + 1}": f"{band_prefix}{b + 1}" for b in range(total_bands)},
+                    inplace=True
                 )
 
-                # Match each pixel to its polygon
-                pixel_points = gpd.GeoDataFrame({
-                    'x': x_coords,
-                    'y': y_coords,
-                    'geometry': gpd.points_from_xy(x_coords, y_coords)
-                }, crs=src.crs)
+                # Merge with polygon attributes
+                polygon_attributes = polygons.reset_index().rename(columns={'index': 'Polygon_ID'})
+                chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
 
-                # Spatial join to associate polygons with pixels
-                pixel_with_polygons = gpd.sjoin(pixel_points, polygons, how="left", predicate="intersects")
+                # Dynamically filter available columns for reordering
+                polygon_columns = [
+                    'Polygon_ID', 'Pixel_Row', 'Pixel_Col', 'GlobalID', 'CreationDate', 'Creator',
+                    'EditDate', 'Editor', 'description_notes', 'dbh', 'tree_height',
+                    'other_species', 'species', 'other_subcategory', 'dead_subcategory',
+                    'cover_subcategory', 'cover_category', 'og_flight_date', 'collection_date',
+                    'collector_name', 'plot', 'location', 'woody_shrub_height', 'imagery',
+                    'combined_all_category_species', 'area_m', 'geometry'
+                ]
+                available_polygon_columns = [col for col in polygon_columns if col in chunk_df.columns]
+                spectral_columns = [col for col in chunk_df.columns if col not in available_polygon_columns]
 
-                # Add polygon attributes to the data chunk
-                polygon_attributes = polygons.columns.difference(['geometry']).to_list()
-                data_chunk = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
-                data_chunk = pd.concat([pixel_with_polygons[polygon_attributes].reset_index(drop=True), data_chunk], axis=1)
+                # Reorder columns
+                chunk_df = chunk_df[available_polygon_columns + spectral_columns]
 
                 # Write the chunk to the CSV
                 mode = 'w' if first_chunk else 'a'
                 header = first_chunk
-                data_chunk.to_csv(output_csv_path, mode=mode, header=header, index=False)
+                chunk_df.to_csv(output_csv_path, mode=mode, header=header, index=False)
 
                 first_chunk = False
-                pbar.update(1)  # Update the progress bar
+                pbar.update(1)
 
 
 
