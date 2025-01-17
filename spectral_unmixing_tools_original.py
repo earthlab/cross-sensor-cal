@@ -66,7 +66,7 @@ def jefe(base_folder, site_code, product_code, year_month, flight_lines):
     # Finally, clean the CSV files by removing rows with any NaN values
     #clean_csv_files_in_subfolders(base_folder)
     
-    merge_csvs_by_columns(base_folder)
+    #merge_csvs_by_columns(base_folder)
     #validate_output_files(base_folder)
 
     print("Jefe finished. Please check for the _with_mask_and_all_spectra.csv for your  hyperspectral data from NEON flight lines extracted to match your provided polygons")
@@ -2392,6 +2392,11 @@ pass
 
 
 
+
+
+import os
+import pandas as pd
+
 import os
 import pandas as pd
 
@@ -2442,13 +2447,14 @@ def merge_csvs_by_columns(base_folder):
             merged_df = pd.concat([merged_df, df], axis=1)
 
         # Save the merged CSV
-        output_csv_path = os.path.join(subdirectory, "merged_output.csv")
+        output_csv_path = os.path.join(subdirectory, "polygon_merged_output.csv")
         merged_df.to_csv(output_csv_path, index=False)
         print(f"[INFO] Merged CSV saved to: {output_csv_path}")
 
     print("[INFO] Processing complete for all subdirectories.")
 
 
+pass
 
 
 
