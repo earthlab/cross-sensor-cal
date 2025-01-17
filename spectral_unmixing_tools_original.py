@@ -1346,31 +1346,28 @@ class ENVIProcessor:
 
 def find_raster_files(directory):
     """
-    Searches for raster files in the given directory, capturing only files ending with '_masked' or '_masked.img',
-    while excluding files containing '_mask' (not as a suffix), '_ancillary', 'aux.xml', and specific extensions such as '.hdr',
-    '.json', or '.csv'.
+    Finds raster files ending with '_reflectance', '_envi', or '.img' while excluding
+    files ending in '.json', '.hdr', or containing '_mask' or '_ancillary'.
     """
-    pattern = "*"
-    full_pattern = os.path.join(directory, pattern)
-    all_files = glob.glob(full_pattern)
+    pattern = os.path.join(directory, '*')
+    all_files = glob.glob(pattern)
 
+    # Filter the files based on naming conventions
     filtered_files = [
         file for file in all_files
         if (
-            (file.endswith('_masked') or file.endswith('_masked.img')) and
-            '_ancillary' not in os.path.basename(file) and
-            'aux.xml' not in os.path.basename(file) and
-            not file.endswith('.hdr') and
+            ('_reflectance' in os.path.basename(file) or
+             '_envi' in os.path.basename(file) or
+             file.endswith('.img')) and
             not file.endswith('.json') and
-            not file.endswith('.csv')
+            not file.endswith('.hdr') and
+            '_mask' not in file and
+            '_ancillary' not in file
         )
     ]
 
-    found_files_set = set(filtered_files)
-    found_files = list(found_files_set)
-    found_files.sort()
+    return filtered_files
 
-    return found_files
 
 
 
@@ -2125,48 +2122,57 @@ def process_folder_with_polygons(
 
 pass
 
-import os
 
 def process_base_folder(base_folder, polygon_layer, **kwargs):
     """
-    Applies a processing function to all subdirectories within the base folder.
-
-    Parameters:
-    -----------
-    base_folder : str
-        The path to the base folder containing subdirectories.
-    polygon_layer : str
-        Path to the GeoJSON file containing polygons for masking.
-    **kwargs : dict
-        Additional keyword arguments to pass to `process_folder_with_polygons`.
+    Processes subdirectories in a base folder, finding raster files and applying analysis.
     """
-    # List all subdirectories
+    # Get list of subdirectories
     subdirectories = [
-        os.path.join(base_folder, sub_dir)
-        for sub_dir in os.listdir(base_folder)
-        if os.path.isdir(os.path.join(base_folder, sub_dir))
+        os.path.join(base_folder, d) 
+        for d in os.listdir(base_folder) 
+        if os.path.isdir(os.path.join(base_folder, d))
     ]
+    print(f"Found {len(subdirectories)} subdirectories in {base_folder}.\n")
 
-    print(f"Found {len(subdirectories)} subdirectories in {base_folder}.")
+    for subdir in subdirectories:
+        print(f"Processing subdirectory: {subdir}")
+        
+        # Find raster files in the subdirectory
+        raster_files = find_raster_files(subdir)
+        print(f"Raster files found in {subdir}: {raster_files}")
+        
+        if not raster_files:
+            print(f"No raster files found in {subdir}. Skipping...\n")
+            continue
 
-    for sub_dir in subdirectories:
-        print(f"\nProcessing subdirectory: {sub_dir}")
-        try:
-            process_folder_with_polygons(
-                folder_name=sub_dir,
-                polygon_layer=polygon_layer,
-                **kwargs  # Pass additional parameters to the processing function
-            )
-        except Exception as e:
-            print(f"Error processing subdirectory {sub_dir}: {e}")
-            continue  # Proceed to the next subdirectory
+        # Process each raster file
+        for raster_file in raster_files:
+            try:
+                print(f"Processing raster file: {raster_file}")
+
+                # Mask raster with polygons
+                masked_raster = mask_raster_with_polygons(
+                    envi_path=raster_file,
+                    geojson_path=polygon_layer,
+                    raster_crs_override=kwargs.get("raster_crs_override", None),
+                    polygons_crs_override=kwargs.get("polygons_crs_override", None),
+                    output_masked_suffix=kwargs.get("output_masked_suffix", "_masked"),
+                    plot_output=kwargs.get("plot_output", False),
+                    plot_filename=kwargs.get("plot_filename", None),
+                    dpi=kwargs.get("dpi", 300),
+                )
+
+                if masked_raster:
+                    print(f"Successfully processed and saved masked raster: {masked_raster}")
+                else:
+                    print(f"Skipping raster: {raster_file}")
+            except Exception as e:
+                print(f"Error processing raster file {raster_file}: {e}")
+                continue
 
     print("All subdirectories processed.")
 
-# Example Usage:
-# Replace 'base_folder' with the path to your base folder containing subdirectories,
-# and 'polygon_layer' with the path to your GeoJSON polygon file.
-# Additional optional parameters can be passed as keyword arguments.
 
 pass
 
@@ -2203,7 +2209,7 @@ class ENVIProcessor:
         return self.data
 
 
-def find_raster_files(directory):
+def find_raster_files_for_extraction(directory):
     """
     Finds raster files ending with '_masked' or '_masked.img' while excluding auxiliary files.
     """
@@ -2258,12 +2264,12 @@ def process_raster_in_chunks(raster_path, output_csv_path, chunk_size=100000):
                 pbar.update(1)  # Update the progress bar
 
 
-def control_function(directory):
+def control_function_for_extraction(directory):
     """
     Orchestrates the finding, loading, processing of raster files found in a specified directory,
     processes data in chunks, and saves it to a CSV file in the same directory.
     """
-    raster_paths = find_raster_files(directory)
+    raster_paths = find_raster_files_for_extraction(directory)
 
     if not raster_paths:
         print(f"[DEBUG] No matching raster files found in {directory}.")
@@ -2294,10 +2300,11 @@ def process_all_subdirectories(parent_directory):
     with tqdm(total=len(subdirectories), desc="Processing subdirectories", unit="directory") as pbar:
         for subdirectory in subdirectories:
             try:
-                control_function(subdirectory)
+                control_function_for_extraction(subdirectory)
                 pbar.update(1)
             except Exception as e:
                 print(f"[ERROR] Error processing directory '{subdirectory}': {e}")
+
 
 
 pass
