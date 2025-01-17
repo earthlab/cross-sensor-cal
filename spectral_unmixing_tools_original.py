@@ -65,10 +65,11 @@ def jefe(base_folder, site_code, product_code, year_month, flight_lines):
 
     # Finally, clean the CSV files by removing rows with any NaN values
     #clean_csv_files_in_subfolders(base_folder)
+    
+    merge_csvs_by_columns(base_folder)
+    #validate_output_files(base_folder)
 
-    validate_output_files(base_folder)
-
-    print("Jefe finished")
+    print("Jefe finished. Please check for the _with_mask_and_all_spectra.csv for your  hyperspectral data from NEON flight lines extracted to match your provided polygons")
     
 pass
 
@@ -2230,6 +2231,8 @@ def find_raster_files_for_extraction(directory):
 
     return filtered_files
 
+import os
+import re
 
 def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_size=100000):
     """
@@ -2256,16 +2259,27 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
         num_chunks = (pixel_count // chunk_size) + (1 if pixel_count % chunk_size else 0)
 
         # Determine band naming convention
-        if "_reflectance" in raster_path and "_envi" not in raster_path:
-            band_prefix = "Original_band_"
-        elif "_reflectance__envi" in raster_path:
-            band_prefix = "Corrected_band_"
-        elif ".img" in raster_path:
-            # Extract the resample type from the filename
-            resample_type = raster_path.split("_resample_")[-1].split("_masked")[0]
-            band_prefix = f"{resample_type}_"
+        if total_bands == 426:
+            # Use the order of processing to differentiate Original and Corrected
+            if not hasattr(process_raster_in_chunks, "file_counter"):
+                process_raster_in_chunks.file_counter = 0
+            process_raster_in_chunks.file_counter += 1
+
+            if process_raster_in_chunks.file_counter == 1:
+                band_prefix = "Original_band_"
+            elif process_raster_in_chunks.file_counter == 2:
+                band_prefix = "Corrected_band_"
+            else:
+                raise ValueError("Unexpected number of files with 426 bands.")
         else:
-            band_prefix = "Unknown_band_"
+            # Extract sensor details for resampled bands
+            filename = os.path.basename(raster_path)
+            match = re.search(r"resample_(.*?)_masked", filename)
+            if match:
+                sensor_details = match.group(1)
+                band_prefix = f"{sensor_details}_band_"
+            else:
+                band_prefix = "Resampled_band_"
 
         # Initialize progress bar
         with tqdm(total=num_chunks, desc=f"Processing {os.path.basename(raster_path)}", unit="chunk") as pbar:
@@ -2378,6 +2392,61 @@ pass
 
 
 
+import os
+import pandas as pd
+
+def merge_csvs_by_columns(base_folder):
+    """
+    Merges all CSV files in each subdirectory of the given base folder by columns,
+    ensuring that metadata columns on the left are included only once.
+
+    Args:
+        base_folder (str): Path to the base folder containing subdirectories with CSV files.
+    """
+    # List all subdirectories in the base folder
+    subdirectories = [
+        os.path.join(base_folder, sub_dir)
+        for sub_dir in os.listdir(base_folder)
+        if os.path.isdir(os.path.join(base_folder, sub_dir))
+    ]
+
+    for subdirectory in subdirectories:
+        print(f"[INFO] Processing subdirectory: {subdirectory}")
+        
+        # Find all CSV files in the subdirectory
+        csv_files = [
+            os.path.join(subdirectory, file)
+            for file in os.listdir(subdirectory)
+            if file.endswith(".csv")
+        ]
+
+        if not csv_files:
+            print(f"[INFO] No CSV files found in {subdirectory}. Skipping.")
+            continue
+
+        # Read all CSV files
+        dataframes = [pd.read_csv(csv) for csv in csv_files]
+
+        # Identify metadata columns (common across all files)
+        common_metadata_columns = dataframes[0].columns.tolist()
+        for df in dataframes[1:]:
+            common_metadata_columns = [
+                col for col in common_metadata_columns if col in df.columns
+            ]
+
+        # Merge files column-wise
+        merged_df = dataframes[0]
+        for df in dataframes[1:]:
+            # Exclude metadata columns from subsequent files before merging
+            df = df[[col for col in df.columns if col not in common_metadata_columns]]
+            merged_df = pd.concat([merged_df, df], axis=1)
+
+        # Save the merged CSV
+        output_csv_path = os.path.join(subdirectory, "merged_output.csv")
+        merged_df.to_csv(output_csv_path, index=False)
+        print(f"[INFO] Merged CSV saved to: {output_csv_path}")
+
+    print("[INFO] Processing complete for all subdirectories.")
 
 
 
