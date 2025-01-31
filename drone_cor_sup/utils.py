@@ -9,12 +9,19 @@ import rasterio
 import h5py
 # from osgeo import gdal
 import seaborn as sns
-import rasterio
 from pyproj import Proj, transform
 import ephem
 import subprocess
 import json
 import glob
+
+import geopandas as gpd
+import rasterio.mask
+import pandas as pd
+from shapely.geometry import box
+from shapely.geometry import mapping
+
+from rasterio.transform import Affine
 
 def get_neon_filename(reflectance_tiff_path: str):
     return f"NEON_D13_NIWO_test_{os.path.basename(reflectance_tiff_path)}"
@@ -363,3 +370,198 @@ def generate_config_files(directory, bad_bands=None, file_type='envi', num_cpus=
         generated_files.append(config_file_path)
 
     return generated_files
+
+def check_and_reproject(geojson_path, raster_path):
+    """
+    Checks if the GeoJSON polygons and the ENVI raster have the same CRS.
+    If not, reprojects the polygons to match the raster's CRS.
+    """
+    # Load GeoJSON
+    polygons = gpd.read_file(geojson_path)
+
+    # Load raster CRS
+    with rasterio.open(raster_path) as src:
+        raster_crs = src.crs
+
+    # Check if CRS matches
+    if polygons.crs != raster_crs:
+        print(f"🔄 Reprojecting GeoJSON from {polygons.crs} to {raster_crs}")
+        polygons = polygons.to_crs(raster_crs)
+    else:
+        print("✅ GeoJSON and Raster have the same CRS")
+
+    return polygons
+
+def extract_pixel_reflectance(geojson_path, raster_path, output_csv):
+    """
+    Extracts reflectance values for each pixel inside each polygon and saves to CSV.
+    Column headers use actual wavelengths instead of Band_1, Band_2, etc.
+    """
+    # Reproject GeoJSON if needed
+    polygons = check_and_reproject(geojson_path, raster_path)
+
+    # Open raster and get metadata
+    with rasterio.open(raster_path) as src:
+        wavelengths = src.descriptions  # Get actual wavelengths (e.g., ["444nm", "475nm", ...])
+        raster_crs = src.crs
+        raster_bounds = src.bounds
+        raster_transform = src.transform  # Affine transform for pixel-to-geo mapping
+
+    # Convert wavelengths to valid column names
+    wavelengths = [w.replace(" ", "_") for w in wavelengths]  # Remove spaces if any
+
+    # Convert raster bounds to a polygon
+    raster_extent = box(*raster_bounds)
+
+    # Filter polygons that are within the raster extent
+    polygons = polygons[polygons.geometry.intersects(raster_extent)]
+    
+    # If no polygons remain, exit
+    if polygons.empty:
+        print("❌ No polygons found within the raster extent!")
+        return
+
+    print(f"✅ {len(polygons)} polygons found within raster extent.")
+
+    # Prepare a list to store extracted data
+    extracted_data = []
+
+    # Loop through each polygon
+    for poly_idx, polygon in polygons.iterrows():
+        polygon_id = polygon.get("OBJECTID", poly_idx)  # Use an ID field if available
+
+        # Mask the raster to extract pixel values within the polygon
+        with rasterio.open(raster_path) as src:
+            out_image, out_transform = rasterio.mask.mask(src, [mapping(polygon.geometry)], crop=True)
+            out_image = out_image.astype(np.float32)  # Convert to float for precision
+
+            # Get pixel coordinates
+            num_rows, num_cols = out_image.shape[1], out_image.shape[2]
+            x_coords = np.arange(num_cols) * out_transform[0] + out_transform[2]
+            y_coords = np.arange(num_rows) * out_transform[4] + out_transform[5]
+
+            # Loop over each pixel
+            pixel_id = 0
+            for i in range(num_rows):
+                for j in range(num_cols):
+                    # Extract reflectance for all bands
+                    reflectance_values = out_image[:, i, j]
+
+                    # Check if pixel is valid (not nodata)
+                    if np.any(reflectance_values > 0):  # Assuming negative values are NoData
+                        row = {
+                            "Polygon_ID": polygon_id,
+                            "Pixel_ID": f"{polygon_id}_{pixel_id}",  # Unique ID for each pixel
+                            "X_Coordinate": x_coords[j],
+                            "Y_Coordinate": y_coords[i],
+                            **{wavelengths[b]: reflectance_values[b] for b in range(len(wavelengths))}
+                        }
+                        extracted_data.append(row)
+                        pixel_id += 1  # Increment pixel counter
+
+    # Convert to DataFrame
+    df = pd.DataFrame(extracted_data)
+
+    # Save to CSV
+    df.to_csv(output_csv, index=False)
+    print(f"📂 Reflectance data saved to: {output_csv}")
+
+def get_tiff_transform(tiff_path):
+    """
+    Extract the transform (Affine) from a TIFF file.
+
+    Parameters:
+        tiff_path (str): Path to the TIFF file.
+
+    Returns:
+        Affine: The geotransformation of the TIFF file.
+    """
+    with rasterio.open(tiff_path) as src:
+        return src.transform
+
+def flip_envi_and_preserve_metadata(envi_path, output_path, tiff_transform):
+    """
+    Flip an ENVI image vertically, update its geotransformation, and preserve all metadata.
+    
+    Parameters:
+        envi_path (str): Path to the ENVI file.
+        output_path (str): Path to save the corrected ENVI file.
+        tiff_transform (Affine): The correct transformation from the TIFF file.
+    """
+    with rasterio.open(envi_path) as src_envi:
+        # Read ENVI data and metadata
+        envi_data = src_envi.read()
+        envi_meta = src_envi.meta.copy()
+        
+        # Extract additional metadata like wavelengths
+        wavelengths = src_envi.descriptions  # Band descriptions, e.g., wavelengths
+        wavelengths_units = src_envi.tags().get("wavelength units", "nanometers")  # Default to nanometers
+
+    # Check if ENVI needs flipping (y-resolution positive)
+    if envi_meta['transform'][5] > 0:
+        print("Flipping ENVI image to match TIFF orientation...")
+        # Flip the data vertically
+        flipped_data = np.flip(envi_data, axis=1)
+
+        # Update the transformation to match the TIFF file
+        new_transform = Affine(
+            tiff_transform.a, tiff_transform.b, tiff_transform.c,
+            tiff_transform.d, tiff_transform.e, tiff_transform.f
+        )
+        envi_meta.update({"transform": new_transform})
+    else:
+        flipped_data = envi_data  # No flipping needed
+        print("ENVI image does not need flipping.")
+
+    # Save the corrected ENVI file
+    with rasterio.open(output_path, "w", **envi_meta) as dst:
+        dst.write(flipped_data)
+
+        # Add wavelengths back to metadata
+        if wavelengths:
+            dst.descriptions = wavelengths
+
+        # Add wavelength units if available
+        if wavelengths_units:
+            dst.update_tags(**{"wavelength units": wavelengths_units})
+
+    print(f"Corrected ENVI file saved to {output_path} with preserved metadata.")
+
+def fix_envi_orientation(envi_path, output_path):
+    """
+    Reflip the ENVI image vertically while preserving its corrected spatial position.
+    
+    Parameters:
+        envi_path (str): Path to the ENVI file.
+        output_path (str): Path to save the final corrected ENVI file.
+    """
+    with rasterio.open(envi_path) as src_envi:
+        # Read ENVI data and metadata
+        envi_data = src_envi.read()
+        envi_meta = src_envi.meta.copy()
+        
+        # Extract additional metadata like wavelengths
+        wavelengths = src_envi.descriptions  # Band descriptions, e.g., wavelengths
+        wavelengths_units = src_envi.tags().get("wavelength units", "nanometers")  # Default to nanometers
+
+        
+        # envi_data = src.read()
+        # envi_meta = src.meta.copy()
+
+        # Reflip the ENVI image vertically
+        print("Reflipping ENVI image to restore correct orientation...")
+        reflipped_data = np.flip(envi_data, axis=1)  # Flip along the y-axis (rows)
+
+    # Save the corrected ENVI file
+    with rasterio.open(output_path, "w", **envi_meta) as dst:
+        dst.write(reflipped_data)
+
+        # Add wavelengths back to metadata
+        if wavelengths:
+            dst.descriptions = wavelengths
+
+        # Add wavelength units if available
+        if wavelengths_units:
+            dst.update_tags(**{"wavelength units": wavelengths_units})
+
+    print(f"Corrected ENVI file saved to {output_path} with preserved metadata.")
