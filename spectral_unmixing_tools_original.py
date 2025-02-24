@@ -61,8 +61,8 @@ def jefe(base_folder, site_code, product_code, year_month, flight_lines):
     )
     
     # Next, process all subdirectories within the base_folder
-    process_all_subdirectories(base_folder)
-
+    process_all_subdirectories(base_folder, polygon_layer)
+    
     # Finally, clean the CSV files by removing rows with any NaN values
     #clean_csv_files_in_subfolders(base_folder)
     
@@ -2212,27 +2212,45 @@ class ENVIProcessor:
 
 def find_raster_files_for_extraction(directory):
     """
-    Finds raster files ending with '_masked' or '_masked.img' while excluding auxiliary files.
+    Finds raster files while prioritizing masked versions if they exist.
     """
-    pattern = "*"
-    full_pattern = os.path.join(directory, pattern)
-    all_files = glob.glob(full_pattern)
+    all_files = glob.glob(os.path.join(directory, "*"))
 
-    filtered_files = [
-        file for file in all_files
-        if (
-            ('_masked' in os.path.basename(file) or '_masked.img' in os.path.basename(file)) and
-            not file.endswith('.hdr') and
-            not file.endswith('.aux.xml') and
-            not file.endswith('.json') and
-            not file.endswith('.csv')
-        )
-    ]
+    # Categorize files into different versions
+    file_groups = {}
+    for file in all_files:
+        if file.endswith(('.hdr', '.aux.xml', '.json', '.csv')):  # Skip auxiliary files
+            continue
+        
+        base_name = os.path.basename(file)
+        key = base_name.replace("_reflectance_envi_masked", "").replace("_reflectance_masked", "") \
+                       .replace("_reflectance_envi", "").replace("_reflectance", "")
 
-    return filtered_files
+        if key not in file_groups:
+            file_groups[key] = {}
 
-import os
-import re
+        if "_reflectance_envi_masked" in base_name:
+            file_groups[key]["envi_masked"] = file
+        elif "_reflectance_masked" in base_name:
+            file_groups[key]["masked"] = file
+        elif "_reflectance_envi" in base_name:
+            file_groups[key]["envi"] = file
+        elif "_reflectance" in base_name:
+            file_groups[key]["basic"] = file
+
+    selected_files = []
+    for key, versions in file_groups.items():
+        if "envi_masked" in versions:
+            selected_files.append(versions["envi_masked"])
+        elif "masked" in versions:
+            selected_files.append(versions["masked"])
+        elif "envi" in versions:
+            selected_files.append(versions["envi"])
+        elif "basic" in versions:
+            selected_files.append(versions["basic"])
+
+    return selected_files
+
 
 def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_size=100000):
     """
@@ -2240,12 +2258,11 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
     and renames band columns based on the raster file naming conventions.
     """
     with rasterio.open(raster_path) as src:
-        # Ensure CRS compatibility
         polygons = gpd.read_file(polygon_path)
         if polygons.crs != src.crs:
             polygons = polygons.to_crs(src.crs)
 
-        # Rasterize the polygon layer
+        # Rasterize polygon layer
         polygon_values = rasterize(
             [(geom, idx + 1) for idx, geom in enumerate(polygons.geometry)],
             out_shape=(src.height, src.width),
@@ -2260,7 +2277,6 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
 
         # Determine band naming convention
         if total_bands == 426:
-            # Use the order of processing to differentiate Original and Corrected
             if not hasattr(process_raster_in_chunks, "file_counter"):
                 process_raster_in_chunks.file_counter = 0
             process_raster_in_chunks.file_counter += 1
@@ -2272,7 +2288,6 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
             else:
                 raise ValueError("Unexpected number of files with 426 bands.")
         else:
-            # Extract sensor details for resampled bands
             filename = os.path.basename(raster_path)
             match = re.search(r"resample_(.*?)_masked", filename)
             if match:
@@ -2312,22 +2327,7 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
                 polygon_attributes = polygons.reset_index().rename(columns={'index': 'Polygon_ID'})
                 chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
 
-                # Dynamically filter available columns for reordering
-                polygon_columns = [
-                    'Polygon_ID', 'Pixel_Row', 'Pixel_Col', 'GlobalID', 'CreationDate', 'Creator',
-                    'EditDate', 'Editor', 'description_notes', 'dbh', 'tree_height',
-                    'other_species', 'species', 'other_subcategory', 'dead_subcategory',
-                    'cover_subcategory', 'cover_category', 'og_flight_date', 'collection_date',
-                    'collector_name', 'plot', 'location', 'woody_shrub_height', 'imagery',
-                    'combined_all_category_species', 'area_m', 'geometry'
-                ]
-                available_polygon_columns = [col for col in polygon_columns if col in chunk_df.columns]
-                spectral_columns = [col for col in chunk_df.columns if col not in available_polygon_columns]
-
-                # Reorder columns
-                chunk_df = chunk_df[available_polygon_columns + spectral_columns]
-
-                # Write the chunk to the CSV
+                # Write chunk to CSV
                 mode = 'w' if first_chunk else 'a'
                 header = first_chunk
                 chunk_df.to_csv(output_csv_path, mode=mode, header=header, index=False)
@@ -2336,15 +2336,10 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
                 pbar.update(1)
 
 
-
 def control_function_for_extraction(directory, polygon_path):
     """
-    Orchestrates the finding, loading, processing of raster files found in a specified directory,
+    Orchestrates the finding, loading, processing of raster files in a specified directory,
     processes data in chunks, and saves it to a CSV file in the same directory.
-
-    Parameters:
-    - directory: str, the directory containing raster files.
-    - polygon_path: str, the path to the polygon GeoJSON file.
     """
     raster_paths = find_raster_files_for_extraction(directory)
 
@@ -2367,10 +2362,6 @@ def process_all_subdirectories(parent_directory, polygon_path):
     """
     Searches for all subdirectories within the given parent directory, excluding non-directory files,
     and applies raster file processing to each subdirectory found.
-
-    Parameters:
-    - parent_directory: str, the parent directory containing subdirectories.
-    - polygon_path: str, the path to the polygon GeoJSON file.
     """
     subdirectories = [
         os.path.join(parent_directory, sub_dir)
