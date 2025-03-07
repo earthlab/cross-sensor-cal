@@ -3,11 +3,11 @@
 # Path to the CSV move list
 CSV_FILE="cross-sensor-cal/sorted_files/file_move_list.csv"
 
-# Number of parallel jobs
-NUM_JOBS=10
+# Set a safe number of parallel jobs
+NUM_JOBS=5  # Start with 5, adjust if necessary
 
 # Run in parallel
-tail -n +2 "$CSV_FILE" | parallel -j "$NUM_JOBS" --colsep ',' '
+tail -n +2 "$CSV_FILE" | parallel -j "$NUM_JOBS" --load 80% --colsep ',' '
     irods_destination="/iplant/home/shared/earthlab/macrosystems/{2}"
     echo "Transferring: {1} -> $irods_destination"
     ./gocmd put --diff --icat --retry 3 -d -k "{1}" "$irods_destination"
