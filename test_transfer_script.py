@@ -182,19 +182,41 @@ def extract_and_transfer(remote_path, remote_output_dir):
 if __name__ == "__main__":
     folder_remote = "/iplant/home/shared/earthlab/macrosystems/cross-sensor-cal/sorted_files/envi/Reflectance__ENVI_Masked"
     folder_output = "/iplant/home/shared/earthlab/macrosystems/cross-sensor-cal/sorted_files/csv/masked/Reflectance__ENVI_Masked"
-    local_proxy_hdr_dir = "cross-sensor-cal/local_test_transfer_reference_list"
+    combined_summary_path = "combined_summary_log.txt"
 
-    file_list = [
-        os.path.splitext(f)[0]
-        for f in os.listdir(local_proxy_hdr_dir)
-        if f.endswith(".hdr")
-    ]
-
-    print(f"[INFO] Found {len(file_list)} files to process.")
-
-    for fname in file_list:
-        print(f"\n=== Processing: {fname} ===")
-        extract_and_transfer(
-            remote_path=os.path.join(folder_remote, fname),
-            remote_output_dir=folder_output
+    print(f"[INFO] Getting list of files from: {folder_remote}")
+    try:
+        result = subprocess.run(
+            [GOCMD_PATH, 'ls', folder_remote],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
         )
+        all_files = result.stdout.strip().splitlines()
+        file_list = [os.path.splitext(f.strip())[0] for f in all_files if f.strip().endswith(".hdr")]
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] Failed to list directory with gocmd:\n{e.stderr}")
+        file_list = []
+
+    if not file_list:
+        print(f"[INFO] No .hdr files found in remote folder: {folder_remote}")
+    else:
+        print(f"[INFO] Found {len(file_list)} files to process.")
+
+        for fname in file_list:
+            print(f"\n=== Processing: {fname} ===")
+            extract_and_transfer(
+                remote_path=os.path.join(folder_remote, fname),
+                remote_output_dir=folder_output
+            )
+
+            temp_summary_file = os.path.abspath(f"local_test_transfer/{fname}_summary.txt")
+            if os.path.exists(temp_summary_file):
+                with open(temp_summary_file, "r") as summary_file:
+                    summary_contents = summary_file.read()
+                with open(combined_summary_path, "a") as log_file:
+                    log_file.write(summary_contents + "\n" + "="*60 + "\n")
+                print(f"[LOGGED] Appended summary to {combined_summary_path}")
+            else:
+                print(f"[SKIP LOG] No summary generated for {fname}")
