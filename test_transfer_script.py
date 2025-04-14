@@ -7,10 +7,8 @@ import pandas as pd
 import rasterio
 from spectral import open_image
 from tqdm import tqdm
-import geopandas as gpd
-from shapely.geometry import Point
 
-GOCMD_PATH = "./gocmd"  # Adjust if gocmd lives elsewhere
+GOCMD_PATH = "./gocmd"
 
 def run_gocmd(command_args, desc="Running gocmd"):
     print(f"[{desc}] {' '.join(command_args)}")
@@ -28,17 +26,24 @@ def run_gocmd(command_args, desc="Running gocmd"):
         return False
     return True
 
-def process_envi_array_simple(array, map_info=None, folder_name="Unknown"):
-    with tqdm(total=5, desc="Processing ENVI array", leave=False) as pbar:
+def process_envi_array_simple(array, map_info=None, folder_name="Unknown", nodata_val=-9999):
+    with tqdm(total=6, desc="Processing ENVI array", leave=False) as pbar:
         bands, rows, cols = array.shape
         reshaped_array = array.reshape(bands, -1).T
-        df = pd.DataFrame(reshaped_array, columns=[f'Band_{i+1}' for i in range(bands)])
         pbar.update(1)
 
+        valid_mask = ~(np.all(reshaped_array == nodata_val, axis=1))
+        valid_data = reshaped_array[valid_mask]
+        pbar.update(1)
+
+        df = pd.DataFrame(valid_data, columns=[f'corrected_Band_{i+1}' for i in range(bands)])
+
         pixel_indices = np.indices((rows, cols)).reshape(2, -1).T
+        pixel_indices = pixel_indices[valid_mask]
+        pixel_ids = [f"{folder_name}_{i}" for i in range(len(df))]
         df.insert(0, 'Pixel_Col', pixel_indices[:, 1])
         df.insert(0, 'Pixel_Row', pixel_indices[:, 0])
-        df.insert(0, 'Pixel_id', np.arange(len(df)))
+        df.insert(0, 'Pixel_id', pixel_ids)
         pbar.update(1)
 
         if map_info and len(map_info) >= 7:
@@ -62,7 +67,7 @@ def process_envi_array_simple(array, map_info=None, folder_name="Unknown"):
         pbar.update(2)
 
         df.insert(0, 'Subdirectory', folder_name)
-        df.insert(1, 'Data_Source', 'ENVI Extract')
+        df.insert(1, 'Data_Source', 'NEON_AOP_ENVI_extraction')
         df.insert(2, 'Sensor_Type', 'Hyperspectral')
         pbar.update(1)
 
@@ -144,7 +149,7 @@ def extract_and_transfer(remote_path, remote_output_dir):
         print(preview_df.to_string(index=False))
 
         sample_df = pd.read_csv(local_csv_path, usecols=lambda c: (
-            c in ['Pixel_id', 'Easting', 'Northing'] or c.startswith('Band_')
+            c in ['Pixel_id', 'Easting', 'Northing'] or c.startswith('corrected_Band_')
         ), nrows=100000)
 
         summary_lines = []
@@ -156,7 +161,7 @@ def extract_and_transfer(remote_path, remote_output_dir):
         for col in ['Easting', 'Northing']:
             summary_lines.append(f"  - {col}: {sample_df[col].isna().sum()}")
 
-        band_cols = [col for col in sample_df.columns if col.startswith("Band_")][:3]
+        band_cols = [col for col in sample_df.columns if col.startswith("corrected_Band_")][:3]
         for col in band_cols:
             summary_lines.append(
                 f"{col}: mean={sample_df[col].mean():.4f}, min={sample_df[col].min():.4f}, max={sample_df[col].max():.4f}"
@@ -175,7 +180,21 @@ def extract_and_transfer(remote_path, remote_output_dir):
         print(f"[WARNING] Could not complete quality check: {e}")
 
 if __name__ == "__main__":
-    extract_and_transfer(
-        remote_path='/iplant/home/shared/earthlab/macrosystems/cross-sensor-cal/sorted_files/envi/Reflectance__ENVI_Masked/NEON_D12_YELL_DP1_L014-1_20230718_directional_reflectance__envi_masked',
-        remote_output_dir='/iplant/home/shared/earthlab/macrosystems/cross-sensor-cal/sorted_files/csv/masked/Reflectance__ENVI_Masked'
-    )
+    folder_remote = "/iplant/home/shared/earthlab/macrosystems/cross-sensor-cal/sorted_files/envi/Reflectance__ENVI_Masked"
+    folder_output = "/iplant/home/shared/earthlab/macrosystems/cross-sensor-cal/sorted_files/csv/masked/Reflectance__ENVI_Masked"
+    local_proxy_hdr_dir = "cross-sensor-cal/local_test_transfer_reference_list"
+
+    file_list = [
+        os.path.splitext(f)[0]
+        for f in os.listdir(local_proxy_hdr_dir)
+        if f.endswith(".hdr")
+    ]
+
+    print(f"[INFO] Found {len(file_list)} files to process.")
+
+    for fname in file_list:
+        print(f"\n=== Processing: {fname} ===")
+        extract_and_transfer(
+            remote_path=os.path.join(folder_remote, fname),
+            remote_output_dir=folder_output
+        )
