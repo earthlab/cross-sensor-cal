@@ -1,0 +1,319 @@
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_153414_reflectance__envi_mask
+Total Pixels (approx.): 18,272,640
+Easting range: 461024.00 to 462015.00
+Northing range: 4461134.00 to 4461234.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=178.2640, min=0.0000, max=255.0000
+corrected_Band_2: mean=178.2571, min=0.0000, max=255.0000
+corrected_Band_3: mean=178.2641, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_155155_reflectance__envi_mask
+Total Pixels (approx.): 20,324,224
+Easting range: 460440.00 to 461535.00
+Northing range: 4461231.00 to 4461322.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=181.9844, min=0.0000, max=255.0000
+corrected_Band_2: mean=181.9928, min=0.0000, max=255.0000
+corrected_Band_3: mean=181.9928, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_163602_reflectance__envi_mask
+Total Pixels (approx.): 18,550,972
+Easting range: 459133.00 to 460144.00
+Northing range: 4461547.00 to 4461645.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=189.5036, min=1.0000, max=255.0000
+corrected_Band_2: mean=189.4851, min=0.0000, max=255.0000
+corrected_Band_3: mean=189.5036, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_164427_reflectance__envi_mask
+Total Pixels (approx.): 17,659,820
+Easting range: 458887.00 to 459856.00
+Northing range: 4460970.00 to 4461073.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=159.0286, min=1.0000, max=255.0000
+corrected_Band_2: mean=159.0186, min=0.0000, max=255.0000
+corrected_Band_3: mean=159.0286, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_165300_reflectance__envi_mask
+Total Pixels (approx.): 20,651,332
+Easting range: 458454.00 to 459567.00
+Northing range: 4461817.00 to 4461906.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=187.7687, min=1.0000, max=255.0000
+corrected_Band_2: mean=187.7633, min=0.0000, max=255.0000
+corrected_Band_3: mean=187.7687, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_171931_reflectance__envi_mask
+Total Pixels (approx.): 21,016,296
+Easting range: 457728.00 to 458854.00
+Northing range: 4461016.00 to 4461104.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=159.0286, min=1.0000, max=255.0000
+corrected_Band_2: mean=158.9138, min=0.0000, max=255.0000
+corrected_Band_3: mean=159.0286, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_175558_reflectance__envi_mask
+Total Pixels (approx.): 23,026,864
+Easting range: 456575.00 to 457851.00
+Northing range: 4460895.00 to 4460973.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=198.7161, min=1.0000, max=255.0000
+corrected_Band_2: mean=198.7161, min=1.0000, max=255.0000
+corrected_Band_3: mean=198.7161, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200702_155859_reflectance__envi_mask
+Total Pixels (approx.): 30,929,020
+Easting range: 450744.00 to 452376.00
+Northing range: 4462335.00 to 4462396.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=234.1491, min=1.0000, max=255.0000
+corrected_Band_2: mean=234.1455, min=0.0000, max=255.0000
+corrected_Band_3: mean=234.1491, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200702_163604_reflectance__envi_mask
+Total Pixels (approx.): 21,588,769
+Easting range: 453645.00 to 454807.00
+Northing range: 4461888.00 to 4461973.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=145.4656, min=0.0000, max=255.0000
+corrected_Band_2: mean=145.4728, min=0.0000, max=255.0000
+corrected_Band_3: mean=145.6759, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D10_RMNP_DP1_20200702_180650_reflectance__envi_mask
+Total Pixels (approx.): 23,662,836
+Easting range: 456243.00 to 457526.00
+Northing range: 4461993.00 to 4462070.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=162.6546, min=0.0000, max=255.0000
+corrected_Band_2: mean=162.6096, min=0.0000, max=255.0000
+corrected_Band_3: mean=162.6558, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L001-1_20230711_directional_reflectance__envi_mask
+Total Pixels (approx.): 3,370,065
+Easting range: 525129.00 to 528113.00
+Northing range: 4976605.00 to 4976638.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=247.3917, min=0.0000, max=255.0000
+corrected_Band_2: mean=247.3927, min=1.0000, max=255.0000
+corrected_Band_3: mean=247.3927, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L001-1_20230719_directional_reflectance__envi_mask
+Total Pixels (approx.): 19,289,716
+Easting range: 524664.00 to 544611.00
+Northing range: 4976454.00 to 4976459.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=254.1897, min=1.0000, max=255.0000
+corrected_Band_2: mean=254.1897, min=1.0000, max=255.0000
+corrected_Band_3: mean=254.1897, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L001-1_20230719_directional_reflectance__envi_masked
+Total Pixels (approx.): 2,918
+Easting range: 528557.00 to 540988.00
+Northing range: 4976015.00 to 4976428.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=232.6402, min=12.0000, max=747.0000
+corrected_Band_2: mean=386.0589, min=0.0000, max=3411.0000
+corrected_Band_3: mean=350.5069, min=0.0000, max=2321.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L007-1_20230718_directional_reflectance__envi_mask
+Total Pixels (approx.): 9,626,470
+Easting range: 547276.00 to 548405.00
+Northing range: 4978372.00 to 4978460.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=204.6597, min=1.0000, max=255.0000
+corrected_Band_2: mean=204.6547, min=0.0000, max=255.0000
+corrected_Band_3: mean=204.6597, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L007-1_20230718_directional_reflectance__envi_masked
+Total Pixels (approx.): 5,847
+Easting range: 547461.00 to 547960.00
+Northing range: 4972141.00 to 4973770.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=754.8575, min=14.0000, max=3926.0000
+corrected_Band_2: mean=985.7240, min=96.0000, max=5579.0000
+corrected_Band_3: mean=1032.6578, min=71.0000, max=5851.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L011-1_20230718_directional_reflectance__envi_mask
+Total Pixels (approx.): 9,212,940
+Easting range: 546247.00 to 547186.00
+Northing range: 4978923.00 to 4979029.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=201.5051, min=1.0000, max=255.0000
+corrected_Band_2: mean=201.4975, min=0.0000, max=255.0000
+corrected_Band_3: mean=201.5051, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L011-1_20230718_directional_reflectance__envi_masked
+Total Pixels (approx.): 2,648
+Easting range: 546379.00 to 546988.00
+Northing range: 4974197.00 to 4974917.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=331.3916, min=101.0000, max=1920.0000
+corrected_Band_2: mean=433.5370, min=0.0000, max=2515.0000
+corrected_Band_3: mean=437.9758, min=113.0000, max=2710.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L013-1_20230718_directional_reflectance__envi_mask
+Total Pixels (approx.): 9,702,019
+Easting range: 545646.00 to 546648.00
+Northing range: 4979110.00 to 4979209.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=124.9571, min=1.0000, max=255.0000
+corrected_Band_2: mean=124.9190, min=0.0000, max=255.0000
+corrected_Band_3: mean=124.9571, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L013-1_20230718_directional_reflectance__envi_masked
+Total Pixels (approx.): 995
+Easting range: 546081.00 to 546588.00
+Northing range: 4974004.00 to 4974895.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=229.0482, min=111.0000, max=579.0000
+corrected_Band_2: mean=287.8543, min=127.0000, max=806.0000
+corrected_Band_3: mean=280.0864, min=131.0000, max=862.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L014-1_20230718_directional_reflectance__envi_mask
+Total Pixels (approx.): 9,535,206
+Easting range: 545427.00 to 546360.00
+Northing range: 4980452.00 to 4980559.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=130.2352, min=1.0000, max=255.0000
+corrected_Band_2: mean=130.2281, min=0.0000, max=255.0000
+corrected_Band_3: mean=130.2352, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L014-1_20230718_directional_reflectance__envi_masked
+Total Pixels (approx.): 561
+Easting range: 546081.00 to 546210.00
+Northing range: 4974004.00 to 4974437.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=182.0018, min=95.0000, max=531.0000
+corrected_Band_2: mean=265.2210, min=100.0000, max=823.0000
+corrected_Band_3: mean=253.0713, min=98.0000, max=796.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L024-1_20230718_directional_reflectance__envi_mask
+Total Pixels (approx.): 10,384,297
+Easting range: 542541.00 to 543849.00
+Northing range: 4981002.00 to 4981078.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=116.5395, min=0.0000, max=255.0000
+corrected_Band_2: mean=116.4814, min=0.0000, max=255.0000
+corrected_Band_3: mean=116.5395, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L024-1_20230718_directional_reflectance__envi_masked
+Total Pixels (approx.): 4,729
+Easting range: 543047.00 to 543423.00
+Northing range: 4976697.00 to 4977490.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=386.9410, min=48.0000, max=928.0000
+corrected_Band_2: mean=539.9884, min=120.0000, max=7061.0000
+corrected_Band_3: mean=549.8767, min=114.0000, max=1352.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L024-1_20230719_directional_reflectance__envi_mask
+Total Pixels (approx.): 8,620,254
+Easting range: 542655.00 to 543716.00
+Northing range: 4981080.00 to 4981174.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=111.0349, min=0.0000, max=255.0000
+corrected_Band_2: mean=110.9390, min=0.0000, max=255.0000
+corrected_Band_3: mean=111.0353, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L024-1_20230719_directional_reflectance__envi_masked
+Total Pixels (approx.): 4,729
+Easting range: 543047.00 to 543423.00
+Northing range: 4976697.00 to 4977490.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=404.1220, min=64.0000, max=991.0000
+corrected_Band_2: mean=545.7655, min=103.0000, max=1315.0000
+corrected_Band_3: mean=563.2070, min=132.0000, max=1380.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L025-1_20230719_directional_reflectance__envi_mask
+Total Pixels (approx.): 7,693,590
+Easting range: 542366.00 to 543316.00
+Northing range: 4980585.00 to 4980690.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=95.3788, min=1.0000, max=255.0000
+corrected_Band_2: mean=95.3376, min=0.0000, max=255.0000
+corrected_Band_3: mean=95.3788, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L025-1_20230719_directional_reflectance__envi_masked
+Total Pixels (approx.): 2,057
+Easting range: 543047.00 to 543247.00
+Northing range: 4976750.00 to 4977277.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=320.1629, min=4.0000, max=688.0000
+corrected_Band_2: mean=412.6947, min=91.0000, max=917.0000
+corrected_Band_3: mean=435.3432, min=89.0000, max=963.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L029-1_20230715_directional_reflectance__envi_mask
+Total Pixels (approx.): 10,827,773
+Easting range: 541127.00 to 542369.00
+Northing range: 4982160.00 to 4982240.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=152.4069, min=1.0000, max=255.0000
+corrected_Band_2: mean=152.4056, min=0.0000, max=255.0000
+corrected_Band_3: mean=152.4069, min=1.0000, max=255.0000
+============================================================
+SUMMARY FOR NEON_D12_YELL_DP1_L029-1_20230715_directional_reflectance__envi_masked
+Total Pixels (approx.): 227
+Easting range: 541348.00 to 541467.00
+Northing range: 4977387.00 to 4977486.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=241.0661, min=74.0000, max=587.0000
+corrected_Band_2: mean=307.9780, min=139.0000, max=684.0000
+corrected_Band_3: mean=310.8282, min=138.0000, max=656.0000
+============================================================

@@ -1,0 +1,225 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(terra)
+library(ggplot2)
+library(ggthemes)
+
+layer <- rast("NEON_D13_NIWO_DP1_20170904_181819_reflectance__before_correction.tif")
+df <- layer |> as.data.frame()
+getwd()
+
+strsplit(names(df), " ") |> as.data.frame() -> newnames  
+names(df) <- newnames[1,] |> as.numeric()
+before_df <- df |> rownames_to_column()
+
+layer <- rast("NEON_D13_NIWO_DP1_20170904_181819_reflectance__after_correction.tif")
+df <- layer |> as.data.frame()
+getwd()
+
+strsplit(names(df), " ") |> as.data.frame() -> newnames  
+names(df) <- newnames[1,] |> as.numeric()
+after_df <- df |> rownames_to_column()
+
+
+layer <- rast("resample__after_correction.tif")
+df <- layer |> as.data.frame()
+getwd()
+
+strsplit(names(df), " ") |> as.data.frame() -> newnames  
+names(df) <- newnames[1,] |> as.numeric()
+resample_after_df <- df |> rownames_to_column()
+
+```
+
+```{r}
+before_df |>
+  slice_sample(n=50000) |> # This is where we add the vegetation classification. 
+   pivot_longer(!rowname, names_to = "wavelength_nm", values_to = "reflectance")|>
+  mutate(wavelength_nm = as.numeric(wavelength_nm)) -> before_y
+
+after_df |>
+  slice_sample(n=50000) |> # This is where we add the vegetation classification. 
+   pivot_longer(!rowname, names_to = "wavelength_nm", values_to = "reflectance")|>
+  mutate(wavelength_nm = as.numeric(wavelength_nm)) -> after_y
+
+resample_after_df |>
+  slice_sample(n=50000) |> # This is where we add the vegetation classification. 
+   pivot_longer(!rowname, names_to = "wavelength_nm", values_to = "reflectance")|>
+  mutate(wavelength_nm = as.numeric(wavelength_nm)) -> resample_after_y
+
+
+```
+
+```{r}
+
+our_yellow <- "yellow"
+our_green <- "green"
+our_grey <- "gray80"
+our_white <- "white"
+
+
+before_day_density <- ggplot(data=before_y, aes(x=wavelength_nm, y=reflectance))+ 
+  stat_smooth( color=our_green, fill="lightgrey")+
+  geom_density2d(colour="black", bins=10, alpha=0.1)+
+  stat_density2d(aes(alpha=..level.., fill=..level..), linewidth=2, 
+        bins=10, geom="polygon") + 
+    scale_fill_gradient(low = our_white, high = our_yellow) +
+  
+    scale_alpha(range = c(0.00, 0.8), guide = FALSE) +
+  
+  theme_tufte() +
+  xlab("wavelength") +
+  ylab("reflectance")+
+  ylim(0,16000)+
+  theme(aspect.ratio=5/14, axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,colour =c("darkblue","blue","green", "red", "darkred", "darkred","darkred", "darkred", "darkred", "black","black","black","black"))) +
+  scale_x_continuous(breaks=c(443,490,560,665,705,740,783,842,865,940,1610,2190)) + theme(axis.title.x=element_blank(),
+  plot.margin = margin(t = 30,  # Top margin
+                             r = 10,  # Right margin
+                             b = 40,  # Bottom margin
+                             l = 18),       
+axis.title.y=element_blank())
+#day_density
+  
+
+
+
+after_day_density <- ggplot(data=after_y, aes(x=wavelength_nm, y=reflectance))+ 
+  stat_smooth( color=our_green, fill="lightgrey")+
+  geom_density2d(colour="black", bins=10, alpha=0.1)+
+  stat_density2d(aes(alpha=..level.., fill=..level..), linewidth=2, 
+        bins=10, geom="polygon") + 
+    scale_fill_gradient(low = our_white, high = our_yellow) +
+  
+    scale_alpha(range = c(0.00, 0.8), guide = FALSE) +
+  
+  theme_tufte() +
+  xlab("wavelength") +
+  ylab("reflectance")+
+  ylim(0,16000)+
+  theme(aspect.ratio=5/14, axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,colour =c("darkblue","blue","green", "red", "darkred", "darkred","darkred", "darkred", "darkred", "black","black","black","black"))) +
+  scale_x_continuous(breaks=c(443,490,560,665,705,740,783,842,865,940,1610,2190)) + theme(axis.title.x=element_blank(),
+  plot.margin = margin(t = 30,  # Top margin
+                             r = 10,  # Right margin
+                             b = 40,  # Bottom margin
+                             l = 18),       
+axis.title.y=element_blank())
+
+
+
+
+after_day_density <- ggplot(data=resample_after_y, aes(x=wavelength_nm, y=reflectance))+ 
+  stat_smooth( color=our_green, fill="lightgrey")+
+  geom_density2d(colour="black", bins=10, alpha=0.1)+
+  stat_density2d(aes(alpha=..level.., fill=..level..), linewidth=2, 
+        bins=10, geom="polygon") + 
+    scale_fill_gradient(low = our_white, high = our_yellow) +
+  
+    scale_alpha(range = c(0.00, 0.8), guide = FALSE) +
+  
+  theme_tufte() +
+  xlab("wavelength") +
+  ylab("reflectance")+
+  ylim(0,16000)+
+  theme(aspect.ratio=5/14, axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,colour =c("darkblue","blue","green", "red", "darkred", "darkred","darkred", "darkred", "darkred", "black","black","black","black"))) +
+  scale_x_continuous(breaks=c(443,490,560,665,705,740,783,842,865,940,1610,2190)) + theme(axis.title.x=element_blank(),
+  plot.margin = margin(t = 30,  # Top margin
+                             r = 10,  # Right margin
+                             b = 40,  # Bottom margin
+                             l = 18),       
+axis.title.y=element_blank())
+
+
+```
+
+```{r}
+library(gridExtra)
+ggsave(grid.arrange(before_day_density, after_day_density, nrow = 2), file="day_density_before_and_after.png", dpi=600, width=11, height=8.5)
+```
+
+```{r}
+library(gbm)
+for_predict <- after_y |> select(wavelength_nm)
+
+boost_ants1 <- gbm(reflectance ~ wavelength_nm, data=after_y, 
+                  n.trees=500, interaction.depth=15, shrinkage=0.09,
+                  bag.fraction=10,distribution=list(name = "quantile", alpha = 0.01))
+boost_preds <- predict(boost_ants1, newdata=for_predict)
+preds1 <- cbind(after_y, boosted_predictions_01 = boost_preds)
+
+time_a <- Sys.time()
+boost_ants2 <- gbm(reflectance ~ wavelength_nm, data=after_y, 
+                  n.trees=500, interaction.depth=15, shrinkage=0.1,
+                  bag.fraction=1,distribution=list(name = "quantile", alpha = 0.99))
+boost_preds2 <- predict(boost_ants2, newdata=for_predict)
+preds2 <- cbind(after_y, boosted_predictions_99 = boost_preds2)
+
+time_b <- Sys.time()
+difftime(time_b, time_a)
+```
+
+```{r}
+after_y |>
+    ggplot() +
+    # geom_line(data=ants, 
+    #           aes(x=wavelength_nm, y=reflectance),
+    #           linetype=1, color="firebrick", alpha=0.1) +
+    geom_line(data=preds1, 
+              aes(x=wavelength_nm, y=boosted_predictions),
+              linetype=2, color="red") +
+  geom_line(data=preds2, 
+              aes(x=wavelength_nm, y=boosted_predictions),
+              linetype=2, color="red")
+```
+
+```{r}
+library(reshape)
+library("viridis")  
+library(RColorBrewer)
+
+
+
+quantiles_of_reflectance <- function(one_species_data){
+  
+ 
+for_predict <- one_species_data %>% select(wavelength_nm)
+to_fill <- data.frame(matrix(NA, ncol=100, nrow=nrow(one_species_data)))
+colnames(to_fill)<- paste0(rep("qt",100), seq(1,100))
+
+counter <- 1
+for(i in seq(0.01,0.99,by=0.01)){
+boost_me <- gbm(reflectance ~ wavelength_nm, data=one_species_data, 
+                  n.trees=2000, interaction.depth=49, shrinkage=0.01,
+                  bag.fraction=0.5,distribution=list(name = "quantile", alpha = i))
+to_fill[,counter] <- predict(boost_me, newdata=for_predict)
+counter <- counter + 1
+print(counter)
+}
+#to_fill <- to_fill[,1:10]
+
+
+melted_plot_data <- melt(to_fill, id.qt = "quantile")
+wv_repeat <- data.frame(matrix(for_predict[,1], nrow=nrow(for_predict)*10, ncol=1))
+  bound_quantiles <- cbind(wv_repeat, melted_plot_data)
+colnames(bound_quantiles) <- c("wavelength_nm","quantile","reflectance")
+prob_density <- bound_quantiles %>% 
+  mutate(probability_density = substring(quantile, 3))%>% 
+  mutate(probability_density_original = substring(quantile, 3))
+
+prob_density$probability_density <- as.numeric(prob_density$probability_density)/100
+prob_density$probability_density[which(prob_density$probability_density > 0.5)] <- 1 - prob_density$probability_density[which(prob_density$probability_density > 0.5)] 
+    
+prob_density$probability_density_original <- as.numeric(prob_density$probability_density_original)/100
+
+
+return(prob_density)
+}
+
+prob_density_model <- quantiles_of_reflectance(after_y)
+
+```

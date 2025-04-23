@@ -1,0 +1,415 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+library(readr)
+polygon_spectra <- read_csv("/home/jovyan/data-store/cross-sensor-cal/polygon_spectra.csv")
+names(polygon_spectra)
+```
+
+```{r}
+library(ggplot2)
+
+polygon_spectra$Corrected_band_1
+
+ggplot(data=polygon_spectra)+
+  geom_point(aes(x= Original_band_1, y=Corrected_band_1)) +
+  geom_abline(slope=1, intersect=0) +
+  ylim(0.01, 15000)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Step 1: Initialize an empty list to store data frames
+long_data_list <- list()
+
+# Step 2: Loop through each band, convert 0s and values > 10000 to NA, and add the corresponding pairs to the list
+for (i in 1:426) {
+  long_data_list[[i]] <- polygon_spectra %>%
+    select(Original_band = paste0("Original_band_", i),
+           Corrected_band = paste0("Corrected_band_", i)) %>%
+    mutate(Original_band = ifelse(Original_band == 0 | Original_band > 10000, NA, Original_band),
+           Corrected_band = ifelse(Corrected_band == 0 | Corrected_band > 10000, NA, Corrected_band)) %>%
+    mutate(Band = paste0("Band_", i))
+}
+
+# Step 3: Combine all the long data frames into one
+polygon_spectra_long <- bind_rows(long_data_list)
+
+# Step 4: Calculate slope coefficients and add them to the plot
+slope_data <- polygon_spectra_long %>%
+  group_by(Band) %>%
+  summarise(
+    slope = tryCatch({
+      round(coef(lm(Corrected_band ~ Original_band, na.action = na.omit))[2], 2)
+    }, error = function(e) { NA })
+  )
+
+# Step 5: Plot with faceting, linear model, and fixed slope annotation
+plot <- ggplot(data = polygon_spectra_long, aes(x = Original_band, y = Corrected_band)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue", na.rm = TRUE) +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ylim(0.01, 15000) +
+  facet_wrap(~ Band, scales = "free") +
+  geom_text(
+    data = slope_data,
+    aes(x = 10, y = 13000, label = paste("Slope:", slope)),
+    size = 5, color = "black"
+  )
+
+# Step 6: Save the plot to a PDF
+ggsave("faceted_plot_with_slopes.pdf", plot = plot, width = 40, height = 40, units = "in")
+
+
+
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Step 1: Convert 0s and values > 10000 to NA
+polygon_spectra_cleaned <- polygon_spectra %>%
+  mutate(across(everything(), ~ ifelse(. == 0 | . > 10000, NA, .)))
+
+# Step 2: Calculate slope coefficients for each band pair
+slope_table <- bind_rows(lapply(1:426, function(i) {
+  data <- polygon_spectra_cleaned %>%
+    select(Original_band = paste0("Original_band_", i),
+           Corrected_band = paste0("Corrected_band_", i))
+  
+  slope <- tryCatch({
+    coef(lm(Corrected_band ~ Original_band, data = data, na.action = na.omit))[2]
+  }, error = function(e) { NA })
+  
+  data.frame(
+    Original_Band = paste0("Original_band_", i),
+    Corrected_Band = paste0("Corrected_band_", i),
+    Slope_Coefficient = round(slope, 2)
+  )
+}))
+
+# Step 3: View the table
+print(slope_table)
+
+# Optional: Save the table to a CSV file
+write.csv(slope_table, "band_comparison_table.csv", row.names = FALSE)
+
+```
+
+```{r}
+library(ggplot2)
+
+# Extract the band number from the 'Original_Band' column for plotting
+slope_table <- slope_table %>%
+  mutate(Band_Number = as.numeric(gsub("Original_band_", "", Original_Band)))
+
+# Plotting the slope coefficients
+slope_plot <- ggplot(slope_table, aes(x = Band_Number, y = Slope_Coefficient)) +
+  geom_point(color = "blue") +
+  geom_line(color = "blue") +
+  labs(title = "Slope Coefficients Original vs. Corrected 426 band",
+       x = "Band Number",
+       y = "Slope Coefficient") +
+  theme_minimal()
+
+# Display the plot
+print(slope_plot)
+
+# Optional: Save the slope plot to a file
+ggsave("slope_coefficients_plot.pdf", plot = slope_plot, width = 10, height = 6, units = "in")
+
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Assuming 'polygon_spectra' is your data frame with all the relevant columns
+
+# List of band numbers and sensor names
+bands <- 1:6
+sensors <- c("Landsat_5", "Landsat_7", "Landsat_8", "Landsat_9")
+
+# Initialize an empty list to store the results
+slope_table_list <- list()
+
+# Loop through each band
+for (band in bands) {
+  # Step 1: Subset the data for the current band across all sensors
+  band_data <- polygon_spectra %>%
+    select(contains(paste0("_band_", band)))
+  
+  # Step 2: Reshape to long format
+  band_data_long <- band_data %>%
+    pivot_longer(cols = everything(), names_to = "Sensor", values_to = "Value") %>%
+    mutate(Sensor = gsub("_band_.*", "", Sensor))  # Remove band info from sensor names
+  
+  # Step 3: Perform pairwise comparisons and calculate slopes
+  slopes <- expand.grid(Sensor1 = sensors, Sensor2 = sensors) %>%
+    filter(Sensor1 != Sensor2) %>%  # Remove self-comparisons
+    rowwise() %>%
+    mutate(Slope_Coefficient = tryCatch({
+      coef(lm(Value ~ Sensor, data = band_data_long %>% 
+               filter(Sensor %in% c(Sensor1, Sensor2)) %>%
+               mutate(Sensor = as.factor(Sensor))))[2]
+    }, error = function(e) { NA })) %>%
+    mutate(Band = paste0("Band_", band))
+  
+  # Step 4: Store results in list
+  slope_table_list[[band]] <- slopes
+}
+
+# Combine all the results into one data frame
+slope_table <- bind_rows(slope_table_list)
+
+# View the slope table
+print(slope_table)
+
+# Step 5: Plot the slope coefficients
+slope_plot <- ggplot(slope_table, aes(x = interaction(Sensor1, Sensor2), y = Slope_Coefficient, color = Band)) +
+  geom_point() +
+  geom_line(aes(group = Band)) +
+  labs(title = "Slope Coefficients for Each Band Comparison Across Sensors",
+       x = "Sensor Pair",
+       y = "Slope Coefficient") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the plot
+slope_plot
+
+# Optional: Save the slope plot to a file
+ggsave("slope_coefficients_across_sensors.pdf", plot = slope_plot, width = 12, height = 8, units = "in")
+
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# List of Landsat sensors and bands
+sensors <- c("Landsat_5", "Landsat_7", "Landsat_8", "Landsat_9")
+bands <- 1:6
+
+# Step 1: Initialize an empty list to store data frames
+long_data_list <- list()
+
+# Step 2: Loop through each band, convert 0s and values > 10000 to NA, and add the corresponding pairs to the list
+for (band in bands) {
+  long_data_list[[band]] <- polygon_spectra %>%
+    select(all_of(paste0(sensors, "_band_", band))) %>%
+    pivot_longer(cols = everything(), names_to = "Sensor", values_to = "Value") %>%
+    mutate(Sensor = gsub("_band_.*", "", Sensor),
+           Value = ifelse(Value == 0 | Value > 10000, NA, Value),
+           Band = paste0("Band_", band))
+}
+
+# Step 3: Combine all the long data frames into one
+landsat_data_long <- bind_rows(long_data_list)
+
+# Step 4: Calculate slope coefficients and add them to the plot
+slope_data <- landsat_data_long %>%
+  group_by(Band) %>%
+  summarise(
+    slope = tryCatch({
+      round(coef(lm(Value ~ Sensor, na.action = na.omit))[2], 2)
+    }, error = function(e) { NA })
+  )
+
+# Step 5: Plot with faceting, linear model, and fixed slope annotation
+plot <- ggplot(data = landsat_data_long, aes(x = Sensor, y = Value)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue", na.rm = TRUE) +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  ylim(0.01, 15000) +
+  facet_wrap(~ Band, scales = "free") +
+  geom_text(
+    data = slope_data,
+    aes(x = 1.5, y = 13000, label = paste("Slope:", slope)),
+    size = 5, color = "black"
+  )
+
+# Step 6: Save the plot to a PDF
+ggsave("landsat_faceted_plot_with_slopes.pdf", plot = plot, width = 40, height = 40, units = "in")
+
+```
+
+```{r}
+# Load necessary libraries
+library(rstac)
+library(terra)
+library(dplyr)
+
+# Step 1: Define the AOI Polygon (example coordinates)
+aoi <- ext(-105.1, -105.0, 39.7, 39.8)
+
+# Step 2: Define the STAC API endpoint for Planetary Computer
+stac_api_url <- "https://planetarycomputer.microsoft.com/api/stac/v1"
+
+# Step 3: Initialize the STAC client and perform the search
+client <- stac(stac_api_url)
+search <- client %>%
+  stac_search(collections = "landsat-8-c2-l2",
+              bbox = as.vector(aoi), 
+              datetime = "2021-01-01/2021-12-31") %>%
+  get_request()
+
+# Check if there are any items in the search result
+if (length(search$features) == 0) {
+  stop("No items found.")
+}
+
+# Step 4: Retrieve the first item
+item <- search$features[[1]]
+
+# Step 5: Define the bands you want to retrieve
+bands <- c("SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7")
+
+# Step 6: Prepare to store reflectance data
+data_list <- list()
+
+# Loop through each band, download, and process the data
+for (band in bands) {
+  if (!is.null(item$assets[[band]])) {
+    # Get the asset URL (no need for access token)
+    asset_url <- item$assets[[band]]$href
+
+    # Load the raster data using terra
+    raster_data <- rast(asset_url)
+
+    # Extract reflectance values and flatten them
+    band_values <- as.data.frame(values(raster_data))
+    band_values$band <- band
+
+    # Append to the list
+    data_list[[band]] <- band_values
+  } else {
+    print(paste("Band", band, "not found in the item."))
+  }
+}
+
+# Combine all the data into a single dataframe
+df <- bind_rows(data_list)
+
+# Step 7: Display the DataFrame
+print(df)
+
+# Step 8: Plot the distribution of reflectance values per band
+library(ggplot2)
+
+ggplot(df, aes(x = band, y = SR_B1)) + 
+  geom_violin() +
+  labs(title = "Distribution of Reflectance Values per Band", x = "Band", y = "Reflectance") +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# Install readr if not already installed
+#install.packages("readr")
+
+# Load the readr package
+library(readr)
+library(dplyr)
+
+NIWO_landsat8_compare <- read_csv("NIWO_landsat8_compare.csv")
+
+
+
+
+```
+
+```{r}
+# Round all 'sampled' columns to whole numbers
+NIWO_landsat8_compare <- NIWO_landsat8_compare %>%
+  mutate(across(contains("sampled"), ~ round(.)))
+
+
+head(NIWO_landsat8_compare)
+```
+
+```{r}
+# Install and load necessary packages
+#install.packages(c("ggplot2", "tidyr", "dplyr"))  # Skip if already installed
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Load the CSV file
+#NIWO_landsat8_compare <- read.csv("NIWO_landsat8_compare.csv", stringsAsFactors = FALSE)
+
+# Inspect the dataframe
+#head(NIWO_landsat8_compare)
+#str(NIWO_landsat8_compare)
+#summary(NIWO_landsat8_compare)
+
+# Reshape the dataframe from wide to long format
+long_df <- NIWO_landsat8_compare %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Band_Type",
+    values_to = "Reflectance"
+  ) %>%
+  separate(Band_Type, into = c("Source", "Band"), sep = "_band_") %>%
+  mutate(
+    Band = as.integer(Band),
+    Source = ifelse(grepl("real", Source, ignore.case = TRUE), "Real", "Sampled")
+  )
+
+# Inspect the reshaped dataframe
+head(long_df)
+str(long_df)
+sum(is.na(long_df$Reflectance))
+
+# Combined Density Plot for All Bands and Sources
+ggplot(long_df, aes(x = Reflectance, color = interaction(Source, Band), fill = interaction(Source, Band))) +
+  geom_density(alpha = 0.3) +
+  labs(
+    title = "Density Distribution of Landsat8 Real and Sampled Bands",
+    x = "Reflectance",
+    y = "Density",
+    color = "Source and Band",
+    fill = "Source and Band"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+# Faceted Density Plot by Band
+ggplot(long_df, aes(x = Reflectance, fill = Source, color = Source)) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~ Band, ncol = 3) +
+  labs(
+    title = "Density Distribution of Landsat8 Bands: Real vs. Sampled",
+    x = "Reflectance",
+    y = "Density",
+    fill = "Source",
+    color = "Source"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+# Save the combined density plot
+ggsave("Combined_Density_Plot.png", width = 10, height = 6, dpi = 300)
+
+# Save the faceted density plot by band
+ggsave("Faceted_Density_Plot_by_Band.png", width = 12, height = 8, dpi = 300)
+
+```

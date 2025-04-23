@@ -1,0 +1,11 @@
+SUMMARY FOR NEON_D10_RMNP_DP1_20200701_153414_reflectance__envi_mask
+Total Pixels (approx.): 18,272,640
+Easting range: 461024.00 to 462015.00
+Northing range: 4461134.00 to 4461234.00
+NaN counts:
+  - Easting: 0
+  - Northing: 0
+corrected_Band_1: mean=178.2640, min=0.0000, max=255.0000
+corrected_Band_2: mean=178.2571, min=0.0000, max=255.0000
+corrected_Band_3: mean=178.2641, min=1.0000, max=255.0000
+============================================================
