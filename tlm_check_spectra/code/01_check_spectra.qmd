@@ -1,0 +1,58 @@
+---
+title: "01_check_spectra"
+author: Tyler L. McIntosh
+date: last-modified
+format:
+  html:
+    embed-resources: true
+    html-math-method: katex
+    css: styles.css
+    toc: true
+    toc-depth: 1
+    toc-title: Contents
+    toc-location: right
+    code-fold: true
+    code-summary: "Show the code"
+---
+
+# Setup and read in data
+
+``` {r setupchunk}
+#| echo: true
+#| message: false
+#| warning: false
+#| results: 'hide'
+
+rm(list = ls())
+
+if(cyverse) {
+  options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2025-04-11"))
+}
+Sys.setenv(PAK_NONINTERACTIVE = "true")
+
+if(!requireNamespace("here", quietly = TRUE)) {
+  install.packages("here")
+}
+library(here)
+
+source(here::here("code", "functions.R"))
+
+install_and_load_packages(c(
+  "tidyverse",
+  "terra",
+  "mapview",
+  "sf",
+  "tictoc"))
+
+dir_figs <- here::here('figs')
+dir_data <- here::here('data')
+dir_derived <- here::here('data', 'derived')
+dir_raw <- here::here('data', 'raw')
+dir_manual <- here::here('data', 'manual')
+dir_ensure(c(dir_figs,
+             dir_data,
+             dir_derived,
+             dir_manual,
+             dir_raw))
+
+```
