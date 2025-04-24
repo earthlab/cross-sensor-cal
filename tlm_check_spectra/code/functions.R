@@ -68,7 +68,7 @@ install_and_load_packages <- function(package_list, auto_install = "n") {
   
   # Install missing ones (CRAN or GitHub), with version support
   if (length(missing_pkgs) > 0) {
-    pak::pkg_install(missing_pkgs, upgrade = TRUE)
+    pak::pkg_install(missing_pkgs, upgrade = TRUE, ask = FALSE)
   }
   
   # Load all packages

@@ -25,10 +25,12 @@ format:
 
 rm(list = ls())
 
+cyverse = TRUE
+
 if(cyverse) {
   options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2025-04-11"))
 }
-Sys.setenv(PAK_NONINTERACTIVE = "true")
+
 
 if(!requireNamespace("here", quietly = TRUE)) {
   install.packages("here")
@@ -36,6 +38,9 @@ if(!requireNamespace("here", quietly = TRUE)) {
 library(here)
 
 source(here::here("code", "functions.R"))
+
+install.packages('sf')
+library(sf)
 
 install_and_load_packages(c(
   "tidyverse",
@@ -54,5 +59,33 @@ dir_ensure(c(dir_figs,
              dir_derived,
              dir_manual,
              dir_raw))
+
+
+```
+
+
+
+```{r load-data}
+
+#move the data
+system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/field-data/output/summary_spectra/out_csv ~/cross-sensor-cal/tlm_check_spectra/data/") 
+system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/field-data/analysis_ready_polygons ~/cross-sensor-cal/tlm_check_spectra/data/") 
+
+aop_all <- readr::read_csv(here::here('data', 'out_csv', 'NEON_AOP', 'merged_data_NEON_AOP_full_diam_all.csv'))
+aop_polygons <- sf::st_read(here::here('data', 'analysis_ready_polygons', "aop_polygons_4_22_2025_analysis_ready.geojson"))
+
+
+aop_niwo <- aop_niwo |>
+  left_join(aop_polygons, by = join_by(Polygon_ID == OBJECTID))
+
+```
+
+
+```{r check-spectra-by-size}
+
+ggplot(data = aop_niwo) +
+  
+
+
 
 ```
