@@ -405,20 +405,20 @@ toc() #35 seconds
 safe_check_spectra_tif <- safely(check_spectra_plots_tif)
 safe_check_spectra_envi <- safely(check_spectra_plots_envi)
 
-
+tic()
 all_manual_spectra_tif <- purrr::map2(.x = matched_ids[-1], #remove CW1, has no polygons
                                   .y = aligned_orthomosaics[-1],
                                   .f = ~ safe_check_spectra_tif(plotID = .x,
                                                              ortho_location = .y))
+toc()
 
-
-
+tic()
 all_manual_spectra_envi <- purrr::map2(.x = matched_ids[-1], #remove CW1, has no polygons
                                   .y = envi_files[-1],
                                   .f = ~ safe_check_spectra_envi(plotID = .x,
                                                              ortho_location = .y))
 
-
+toc()
 
 
 
