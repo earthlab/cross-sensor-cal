@@ -39,8 +39,6 @@ library(here)
 
 source(here::here("code", "functions.R"))
 
-install.packages('sf')
-library(sf)
 
 install_and_load_packages(c(
   "tidyverse",
@@ -74,18 +72,351 @@ system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/field-d
 aop_all <- readr::read_csv(here::here('data', 'out_csv', 'NEON_AOP', 'merged_data_NEON_AOP_full_diam_all.csv'))
 aop_polygons <- sf::st_read(here::here('data', 'analysis_ready_polygons', "aop_polygons_4_22_2025_analysis_ready.geojson"))
 
-
-aop_niwo <- aop_niwo |>
-  left_join(aop_polygons, by = join_by(Polygon_ID == OBJECTID))
+aop_all_long <- aop_all %>%
+  pivot_longer(
+    cols = starts_with("Masked_band_"),
+    names_to = "band",
+    names_pattern = "Masked_band_(\\d+)",
+    values_to = "reflectance"
+  )
 
 ```
 
 
 ```{r check-spectra-by-size}
 
-ggplot(data = aop_niwo) +
+
+# Ensure 'band' is numeric for proper x-axis scaling
+aop_all_long <- aop_all_long %>%
+  mutate(band = as.numeric(band))
+
+# Plot median with interquartile ribbons
+ggplot(aop_all_long, aes(x = band, y = reflectance, color = cover_category, group = cover_category)) +
+  stat_summary(fun = median, geom = "line", size = 1) +
+  stat_summary(fun.data = function(y) {
+    quant <- quantile(y, probs = c(0.25, 0.75), na.rm = TRUE)
+    data.frame(ymin = quant[1], ymax = quant[2])
+  }, geom = "ribbon", aes(fill = cover_category), alpha = 0.2, color = NA) +
+  labs(
+    title = "Median Spectral Signatures (25–75% Quantiles) by Cover Category - AOP",
+    x = "Band number",
+    y = "Reflectance"
+  ) +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+
+
+niwo <- aop_all_long |>
+  filter()
+
+
+```
+
+
+
+
+
+```{r check-uas}
+
+uas_polygons <- sf::st_read(here::here('data', 'analysis_ready_polygons', "uas_polygons_4_22_2025_analysis_ready.geojson"))
+
+uas_extract <- read_csv(here::here('data', 'out_csv', 'uas_2023', 'merged_data_2023_UAS_10cm_full_diam.csv')) |>
+  left_join(uas_polygons, by= join_by(Polygon_ID == OBJECTID))
+
+uas_2023 <- uas_polygons |> filter(field_year == 2023) |>
+  sf::st_transform('EPSG:26913')
+
+
+# A function to compare the python tool spectra and a manual terra extraction
+check_spectra_plots_tif <- function(plotID, ortho_location) {
   
+  #Format extracted data
+  extract <- uas_extract |>
+    filter(plotID_clean == plotID)
+  # nanometer_cols <- which(str_ends(names(cw2_extract), "nanometers"))
+  # 
+  # extract <- extract %>%
+  #   rename_with(
+  #     .cols = nanometer_cols,
+  #     .fn = ~ paste0("band ", seq_along(.))
+  #   )
+  
+  nanometer_cols <- names(extract)[str_ends(names(extract), "nanometers")]
+  
+  extract <- extract %>%
+    rename_with(
+      .cols = all_of(nanometer_cols),
+      .fn = ~ paste0("band ", seq_along(.))
+    )
+  
+  extract_long <- extract |>
+    pivot_longer(
+      cols = starts_with("band"),
+      names_to = "band",
+      names_pattern = "band (\\d+)",
+      values_to = "reflectance"
+    ) |>
+    mutate(band = as.integer(band),
+           reflectance = as.numeric(reflectance)) 
+  
+  
+  # Filter polygons
+  plot <- terra::rast(ortho_location)
+  
+  plot_p <- uas_2023 |>
+    filter(plotID_clean == plotID) |>
+    mutate(pID = row_number())
+  
+  plot_p_d <- terra::extract(plot, plot_p, bind = TRUE)
+  plot_p_d <- plot_p_d |> 
+    left_join(plot_p, by = join_by(ID == pID))
+  plot_p_d_clean <- plot_p_d %>%
+    select(-which(str_ends(names(.), "georef_11")))
+  
+  
+  # m300_cols <- which(str_detect(names(plot_p_d_clean), "-M300"))
+  # 
+  # plot_p_d_clean <- plot_p_d_clean %>%
+  #   rename_with(
+  #     .cols = m300_cols,
+  #     .fn = ~ paste0("band ", seq_along(.))
+  #   )
+  
+  m300_cols <- names(plot_p_d_clean)[str_detect(names(plot_p_d_clean), "-M300")]
+  
+  plot_p_d_clean <- plot_p_d_clean %>%
+    rename_with(
+      .cols = all_of(m300_cols),
+      .fn = ~ paste0("band ", seq_along(.))
+    )
+  
+  plot_p_d_clean_long <- plot_p_d_clean |>
+    pivot_longer(
+      cols = starts_with("band"),
+      names_to = "band",
+      names_pattern = "band (\\d+)",
+      values_to = "reflectance"
+    ) |>
+    mutate(band = as.integer(band),
+           reflectance = as.numeric(reflectance)) 
+  
+  
+  # Plots
+  p_manual <- ggplot(plot_p_d_clean_long, aes(x = band, y = reflectance, color = cover_category, group = cover_category)) +
+    stat_summary(fun = median, geom = "line", size = 1) +
+    stat_summary(fun.data = function(y) {
+      quant <- quantile(y, probs = c(0.25, 0.75), na.rm = TRUE)
+      data.frame(ymin = quant[1], ymax = quant[2])
+    }, geom = "ribbon", aes(fill = cover_category), alpha = 0.2, color = NA) +
+    labs(
+      title = paste("Median Spectral Signatures (25–75% Quantiles) by Cover Category\n", plotID, "Extract Tyler manual - TIF"),
+      x = "Band number",
+      y = "Reflectance"
+    ) +
+    theme_minimal() +
+    theme(legend.title = element_blank())
+  
+  ggsave(filename = here::here('figs', paste0(plotID, "_tlm_extract_tif.png")),
+         plot = p_manual,
+         width = 10, height = 7)
+
+  
+  p_extract <- ggplot(extract_long, aes(x = band, y = reflectance, color = cover_category, group = cover_category)) +
+    stat_summary(fun = median, geom = "line", size = 1) +
+    stat_summary(fun.data = function(y) {
+      quant <- quantile(y, probs = c(0.25, 0.75), na.rm = TRUE)
+      data.frame(ymin = quant[1], ymax = quant[2])
+    }, geom = "ribbon", aes(fill = cover_category), alpha = 0.2, color = NA) +
+    labs(
+      title = paste("Median Spectral Signatures (25–75% Quantiles) by Cover Category\n", plotID, "Extract with python tool"),
+      x = "Band number",
+      y = "Reflectance"
+    ) +
+    theme_minimal() +
+    theme(legend.title = element_blank())
+    
+  ggsave(filename = here::here('figs', paste0(plotID, "_py_extract.png")),
+         plot = p_extract,
+         width = 10, height = 7)
+  
+    
+    return(plot_p_d_clean_long)
+}
+
+
+
+# A function to compare the python tool spectra and a manual terra extraction
+check_spectra_plots_envi <- function(plotID, ortho_location) {
+  
+  #Format extracted data
+  extract <- uas_extract |>
+    filter(plotID_clean == plotID)
+  # nanometer_cols <- which(str_ends(names(cw2_extract), "nanometers"))
+  # 
+  # extract <- extract %>%
+  #   rename_with(
+  #     .cols = nanometer_cols,
+  #     .fn = ~ paste0("band ", seq_along(.))
+  #   )
+  
+  nanometer_cols <- names(extract)[str_ends(names(extract), "nanometers")]
+  
+  extract <- extract %>%
+    rename_with(
+      .cols = all_of(nanometer_cols),
+      .fn = ~ paste0("band ", seq_along(.))
+    )
+  
+  extract_long <- extract |>
+    pivot_longer(
+      cols = starts_with("band"),
+      names_to = "band",
+      names_pattern = "band (\\d+)",
+      values_to = "reflectance"
+    ) |>
+    mutate(band = as.integer(band),
+           reflectance = as.numeric(reflectance)) 
+  
+  
+  # Filter polygons
+  plot <- terra::rast(ortho_location)
+  
+  plot_p <- uas_2023 |>
+    filter(plotID_clean == plotID) |>
+    mutate(pID = row_number())
+  
+  plot_p_d <- terra::extract(plot, plot_p, bind = TRUE)
+  plot_p_d <- plot_p_d |> 
+    left_join(plot_p, by = join_by(ID == pID))
+  plot_p_d_clean <- plot_p_d
+  
+  # m300_cols <- which(str_detect(names(plot_p_d_clean), "-M300"))
+  # 
+  # plot_p_d_clean <- plot_p_d_clean %>%
+  #   rename_with(
+  #     .cols = m300_cols,
+  #     .fn = ~ paste0("band ", seq_along(.))
+  #   )
+  
+  #m300_cols <- names(plot_p_d_clean)[str_detect(names(plot_p_d_clean), "-M300")]
+  nanometer_cols <- names(plot_p_d_clean)[str_ends(names(plot_p_d_clean), "nanometers")]
+
+  plot_p_d_clean <- plot_p_d_clean %>%
+    rename_with(
+      .cols = all_of(nanometer_cols),
+      .fn = ~ paste0("band ", seq_along(.))
+    )
+  
+  plot_p_d_clean_long <- plot_p_d_clean |>
+    pivot_longer(
+      cols = starts_with("band"),
+      names_to = "band",
+      names_pattern = "band (\\d+)",
+      values_to = "reflectance"
+    ) |>
+    mutate(band = as.integer(band),
+           reflectance = as.numeric(reflectance)) 
+  
+  
+  # Plots
+  p_manual <- ggplot(plot_p_d_clean_long, aes(x = band, y = reflectance, color = cover_category, group = cover_category)) +
+    stat_summary(fun = median, geom = "line", size = 1) +
+    stat_summary(fun.data = function(y) {
+      quant <- quantile(y, probs = c(0.25, 0.75), na.rm = TRUE)
+      data.frame(ymin = quant[1], ymax = quant[2])
+    }, geom = "ribbon", aes(fill = cover_category), alpha = 0.2, color = NA) +
+    labs(
+      title = paste("Median Spectral Signatures (25–75% Quantiles) by Cover Category\n", plotID, "Extract Tyler manual - ENVI"),
+      x = "Band number",
+      y = "Reflectance"
+    ) +
+    theme_minimal() +
+    theme(legend.title = element_blank())
+  
+  ggsave(filename = here::here('figs', paste0(plotID, "_tlm_extract_envi.png")),
+         plot = p_manual,
+         width = 10, height = 7)
+
+  
+  p_extract <- ggplot(extract_long, aes(x = band, y = reflectance, color = cover_category, group = cover_category)) +
+    stat_summary(fun = median, geom = "line", size = 1) +
+    stat_summary(fun.data = function(y) {
+      quant <- quantile(y, probs = c(0.25, 0.75), na.rm = TRUE)
+      data.frame(ymin = quant[1], ymax = quant[2])
+    }, geom = "ribbon", aes(fill = cover_category), alpha = 0.2, color = NA) +
+    labs(
+      title = paste("Median Spectral Signatures (25–75% Quantiles) by Cover Category\n", plotID, "Extract with python tool"),
+      x = "Band number",
+      y = "Reflectance"
+    ) +
+    theme_minimal() +
+    theme(legend.title = element_blank())
+    
+  ggsave(filename = here::here('figs', paste0(plotID, "_py_extract.png")),
+         plot = p_extract,
+         width = 10, height = 7)
+  
+    
+    return(plot_p_d_clean_long)
+}
+
+
+
+
+paths <- list.files('~/data-store/data/iplant/home/shared/earthlab/macrosystems/field-data/output/summer-2023-10cm-10k/',
+           full.names = TRUE,
+           recursive = TRUE,
+           include.dirs = FALSE)
+
+aligned_orthomosaics <-  paths[
+  str_ends(paths, "aligned_orthomosaic.tif") & !str_detect(paths, "AOP-")
+]
+
+envi_files <- paths[
+  str_ends(paths, "NEON_D13_NIWO_test_aligned_orthomosaic__reflectance_corrected_flipped") & !str_detect(paths, "AOP-")
+]
+  
+matched_ids <- str_extract(aligned_orthomosaics, "(?<=//)[^/-]+")
+
+
+tic()
+cw2 <- check_spectra_plots_tif(plotID = "CW2", ortho_location = '~/data-store/data/iplant/home/shared/earthlab/macrosystems/field-data/output/summer-2023-10cm-10k/CW2-08-16-23-ExportPackage/aligned_orthomosaic.tif')
+toc() #35 seconds
+
+tic()
+cw2_envi <- check_spectra_plots_envi(plotID = "CW2", ortho_location = '~/data-store/data/iplant/home/shared/earthlab/macrosystems/field-data/output/summer-2023-10cm-10k/CW2-08-16-23-ExportPackage/NEON_D13_NIWO_test_aligned_orthomosaic__reflectance_corrected_flipped')
+toc() #35 seconds
+
+
+
+# should take around 6-7 minutes
+safe_check_spectra_tif <- safely(check_spectra_plots_tif)
+safe_check_spectra_envi <- safely(check_spectra_plots_envi)
+
+
+all_manual_spectra_tif <- purrr::map2(.x = matched_ids[-1], #remove CW1, has no polygons
+                                  .y = aligned_orthomosaics[-1],
+                                  .f = ~ safe_check_spectra_tif(plotID = .x,
+                                                             ortho_location = .y))
+
+
+
+all_manual_spectra_envi <- purrr::map2(.x = matched_ids[-1], #remove CW1, has no polygons
+                                  .y = envi_files[-1],
+                                  .f = ~ safe_check_spectra_envi(plotID = .x,
+                                                             ortho_location = .y))
+
+
 
 
 
 ```
+
+
+
+
+
+
+
+
