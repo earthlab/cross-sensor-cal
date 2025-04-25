@@ -215,7 +215,9 @@ check_spectra_plots_tif <- function(plotID, ortho_location) {
       y = "Reflectance"
     ) +
     theme_minimal() +
-    theme(legend.title = element_blank())
+    theme(legend.title = element_blank(),
+           plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA))
   
   ggsave(filename = here::here('figs', paste0(plotID, "_tlm_extract_tif.png")),
          plot = p_manual,
@@ -234,10 +236,13 @@ check_spectra_plots_tif <- function(plotID, ortho_location) {
       y = "Reflectance"
     ) +
     theme_minimal() +
-    theme(legend.title = element_blank())
+    theme(legend.title = element_blank(),
+           plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA))
     
   ggsave(filename = here::here('figs', paste0(plotID, "_py_extract.png")),
          plot = p_extract,
+                  bg = "white",
          width = 10, height = 7)
   
     
@@ -332,10 +337,13 @@ check_spectra_plots_envi <- function(plotID, ortho_location) {
       y = "Reflectance"
     ) +
     theme_minimal() +
-    theme(legend.title = element_blank())
+    theme(legend.title = element_blank(),
+           plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA))
   
   ggsave(filename = here::here('figs', paste0(plotID, "_tlm_extract_envi.png")),
          plot = p_manual,
+         bg = "white",
          width = 10, height = 7)
 
   
@@ -351,10 +359,13 @@ check_spectra_plots_envi <- function(plotID, ortho_location) {
       y = "Reflectance"
     ) +
     theme_minimal() +
-    theme(legend.title = element_blank())
+    theme(legend.title = element_blank(),
+           plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA))
     
   ggsave(filename = here::here('figs', paste0(plotID, "_py_extract.png")),
          plot = p_extract,
+         bg = "white",
          width = 10, height = 7)
   
     
