@@ -389,6 +389,12 @@ envi_files <- paths[
 ]
   
 matched_ids <- str_extract(aligned_orthomosaics, "(?<=//)[^/-]+")
+matched_ids <- case_when(
+  matched_ids == "SPR1" ~ "SPR-1",
+  matched_ids == "SPR2" ~ "SPR-2",
+  matched_ids == "SH67_1" ~ "SH67-1",
+  TRUE ~ matched_ids
+)
 
 
 tic()
@@ -425,6 +431,80 @@ toc()
 ```
 
 
+# Overall plots
+
+```{r}
+
+# Deal with total lists
+envi_errors <- map(all_manual_spectra_envi, ~ .x$error)
+envi_results <- map(all_manual_spectra_envi, ~ .x$result)
+all_manual_spectra_envi_results <- dplyr::bind_rows(envi_results)
+
+
+  nanometer_cols <- names(uas_extract)[str_ends(names(uas_extract), "nanometers")]
+  
+  uas_extract <- uas_extract %>%
+    rename_with(
+      .cols = all_of(nanometer_cols),
+      .fn = ~ paste0("band ", seq_along(.))
+    )
+  
+  uas_extract_long <- uas_extract |>
+    pivot_longer(
+      cols = starts_with("band"),
+      names_to = "band",
+      names_pattern = "band (\\d+)",
+      values_to = "reflectance"
+    ) |>
+    mutate(band = as.integer(band),
+           reflectance = as.numeric(reflectance)) 
+
+ 
+  # Plots
+  p_manual <- ggplot(all_manual_spectra_envi_results, aes(x = band, y = reflectance, color = cover_category, group = cover_category)) +
+    stat_summary(fun = median, geom = "line", size = 1) +
+    stat_summary(fun.data = function(y) {
+      quant <- quantile(y, probs = c(0.25, 0.75), na.rm = TRUE)
+      data.frame(ymin = quant[1], ymax = quant[2])
+    }, geom = "ribbon", aes(fill = cover_category), alpha = 0.2, color = NA) +
+    labs(
+      title = "Median Spectral Signatures (25–75% Quantiles) by Cover Category\n ALL Extract Tyler manual - ENVI",
+      x = "Band number",
+      y = "Reflectance"
+    ) +
+    theme_minimal() +
+    theme(legend.title = element_blank(),
+           plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA))
+  
+  ggsave(filename = here::here('figs', "ALL_tlm_extract_envi.png"),
+         plot = p_manual,
+         bg = "white",
+         width = 10, height = 7)
+
+  
+  p_extract <- ggplot(uas_extract_long, aes(x = band, y = reflectance, color = cover_category, group = cover_category)) +
+    stat_summary(fun = median, geom = "line", size = 1) +
+    stat_summary(fun.data = function(y) {
+      quant <- quantile(y, probs = c(0.25, 0.75), na.rm = TRUE)
+      data.frame(ymin = quant[1], ymax = quant[2])
+    }, geom = "ribbon", aes(fill = cover_category), alpha = 0.2, color = NA) +
+    labs(
+      title = "Median Spectral Signatures (25–75% Quantiles) by Cover Category\n ALL Extract with python tool",
+      x = "Band number",
+      y = "Reflectance"
+    ) +
+    theme_minimal() +
+    theme(legend.title = element_blank(),
+           plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA))
+    
+  ggsave(filename = here::here('figs', "ALL_py_extract.png"),
+         plot = p_extract,
+         bg = "white",
+         width = 10, height = 7)
+
+```
 
 
 
