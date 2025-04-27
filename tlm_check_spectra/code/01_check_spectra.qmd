@@ -407,7 +407,6 @@ toc() #35 seconds
 
 
 
-# should take around 6-7 minutes
 safe_check_spectra_tif <- safely(check_spectra_plots_tif)
 safe_check_spectra_envi <- safely(check_spectra_plots_envi)
 
@@ -416,7 +415,7 @@ all_manual_spectra_tif <- purrr::map2(.x = matched_ids[-1], #remove CW1, has no 
                                   .y = aligned_orthomosaics[-1],
                                   .f = ~ safe_check_spectra_tif(plotID = .x,
                                                              ortho_location = .y))
-toc()
+toc() # should take around 5-10 minutes
 
 tic()
 all_manual_spectra_envi <- purrr::map2(.x = matched_ids[-1], #remove CW1, has no polygons
@@ -424,7 +423,7 @@ all_manual_spectra_envi <- purrr::map2(.x = matched_ids[-1], #remove CW1, has no
                                   .f = ~ safe_check_spectra_envi(plotID = .x,
                                                              ortho_location = .y))
 
-toc()
+toc() # took about 30 minutes
 
 
 
