@@ -11,6 +11,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from unmixing.el_mesma import MesmaCore
 import itertools
+import geopandas as gpd
+from rasterio.mask import mask
+from shapely.geometry import mapping
+
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -46,7 +50,26 @@ def download_ecoregion():
 	assert os.path.exists(ecoregion_download), f"Failed to find {ecoregion_download} after extraction."
 
 
-def read_landsat_data(landsat_dir: str):
+def mask_band(band_data, transform, geometries, crs):
+    with rasterio.Env():
+        # Create a dummy rasterio dataset in memory
+        with rasterio.MemoryFile() as memfile:
+            profile = {
+                'driver': 'GTiff',
+                'height': band_data.shape[0],
+                'width': band_data.shape[1],
+                'count': 1,
+                'dtype': band_data.dtype,
+                'crs': crs,
+                'transform': transform,
+            }
+            with memfile.open(**profile) as dataset:
+                dataset.write(band_data, 1)
+                out_image, out_transform = mask(dataset, geometries, crop=True)
+    return out_image[0]  # because mask returns (bands, height, width)
+
+
+def read_landsat_data(landsat_dir: str, geometries):
     '''
     # TODO: Use scale function rather than dividing by 10
             Need to remove NAs
@@ -63,16 +86,33 @@ def read_landsat_data(landsat_dir: str):
             data = src.read(1).astype(np.float32)
         return data
 
+    def read_raster_full(path):
+        with rasterio.open(path) as src:
+            data = src.read(1).astype(np.float32)
+            transform = src.transform
+            crs = src.crs
+        return data, transform, crs
+
     # Read bands individually
-    L1 = read_raster(all_landsat_bands[0])
-    L2 = read_raster(all_landsat_bands[1])
-    L3 = read_raster(all_landsat_bands[2])
-    L4 = read_raster(all_landsat_bands[3])
-    L5 = read_raster(all_landsat_bands[4])
-    L6 = read_raster(all_landsat_bands[5])
+    L1, transform, crs = read_raster_full(all_landsat_bands[0])
+    L2, transform, crs = read_raster_full(all_landsat_bands[1])
+    L3, transform, crs = read_raster_full(all_landsat_bands[2])
+    L4, transform, crs = read_raster_full(all_landsat_bands[3])
+    L5, transform, crs = read_raster_full(all_landsat_bands[4])
+    L6, transform, crs = read_raster_full(all_landsat_bands[5])
+
+    geometries = geometries.to_crs(crs)
+    geometries = [mapping(geom) for geom in geometries.geometry]
+
+    L1_clipped = mask_band(L1, transform, geometries, crs)
+    L2_clipped = mask_band(L2, transform, geometries, crs)
+    L3_clipped = mask_band(L3, transform, geometries, crs)
+    L4_clipped = mask_band(L4, transform, geometries, crs)
+    L5_clipped = mask_band(L5, transform, geometries, crs)
+    L6_clipped = mask_band(L6, transform, geometries, crs)
 
     # 3. Stack them into a 3D array (bands first)
-    landsat_spatRas_scale = np.stack([L1, L2, L3, L4, L5, L6], axis=0)  # shape: (6, height, width)
+    landsat_spatRas_scale = np.stack([L1_clipped, L2_clipped, L3_clipped, L4_clipped, L5_clipped, L6_clipped], axis=0)
 
     # 4. Check the range of band 3
     nan_max = np.nanmax(landsat_spatRas_scale)
@@ -206,8 +246,14 @@ def build_look_up_table(class_labels, level=2):
 
 
 def main(signatures_path: str, landsat_dir: str):
+    download_ecoregion()
+
+    ecoregion_download = os.path.join(PROJ_DIR, 'data', 'Ecoregion', 'us_eco_l3.shp')
+    ecoregions = gpd.read_file(ecoregion_download)
+    geometries = ecoregions[ecoregions['US_L3NAME'] == 'Southern Rockies']
+
     signatures = pd.read_csv(signatures_path)
-    landsat, max_landsat = read_landsat_data(landsat_dir)
+    landsat, max_landsat = read_landsat_data(landsat_dir, geometries)
 
     spectral_library = signatures.iloc[:, 0:7].to_numpy()
     ies_results = ies_from_library(spectral_library, len(signatures.values))
