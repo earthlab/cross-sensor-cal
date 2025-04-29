@@ -1,3 +1,4 @@
+import collections
 import os
 import requests
 import zipfile
@@ -266,10 +267,11 @@ def main(signatures_path: str, landsat_dir: str):
 
     # Rename the first column to "class"
     #endmember_library.columns = ['class'] + list(endmember_library.columns[1:])
-    class_labels = list(signatures.columns[22])
-    look_up_table = build_look_up_table(class_labels, level=len(endmember_library.columns))
-    print(type(look_up_table))
-    em_per_class = {cls: 1 for cls in class_labels}
+    class_labels = list(signatures.iloc[ies_results['indices'], [22]].to_numpy())
+    look_up_table = build_look_up_table(class_labels, level=len(endmember_library.rows))
+    em_per_class = collections.defaultdict(int)
+    for cl in class_labels:
+        em_per_class[cl[0]] += 1
 
     mesma = MesmaCore(n_cores=1)
     model_best, model_fractions, model_rmse = mesma.execute(

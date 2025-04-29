@@ -309,7 +309,6 @@ class MesmaCore:
                                    with at least this value
         :return: for each pixel the best model and the fractions and rmse belonging to that model
         """
-
         levels = self.look_up_table.keys()
         n_levels = len(levels)
 
