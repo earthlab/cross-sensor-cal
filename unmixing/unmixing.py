@@ -225,25 +225,33 @@ def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_m
     }
 
 
-def build_look_up_table(class_labels, level=2):
-    """
-    Builds a MESMA look-up table.
+def build_look_up_table(endmember_classes):
+    # Your input
+    n_endmembers = len(endmember_classes)
+    levels = [n_endmembers]
 
-    Args:
-        class_labels (list): List of class labels (strings or IDs).
-        level (int): How many endmembers to combine (e.g., 2 for pairs).
+    # Initialize look-up table
+    look_up_table = collections.defaultdict(dict)
 
-    Returns:
-        dict: Valid look_up_table for MesmaCore.
-    """
-    class_indices = list(range(len(class_labels)))
-    combinations = list(itertools.combinations(class_indices, level))
+    # Get unique class labels
+    class_labels = np.unique(endmember_classes)
 
-    lookup = {
-        level: {combo: np.array([combo]) for combo in combinations}
+    # Map each class to the indices of its members
+    class_to_indices = {
+        label: np.where(endmember_classes == label)[0]
+        for label in class_labels
     }
 
-    return lookup
+    # Build combinations for each class and level
+    for level in levels:
+        for class_label, indices in class_to_indices.items():
+            if len(indices) >= level:
+                combos = list(itertools.combinations(indices, level))
+                look_up_table[level][class_label] = np.array(combos, dtype=np.int32)
+            else:
+                look_up_table[level][class_label] = np.empty((0, level), dtype=np.int32)
+
+    return look_up_table
 
 
 def main(signatures_path: str, landsat_dir: str):
@@ -267,8 +275,8 @@ def main(signatures_path: str, landsat_dir: str):
 
     # Rename the first column to "class"
     #endmember_library.columns = ['class'] + list(endmember_library.columns[1:])
-    class_labels = list(signatures.iloc[ies_results['indices'], [22]].to_numpy())
-    look_up_table = build_look_up_table(class_labels, level=len(endmember_library.values))
+    class_labels = signatures.iloc[ies_results['indices'], [22]].to_numpy()
+    look_up_table = build_look_up_table(class_labels)
     em_per_class = collections.defaultdict(int)
     for cl in class_labels:
         em_per_class[cl[0]] += 1
@@ -276,7 +284,7 @@ def main(signatures_path: str, landsat_dir: str):
     mesma = MesmaCore(n_cores=1)
     model_best, model_fractions, model_rmse = mesma.execute(
         image=landsat,
-        library=endmember_library,
+        library=np.float32(endmember_library).T,
         look_up_table=look_up_table,
         em_per_class=em_per_class,
         residual_image=False
