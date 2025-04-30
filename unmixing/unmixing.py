@@ -18,6 +18,7 @@ import geopandas as gpd
 from rasterio.mask import mask
 from shapely.geometry import mapping
 from spectral.io import envi
+from tqdm import tqdm
 
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -316,7 +317,6 @@ def main(signatures_path: str, landsat_dir: str):
     max_endmember = np.nanmax(endmember_library)
 
     class_labels = signatures.iloc[ies_results['indices'], 22]
-    print(class_labels)
     class_list = np.asarray([str(x).lower() for x in class_labels])
     n_classes = len(np.unique(class_list))
     complexity_level = n_classes + 1
@@ -325,24 +325,51 @@ def main(signatures_path: str, landsat_dir: str):
     endmember_library /= max_endmember
 
     models_object = MesmaModels()
-    print(n_classes)
     models_object.setup(class_list)
-    print(models_object.level_yn)
-    print(models_object.level_yn.shape)
     for level in range(2, complexity_level):
         models_object.select_level(state=True, level=level)
         for i in np.arange(n_classes):
             models_object.select_class(state=True, index=i, level=level)
 
     mesma = MesmaCore(n_cores=1)
-    model_best, model_fractions, model_rmse = mesma.execute(
-        image=landsat,
-        library=np.float32(endmember_library).T,
-        look_up_table=models_object.return_look_up_table(),
-        em_per_class=models_object.em_per_class,
-        residual_image=False
-    )
 
+    # === Chunking here ===
+    bands, height, width = landsat.shape
+    total_pixels = height * width
+    chunk_size = 1_000_000
+    model_best = np.zeros((height, width), dtype=np.uint8)
+    model_fractions = np.zeros((height, width, endmember_library.shape[0]), dtype=np.float32)
+    model_rmse = np.zeros((height, width, 1), dtype=np.float32)
+
+    landsat_2d = landsat.reshape(bands, -1)
+
+    for start in tqdm(range(0, total_pixels, chunk_size), desc="Processing chunks"):
+        end = min(start + chunk_size, total_pixels)
+        cols = end - start
+
+        chunk = landsat_2d[:, start:end]
+        chunk_reshaped = chunk.reshape(bands, 1, cols)
+
+        best, fractions, rmse = mesma.execute(
+            image=chunk_reshaped,
+            library=np.float32(endmember_library).T,
+            look_up_table=models_object.return_look_up_table(),
+            em_per_class=models_object.em_per_class,
+            residual_image=False
+        )
+
+        # reshape outputs back into flat arrays
+        model_best_flat = best[0, 0, :]
+        model_fractions_flat = fractions[0, 0, :, :].T
+        model_rmse_flat = rmse[0, 0, :]
+
+        # put into full-size images
+        rows = np.unravel_index(np.arange(start, end), (height, width))
+        model_best[rows] = model_best_flat
+        model_rmse[rows[0], rows[1], 0] = model_rmse_flat
+        model_fractions[rows[0], rows[1], :] = model_fractions_flat
+
+    # === Plot result ===
     plt.imshow(model_rmse[:, :, 0], cmap='viridis')
     plt.colorbar(label='RMSE')
     plt.title('Best Model RMSE')
