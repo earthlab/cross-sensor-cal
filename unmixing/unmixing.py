@@ -349,6 +349,7 @@ def main(signatures_path: str, landsat_dir: str):
 
         chunk = landsat_2d[:, start:end]
         chunk_reshaped = chunk.reshape(bands, 1, cols)
+        print(chunk_reshaped.shape, chunk_reshaped.size)
 
         best, fractions, rmse, residuals = mesma.execute(
             image=chunk_reshaped,
