@@ -350,7 +350,7 @@ def main(signatures_path: str, landsat_dir: str):
         chunk = landsat_2d[:, start:end]
         chunk_reshaped = chunk.reshape(bands, 1, cols)
 
-        best, fractions, rmse = mesma.execute(
+        best, fractions, rmse, residuals = mesma.execute(
             image=chunk_reshaped,
             library=np.float32(endmember_library).T,
             look_up_table=models_object.return_look_up_table(),
@@ -359,9 +359,9 @@ def main(signatures_path: str, landsat_dir: str):
         )
 
         # reshape outputs back into flat arrays
-        model_best_flat = best[0, 0, :]
-        model_fractions_flat = fractions[0, 0, :, :].T
-        model_rmse_flat = rmse[0, 0, :]
+        model_best_flat = best.flatten()
+        model_rmse_flat = rmse.flatten()
+        model_fractions_flat = fractions.reshape(fractions.shape[0], -1).T  # shape [N, n_endmembers]
 
         # put into full-size images
         rows = np.unravel_index(np.arange(start, end), (height, width))
