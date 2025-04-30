@@ -351,7 +351,7 @@ def main(signatures_path: str, landsat_dir: str):
         chunk_reshaped = chunk.reshape(bands, 1, cols)
         print(chunk_reshaped.shape, chunk_reshaped.size)
 
-        best, fractions, rmse, residuals = mesma.execute(
+        best_all, fractions_all, rmse_all, _ = mesma.execute(
             image=chunk_reshaped,
             library=np.float32(endmember_library).T,
             look_up_table=models_object.return_look_up_table(),
@@ -359,16 +359,19 @@ def main(signatures_path: str, landsat_dir: str):
             residual_image=False
         )
 
-        # reshape outputs back into flat arrays
-        model_best_flat = best.flatten()
-        model_rmse_flat = rmse.flatten()
-        model_fractions_flat = fractions.reshape(fractions.shape[0], -1).T  # shape [N, n_endmembers]
+        rmse_flat = rmse_all.flatten()
+        n_pixels = rmse_flat.shape[0]
 
-        # put into full-size images
-        rows = np.unravel_index(np.arange(start, end), (height, width))
-        model_best[rows] = model_best_flat
+        best_class_per_pixel = np.argmin(rmse_all.reshape(n_classes, -1), axis=0)
+
+        model_rmse_flat = rmse_flat
+
+        fractions_flat = fractions_all.reshape(n_classes + 1, -1).T  # shape: [N, n_endmembers]
+
+        rows = np.unravel_index(np.arange(start, start + n_pixels), (height, width))
+        model_best[rows] = best_class_per_pixel
         model_rmse[rows[0], rows[1], 0] = model_rmse_flat
-        model_fractions[rows[0], rows[1], :] = model_fractions_flat
+        model_fractions[rows[0], rows[1], :] = fractions_flat
 
     # === Plot result ===
     plt.imshow(model_rmse[:, :, 0], cmap='viridis')
