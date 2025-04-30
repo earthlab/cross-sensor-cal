@@ -1,5 +1,7 @@
 import collections
 import os
+from typing import List
+
 import requests
 import zipfile
 import glob
@@ -10,11 +12,12 @@ import numpy as np
 from scipy.optimize import nnls
 import pandas as pd
 import matplotlib.pyplot as plt
-from unmixing.el_mesma import MesmaCore
+from unmixing.el_mesma import MesmaCore, MesmaModels
 import itertools
 import geopandas as gpd
 from rasterio.mask import mask
 from shapely.geometry import mapping
+from spectral.io import envi
 
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -49,6 +52,48 @@ def download_ecoregion():
 
 	# Check that the file now exists
 	assert os.path.exists(ecoregion_download), f"Failed to find {ecoregion_download} after extraction."
+
+
+def ies_to_envi(signatures, ies_indices: List[int],
+                sli_path: str = 'signatures.sli',
+                hdr_path: str = 'signatures.hdr'):
+    """
+    Export a subset of the signatures DataFrame to an ENVI spectral library (.sli/.hdr),
+    selecting only the rows whose indices are in ies_indices.
+
+    :param signatures: pandas.DataFrame containing spectral and metadata columns
+    :param ies_indices: list of integer row indices to include in the output
+    :param sli_path: output path for the .sli file
+    :param hdr_path: output path for the .hdr header file
+    """
+    # 1) subset the DataFrame to only the IES-selected rows
+    subset = signatures.iloc[ies_indices]
+
+    # 2) identify spectral band columns
+    band_cols = [c for c in subset.columns if c.startswith('Masked_band_')]
+
+    # 3) extract spectral data as float32
+    data = subset[band_cols].to_numpy(dtype=np.float32)
+
+    # 4) extract class labels to annotate each spectrum
+    classes = subset['cover_category'].astype(str).tolist()
+
+    # 5) write the binary spectral library (.sli)
+    data.tofile(sli_path)
+
+    # 6) build and write the ENVI header (.hdr)
+    hdr = {
+        'samples':      data.shape[1],
+        'lines':        data.shape[0],
+        'bands':        1,
+        'data type':    4,
+        'interleave':   'bil',
+        'byte order':   0,
+        'band names':   band_cols,
+        'spectra names': classes,
+    }
+    envi.write_envi_header(hdr_path, hdr)
+
 
 
 def mask_band(band_data, transform, geometries, crs):
@@ -270,23 +315,31 @@ def main(signatures_path: str, landsat_dir: str):
     endmember_library = signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5]].copy()
     max_endmember = np.nanmax(endmember_library)
 
-    landsat /= max(max_landsat, max_endmember)
-    endmember_library /= max(max_landsat, max_endmember)
+    class_labels = signatures.iloc[ies_results['indices'], 22]
+    print(class_labels)
+    class_list = np.asarray([str(x).lower() for x in class_labels])
+    n_classes = len(np.unique(class_list))
+    complexity_level = n_classes + 1
 
-    # Rename the first column to "class"
-    #endmember_library.columns = ['class'] + list(endmember_library.columns[1:])
-    class_labels = signatures.iloc[ies_results['indices'], [22]].to_numpy()
-    look_up_table = build_look_up_table(class_labels)
-    em_per_class = collections.defaultdict(int)
-    for cl in class_labels:
-        em_per_class[cl[0]] += 1
+    landsat /= max_landsat
+    endmember_library /= max_endmember
+
+    models_object = MesmaModels()
+    print(n_classes)
+    models_object.setup(class_list)
+    print(models_object.level_yn)
+    print(models_object.level_yn.shape)
+    for level in range(2, complexity_level):
+        models_object.select_level(state=True, level=level)
+        for i in np.arange(n_classes):
+            models_object.select_class(state=True, index=i, level=level)
 
     mesma = MesmaCore(n_cores=1)
     model_best, model_fractions, model_rmse = mesma.execute(
         image=landsat,
         library=np.float32(endmember_library).T,
-        look_up_table=look_up_table,
-        em_per_class=em_per_class,
+        look_up_table=models_object.return_look_up_table(),
+        em_per_class=models_object.em_per_class,
         residual_image=False
     )
 
