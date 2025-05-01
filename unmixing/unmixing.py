@@ -326,7 +326,7 @@ def main(signatures_path: str, landsat_dir: str):
 
     models_object = MesmaModels()
     models_object.setup(class_list)
-    return models_object.return_look_up_table()
+
     for level in range(2, complexity_level):
         models_object.select_level(state=True, level=level)
         for i in np.arange(n_classes):
