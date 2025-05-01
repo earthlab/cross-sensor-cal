@@ -19,6 +19,7 @@ from rasterio.mask import mask
 from shapely.geometry import mapping
 from spectral.io import envi
 from tqdm import tqdm
+import rasterio
 
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -126,12 +127,6 @@ def read_landsat_data(landsat_dir: str, geometries):
     '''
     # 1. Find all Landsat bands matching "*SR_B*.TIF"
     all_landsat_bands = sorted(glob.glob(os.path.join(landsat_dir, "*SR_B*.TIF")))
-
-    # 2. Read each band into a rasterio dataset and add 0 (convert to float)
-    def read_raster(path):
-        with rasterio.open(path) as src:
-            data = src.read(1).astype(np.float32)
-        return data
 
     def read_raster_full(path):
         with rasterio.open(path) as src:
@@ -308,6 +303,12 @@ def main(signatures_path: str, landsat_dir: str):
     geometries = ecoregions[ecoregions['US_L3NAME'] == 'Southern Rockies']
 
     signatures = pd.read_csv(signatures_path)
+    # Get transform and crs from first TIF file
+    first_band_path = sorted(glob.glob(os.path.join(landsat_dir, "*SR_B*.TIF")))[0]
+    with rasterio.open(first_band_path) as src:
+        transform = src.transform
+        crs = src.crs
+
     landsat, max_landsat = read_landsat_data(landsat_dir, geometries)
 
     spectral_library = signatures.iloc[:, 0:7].to_numpy()
@@ -358,11 +359,64 @@ def main(signatures_path: str, landsat_dir: str):
         print(best_all.shape, fractions_all.shape, rmse_all.shape)
 
         model_best[:, start:start+chunk_height, :] = best_all
-        model_fractions[:, start:start+chunk_height, :, :] = fractions_all
+        model_fractions[:, start:start+chunk_height, :] = fractions_all
         model_rmse[start:start+chunk_height, :] = rmse_all
 
-    # === Plot result ===
-    plt.imshow(model_rmse[:, :, 0], cmap='viridis')
-    plt.colorbar(label='RMSE')
-    plt.title('Best Model RMSE')
-    plt.show()
+    # === Write output arrays as rasters using rasterio ===
+
+    from rasterio.transform import from_origin
+    # Assume transform and crs are still available from read_landsat_data
+    # transform and crs are already loaded in the local scope
+    # Write model_best raster (one band per class)
+    model_best_path = os.path.join(PROJ_DIR, 'output', 'model_best.tif')
+    os.makedirs(os.path.dirname(model_best_path), exist_ok=True)
+    with rasterio.open(
+        model_best_path,
+        'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=n_classes,
+        dtype=model_best.dtype,
+        crs=crs,
+        transform=transform
+    ) as dst:
+        for i in range(n_classes):
+            dst.write(model_best[i, :, :], i + 1)
+            dst.set_band_description(i + 1, str(np.unique(class_list)[i]))
+
+    # Write model_fractions raster (one band per class + 1 for shade)
+    model_fractions_path = os.path.join(PROJ_DIR, 'output', 'model_fractions.tif')
+    os.makedirs(os.path.dirname(model_fractions_path), exist_ok=True)
+    with rasterio.open(
+        model_fractions_path,
+        'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=n_classes + 1,
+        dtype=model_fractions.dtype,
+        crs=crs,
+        transform=transform
+    ) as dst:
+        for i in range(n_classes):
+            dst.write(model_fractions[i, :, :], i + 1)
+            dst.set_band_description(i + 1, str(np.unique(class_list)[i]))
+        dst.write(model_fractions[-1, :, :], n_classes + 1)
+        dst.set_band_description(n_classes + 1, 'shade')
+
+    # Write model_rmse raster
+    model_rmse_path = os.path.join(PROJ_DIR, 'output', 'model_rmse.tif')
+    with rasterio.open(
+        model_rmse_path,
+        'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=1,
+        dtype=model_rmse.dtype,
+        crs=crs,
+        transform=transform
+    ) as dst:
+        dst.write(model_rmse, 1)
+        dst.set_band_description(1, 'rmse')
