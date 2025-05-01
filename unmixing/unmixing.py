@@ -326,6 +326,7 @@ def main(signatures_path: str, landsat_dir: str):
 
     models_object = MesmaModels()
     models_object.setup(class_list)
+    return models_object.return_look_up_table()
     for level in range(2, complexity_level):
         models_object.select_level(state=True, level=level)
         for i in np.arange(n_classes):
@@ -337,13 +338,13 @@ def main(signatures_path: str, landsat_dir: str):
     bands, height, width = landsat.shape
     total_pixels = height * width
     chunk_height = 5
-    model_best = np.zeros((height, width), dtype=np.uint8)
-    model_fractions = np.zeros((height, width, endmember_library.shape[0]), dtype=np.float32)
-    model_rmse = np.zeros((height, width, 1), dtype=np.float32)
+    model_best = np.zeros((n_classes, height, width), dtype=np.uint32)
+    model_fractions = np.zeros((n_classes+1, height, width), dtype=np.float32)  # +1 for shade which mesma adds
+    model_rmse = np.zeros((height, width), dtype=np.float32)
 
     for start in tqdm(range(0, height, chunk_height), desc="Processing chunks"):
 
-        chunk = landsat[:, start:chunk_height, :]
+        chunk = landsat[:, start:start+chunk_height, :]
         print(chunk.shape, chunk.size)
 
         best_all, fractions_all, rmse_all, _ = mesma.execute(
@@ -356,9 +357,9 @@ def main(signatures_path: str, landsat_dir: str):
 
         print(best_all.shape, fractions_all.shape, rmse_all.shape)
 
-        model_best[start:chunk_height, :] = best_all
-        # model_rmse[rows[0], rows[1], 0] = rmse_all
-        # model_fractions[rows[0], rows[1], :] = fractions_all
+        model_best[:, start:start+chunk_height, :] = best_all
+        model_fractions[:, start:start+chunk_height, :, :] = fractions_all
+        model_rmse[start:start+chunk_height, :] = rmse_all
 
     # === Plot result ===
     plt.imshow(model_rmse[:, :, 0], cmap='viridis')
