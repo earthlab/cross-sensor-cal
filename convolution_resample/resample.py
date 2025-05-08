@@ -29,7 +29,7 @@ def resample(hyperspectral_header_file_path: str, satellite_band_parameter_path:
     wavelengths = header.get('wavelength')
 
     if wavelengths is None:
-        with open('convolutional_resample/hyperspectral_bands.json', 'r') as f:
+        with open('convolution_resample/hyperspectral_bands.json', 'r') as f:
             wavelengths = json.load(f).get('bands')
 
     if wavelengths:
@@ -57,10 +57,10 @@ def resample(hyperspectral_header_file_path: str, satellite_band_parameter_path:
 
         plt.plot(band_centers, resampled[row, col, :], 'o-', label=f'{sensor_name}')
 
-        resampled_dir = f'Reflectance_Resample_{sensor_name}'
+        resampled_dir = f"Reflectance_Resample_{sensor_name.replace(' ', '_')}"
         os.makedirs(resampled_dir, exist_ok=True)
 
-        resampled_hdr_path = os.path.join(resampled_dir, f"{os.path.basename(hyperspectral_header_file_path).split('__envi')[0]}_resample_{sensor_name}_masked.hdr")
+        resampled_hdr_path = os.path.join(resampled_dir, f"{os.path.basename(hyperspectral_header_file_path).split('__envi')[0]}_resample_{sensor_name.replace(' ', '_')}_masked.hdr")
         resampled_img_path = resampled_hdr_path.replace('.hdr', '.img')
 
         new_metadata = {
