@@ -302,7 +302,6 @@ def main(signatures_path: str, landsat_dir: str):
     ecoregions = gpd.read_file(ecoregion_download)
     geometries = ecoregions[ecoregions['US_L3NAME'] == 'Southern Rockies']
 
-    signatures = pd.read_csv(signatures_path)
     # Get transform and crs from first TIF file
     first_band_path = sorted(glob.glob(os.path.join(landsat_dir, "*SR_B*.TIF")))[0]
     with rasterio.open(first_band_path) as src:
@@ -311,10 +310,12 @@ def main(signatures_path: str, landsat_dir: str):
 
     landsat, max_landsat = read_landsat_data(landsat_dir, geometries)
 
+    signatures = pd.read_csv(signatures_path)
     spectral_library = signatures.iloc[:, 0:7].to_numpy()
     ies_results = ies_from_library(spectral_library, len(signatures.values))
 
-    endmember_library = signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5]].copy()
+    endmember_library = signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5, 6]].copy()
+    signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5, 6, 22]].copy().to_csv('endmembers.csv')
     max_endmember = np.nanmax(endmember_library)
 
     class_labels = signatures.iloc[ies_results['indices'], 22]
