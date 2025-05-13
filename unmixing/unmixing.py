@@ -166,6 +166,27 @@ def read_landsat_data(landsat_dir: str, geometries):
     return landsat_spatRas, nan_max
 
 
+def random_unit_vectors(n_vectors, n_bands, seed=None):
+    rng = np.random.default_rng(seed)
+    vectors = rng.normal(size=(n_vectors, n_bands))  # Gaussian sampling
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    return vectors / norms
+
+
+def ppi(spectral_library, n_samples, n_bands):
+    ruv = random_unit_vectors(3000, n_bands)
+    ppi_score = np.zeros(n_samples)
+
+    for v in ruv:
+        projections = np.dot(v, spectral_library.T)
+        max_idx = np.argmax(projections)
+        min_idx = np.argmin(projections)
+        ppi_score[max_idx] += 1
+        ppi_score[min_idx] += 1
+
+    return ppi_score
+
+
 def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_mean", stop_threshold=0.01):
     if not isinstance(spectral_library, np.ndarray):
         raise ValueError("spectral_library must be a numpy array.")
@@ -175,7 +196,7 @@ def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_m
     n_samples, n_bands = spectral_library.shape
     if num_endmembers > n_samples:
         raise ValueError("num_endmembers cannot be greater than the number of spectra.")
-    if initial_selection not in ["max_norm", "dist_mean"]:
+    if initial_selection not in ["max_norm", "dist_mean", "ppi"]:
         raise ValueError("initial_selection must be 'max_norm' or 'dist_mean'.")
 
     selected_indices = []
@@ -188,6 +209,10 @@ def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_m
     if initial_selection == "max_norm":
         norms = np.linalg.norm(spectral_library, axis=1)
         first_idx = np.argmax(norms)
+    elif initial_selection == 'ppi':
+        ppi_score = ppi(spectral_library, n_samples, n_bands)
+        first_idx = np.argmax(ppi_score)
+
     else:  # "dist_mean"
         mean_spectrum = np.mean(spectral_library, axis=0)
         distances = np.linalg.norm(spectral_library - mean_spectrum, axis=1)
@@ -312,7 +337,7 @@ def main(signatures_path: str, landsat_dir: str):
 
     signatures = pd.read_csv(signatures_path)
     spectral_library = signatures.iloc[:, 0:7].to_numpy()
-    ies_results = ies_from_library(spectral_library, len(signatures.values))
+    ies_results = ies_from_library(spectral_library, len(signatures.values), initial_selection='ppi')
 
     endmember_library = signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5, 6]].copy()
     signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5, 6, 22]].copy().to_csv('endmembers.csv')
