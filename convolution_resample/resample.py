@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 import os
 
+from unmixing.unmixing import PROJ_DIR
+
 
 def process_directory(dir_path: str):
     for file in os.listdir(dir_path):
@@ -19,7 +21,7 @@ def gaussian_rsr(wavelengths, center, fwhm):
     return rsr / np.sum(rsr)
 
 
-def resample(hyperspectral_header_file_path: str, satellite_band_parameter_path: str):
+def resample(hyperspectral_header_file_path: str):
     img = open_image(hyperspectral_header_file_path)
     try:
         hyperspectral_data = img.load()
@@ -35,7 +37,7 @@ def resample(hyperspectral_header_file_path: str, satellite_band_parameter_path:
     if wavelengths:
         wavelengths = [float(w) for w in wavelengths]
 
-    with open(satellite_band_parameter_path, 'r') as f:
+    with open(os.path.join(PROJ_DIR, 'convolution_resample', 'hyperspectral_bands.json'), 'r') as f:
         all_sensor_params = json.load(f)
 
     rows, cols, bands = hyperspectral_data.shape
@@ -81,10 +83,11 @@ def resample(hyperspectral_header_file_path: str, satellite_band_parameter_path:
 
         envi.save_image(resampled_hdr_path, resampled, metadata=new_metadata, force=True)
         print(f"Saved resampled image to {resampled_img_path}")
+        return resampled_img_path
 
-    plt.xlabel("Wavelength (nm)")
-    plt.ylabel("Reflectance")
-    plt.title("Spectral Convolution Comparison")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f"{hyperspectral_header_file_path.split('.hdr')[0]}_downsampled.png")
+    # plt.xlabel("Wavelength (nm)")
+    # plt.ylabel("Reflectance")
+    # plt.title("Spectral Convolution Comparison")
+    # plt.legend()
+    # plt.grid(True)
+    # plt.savefig(f"{hyperspectral_header_file_path.split('.hdr')[0]}_downsampled.png")
