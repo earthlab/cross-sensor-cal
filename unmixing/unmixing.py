@@ -20,6 +20,15 @@ from shapely.geometry import mapping
 from spectral.io import envi
 from tqdm import tqdm
 import rasterio
+from rasterio.transform import Affine
+from shapely.geometry import Point
+
+import os
+import glob
+import numpy as np
+import rasterio
+from rasterio.mask import mask
+from shapely.geometry import mapping
 
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -117,53 +126,241 @@ def mask_band(band_data, transform, geometries, crs):
     return out_image[0]  # because mask returns (bands, height, width)
 
 
-def read_landsat_data(landsat_dir: str, geometries):
-    '''
-    # TODO: Use scale function rather than dividing by 10
-            Need to remove NAs
-                Need to weed out low-quality bands
-                    Use Landsat on Cyverse rather than downloading from Earth Explorer
-    Returns:
-    '''
-    # 1. Find all Landsat bands matching "*SR_B*.TIF"
-    all_landsat_bands = sorted(glob.glob(os.path.join(landsat_dir, "*SR_B*.TIF")))
+def read_landsat_data(landsat_file: str, geometries):
+    """
+    Reads a single multi‐band (stacked) Landsat GeoTIFF, clips it to the input geometries,
+    applies the raster’s nodata mask (converting nodata to np.nan), and returns:
+      • clipped_stack: numpy.ndarray of shape (bands, H_clip, W_clip)
+      • nan_max: float, the maximum over all non‐NaN pixels in the clipped stack
 
-    def read_raster_full(path):
-        with rasterio.open(path) as src:
-            data = src.read(1).astype(np.float32)
-            transform = src.transform
-            crs = src.crs
-        return data, transform, crs
+    Parameters
+    ----------
+    landsat_file : str
+        Path to a multi‐band GeoTIFF (e.g. one of your "<tile>_clipped.tif" files).
+    geometries : GeoDataFrame
+        A GeoDataFrame containing one or more polygons. These will be reprojected
+        to match the raster’s CRS before masking.
+    """
+    # 1) Open the stacked GeoTIFF and read metadata
+    with rasterio.open(landsat_file) as src:
+        # Read all bands into a 3D array of shape (bands, H, W), cast to float32
+        full_stack = src.read().astype(np.float32)
+        src_crs = src.crs
+        src_transform = src.transform
+        nodata_val = src.nodata
 
-    # Read bands individually
-    L1, transform, crs = read_raster_full(all_landsat_bands[0])
-    L2, transform, crs = read_raster_full(all_landsat_bands[1])
-    L3, transform, crs = read_raster_full(all_landsat_bands[2])
-    L4, transform, crs = read_raster_full(all_landsat_bands[3])
-    L5, transform, crs = read_raster_full(all_landsat_bands[4])
-    L6, transform, crs = read_raster_full(all_landsat_bands[5])
+        # Reproject geometries to match the raster’s CRS
+        geoms_proj = geometries.to_crs(src_crs)
+        shapes = [mapping(geom) for geom in geoms_proj.geometry]
 
-    geometries = geometries.to_crs(crs)
-    geometries = [mapping(geom) for geom in geometries.geometry]
+        # Clip (mask) the raster to those shapes; crop=True returns only the minimal window
+        clipped_stack, clipped_transform = mask(
+            dataset=src,
+            shapes=shapes,
+            crop=True,
+            nodata=nodata_val,
+            filled=True
+        )
+        # clipped_stack has shape (bands, H_clip, W_clip)
 
-    L1_clipped = mask_band(L1, transform, geometries, crs)
-    L2_clipped = mask_band(L2, transform, geometries, crs)
-    L3_clipped = mask_band(L3, transform, geometries, crs)
-    L4_clipped = mask_band(L4, transform, geometries, crs)
-    L5_clipped = mask_band(L5, transform, geometries, crs)
-    L6_clipped = mask_band(L6, transform, geometries, crs)
+    # 2) Convert the nodata pixels to np.nan (only if nodata is defined)
+    if nodata_val is not None:
+        clipped_stack[clipped_stack == nodata_val] = np.nan
 
-    # 3. Stack them into a 3D array (bands first)
-    landsat_spatRas_scale = np.stack([L1_clipped, L2_clipped, L3_clipped, L4_clipped, L5_clipped, L6_clipped], axis=0)
+    # 3) Compute the maximum reflectance (ignoring NaNs)
+    nan_max = float(np.nanmax(clipped_stack))
 
-    # 4. Check the range of band 3
-    nan_max = np.nanmax(landsat_spatRas_scale)
-    print("Maximum relfectance:", nan_max)
+    return clipped_stack, nan_max
 
-    # 5. Scale the data by dividing by 10
-    landsat_spatRas = landsat_spatRas_scale
 
-    return landsat_spatRas, nan_max
+import os
+import glob
+import numpy as np
+import rasterio
+from rasterio.mask import mask
+from shapely.geometry import mapping
+
+def read_landsat_data_with_transform(landsat_dir: str, geometries):
+    """
+    For each tile under `landsat_dir`, this function:
+      1. Finds the date subfolder whose QA_PIXEL has the most “clear” pixels (bit 6 == 1).
+      2. Reads & clips that QA_PIXEL to `geometries`, producing a boolean mask of “valid” pixels.
+      3. Reads & clips each SR_B1…SR_B7 band to the same window, then applies the QA mask
+         (setting non‐valid pixels to np.nan).
+      4. Stacks the 7 clipped & masked bands into a single array of shape (7, H_clip, W_clip).
+      5. Writes that 7‐band stack to a GeoTIFF named `<tile_name>_clipped.tif` inside the tile’s folder.
+    """
+    # Loop over each “tile” folder (e.g. "039030", "040026", …)
+    for tile_name in sorted(os.listdir(landsat_dir)):
+        tile_path = os.path.join(landsat_dir, tile_name)
+        if not os.path.isdir(tile_path):
+            continue
+
+        # Step 1: find all date subfolders under this tile
+        date_folders = sorted([
+            d for d in os.listdir(tile_path)
+            if os.path.isdir(os.path.join(tile_path, d))
+        ])
+        if not date_folders:
+            continue
+
+        best_date = None
+        best_valid_count = -1
+        best_qa_path = None
+
+        # Step 2: For each date, open QA_PIXEL and count how many “clear” (bit 6 == 1) pixels
+        for date_name in date_folders:
+            date_path = os.path.join(tile_path, date_name)
+            qa_files = glob.glob(os.path.join(date_path, "*QA_PIXEL.TIF"))
+            if len(qa_files) != 1:
+                # Skip if no QA_PIXEL or multiple QA_PIXEL
+                continue
+            qa_path = qa_files[0]
+            with rasterio.open(qa_path) as qa_src:
+                qa_data = qa_src.read(1)  # uint16 array
+                # "Clear" pixel if bit 6 == 1
+                clear_mask = ((qa_data >> 6) & 1) == 1
+                valid_count = int(np.count_nonzero(clear_mask))
+
+            if valid_count > best_valid_count:
+                best_valid_count = valid_count
+                best_date = date_name
+                best_qa_path = qa_path
+
+        # If no valid date found, skip this tile
+        if best_date is None:
+            continue
+
+        # Step 3: Clip the chosen QA_PIXEL to geometries → get both array and transform
+        with rasterio.open(best_qa_path) as qa_src:
+            qa_crs = qa_src.crs
+            # Reproject geometries to match QA’s CRS
+            geoms_proj = geometries.to_crs(qa_crs)
+            shapes = [mapping(g) for g in geoms_proj.geometry]
+
+            # mask(..., crop=True) returns (clipped_array, clipped_transform)
+            qa_clipped, qa_transform = mask(
+                qa_src, shapes, crop=True, nodata=0, filled=True
+            )
+            # qa_clipped has shape (1, H_clip, W_clip)
+            qa_clipped = qa_clipped[0]
+
+        # Build boolean “clear pixel” mask from clipped QA:
+        valid_mask_clipped = ((qa_clipped >> 6) & 1) == 1
+
+        # Step 4: For SR_B1…SR_B7, clip & apply QA mask
+        band_arrays = []
+        for b in range(1, 8):
+            pattern = os.path.join(
+                tile_path, best_date, f"*SR_B{b}.TIF"
+            )
+            band_files = glob.glob(pattern)
+            if len(band_files) != 1:
+                raise RuntimeError(
+                    f"Expected exactly one SR_B{b}.TIF in {tile_name}/{best_date}, found {band_files}"
+                )
+            band_path = band_files[0]
+
+            with rasterio.open(band_path) as band_src:
+                # Clip this band to the same shapes; use crop=True so the window matches QA’s
+                band_clipped, _ = mask(
+                    band_src,
+                    shapes,
+                    crop=True,
+                    nodata=band_src.nodata,
+                    filled=True
+                )
+                band_clipped = band_clipped[0].astype(np.float32)
+
+            # Set non‐valid (cloudy) pixels to np.nan
+            band_clipped[~valid_mask_clipped] = np.nan
+            band_arrays.append(band_clipped)
+
+        # Step 5: Stack the 7 bands into one array of shape (7, H_clip, W_clip)
+        landsat_stack = np.stack(band_arrays, axis=0)
+        nan_max = float(np.nanmax(landsat_stack))
+
+        # Build metadata for writing the 7-band GeoTIFF
+        # Use the QA’s transform & CRS (all bands share them)
+        h_clip, w_clip = landsat_stack.shape[1:]
+        out_meta = {
+            "driver": "GTiff",
+            "dtype": "float32",
+            "count": 7,                # B1…B7
+            "crs": qa_crs,
+            "transform": qa_transform,
+            "height": h_clip,
+            "width": w_clip,
+            # If you want compression, add e.g. "compress": "lzw"
+        }
+
+        # Step 6: Write the output file inside the tile’s folder
+        out_filename = f"{tile_name}_clipped.tif"
+        out_path = os.path.join(tile_path, out_filename)
+        with rasterio.open(out_path, "w", **out_meta) as dst:
+            for idx in range(7):
+                dst.write(landsat_stack[idx], idx + 1)
+
+        print(f"Wrote {out_path}  (max reflectance: {nan_max})")
+
+    # Function writes files to disk and does not return anything
+    return
+
+
+def write_to_raster(tile_results):
+    band_tiles = {b: [] for b in range(7)}  # 0→B1, 1→B2, …, 6→B7
+
+    for tile_name, info in tile_results.items():
+        stack = info["stack"]         # shape (7, H_clip, W_clip)
+        tf = info["transform"]        # affine.Affine for that clipped window
+        crs = info["crs"]             # common CRS for all tiles
+
+        # For each of the 7 bands, append (array, transform).
+        # Note: merge expects a list of single‐band 2D arrays, each with its own transform.
+        for band_idx in range(7):
+            band_tiles[band_idx].append((stack[band_idx], tf))
+
+    # 3. For each band, do a mosaic via rasterio.merge.merge
+    merged_bands = []
+    merged_transform = None
+
+    for band_idx in range(7):
+        # `sources` is a list of (array, transform) → merge will mosaic them.
+        sources = band_tiles[band_idx]  # list of (2D array, transform)
+        # `merge` returns (mosaic_array, mosaic_transform):
+        #    mosaic_array shape = (1, H_out, W_out)   (because each source is 2D)
+        mosaic_arr, mosaic_tf = merge(sources)
+        # Extract the 2D array
+        merged_bands.append(mosaic_arr[0])
+        # All bands share the same final mosaic grid, so save the transform once
+        if merged_transform is None:
+            merged_transform = mosaic_tf
+
+    # 4. Build metadata for writing the final 7‐band GeoTIFF
+    #    We assume all tiles shared the same CRS (they should, since they were all L2SP)
+    out_crs = crs  # from last tile (all tiles must share CRS)
+    out_height, out_width = merged_bands[0].shape
+
+    out_meta = {
+        "driver": "GTiff",
+        "dtype": "float32",
+        "count": 7,                     # 7 bands (B1…B7)
+        "crs": out_crs,
+        "transform": merged_transform,
+        "height": out_height,
+        "width": out_width,
+        # You can add compression options if desired:
+        # "compress": "lzw", "predictor": 2, etc.
+    }
+
+    # 5. Write the single output file
+    output_path = "landsat_mosaic.tif"
+    with rasterio.open(output_path, "w", **out_meta) as dst:
+        for idx, band_arr in enumerate(merged_bands, start=1):
+            # rasterio bands are 1‐indexed, so write at band=idx
+            dst.write(band_arr, idx)
+
+    print(f"Wrote merged mosaic → {output_path}")
 
 
 def random_unit_vectors(n_vectors, n_bands, seed=None):
@@ -185,6 +382,68 @@ def ppi(spectral_library, n_samples, n_bands):
         ppi_score[min_idx] += 1
 
     return ppi_score
+
+
+# --- NFINDR Iterative Selection ---
+def nfindr_iterative_selection(spectral_library, max_endmembers=21, max_iterations=3):
+    """
+    True NFINDR implementation using simplex volume maximization.
+
+    Args:
+        spectral_library: (n_samples, n_bands) array of spectral vectors
+        max_endmembers: number of endmembers to extract
+        max_iterations: number of full replacement passes
+
+    Returns:
+        dict containing selected endmembers, their indices, and volume history
+    """
+    from scipy.spatial import ConvexHull
+    import random
+
+    n_samples, n_bands = spectral_library.shape
+    # if max_endmembers > n_bands + 1:
+    #     raise ValueError("max_endmembers cannot exceed number of bands + 1")
+
+    # Initialize by selecting random unique indices
+    selected_indices = random.sample(range(n_samples), max_endmembers)
+    current_endmembers = spectral_library[selected_indices, :]
+    volume_history = []
+
+    def compute_simplex_volume(endmembers):
+        # Subtract mean to ensure correct affine volume
+        centered = endmembers - np.mean(endmembers, axis=0)
+        try:
+            hull = ConvexHull(centered)
+            return hull.volume
+        except:
+            return 0.0
+
+    current_volume = compute_simplex_volume(current_endmembers)
+    volume_history.append(current_volume)
+
+    print('Running')
+    for _ in range(max_iterations):
+        improved = False
+        for i in range(max_endmembers):
+            for j in range(n_samples):
+                if j in selected_indices:
+                    continue
+                trial_indices = selected_indices.copy()
+                trial_indices[i] = j
+                trial_endmembers = spectral_library[trial_indices, :]
+                volume = compute_simplex_volume(trial_endmembers)
+                if volume > current_volume:
+                    selected_indices = trial_indices
+                    current_volume = volume
+                    improved = True
+        volume_history.append(current_volume)
+    print('Done')
+
+    return {
+        'endmembers': spectral_library[selected_indices, :],
+        'indices': selected_indices,
+        'volume_history': volume_history
+    }
 
 
 def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_mean", stop_threshold=0.01):
@@ -212,7 +471,6 @@ def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_m
     elif initial_selection == 'ppi':
         ppi_score = ppi(spectral_library, n_samples, n_bands)
         first_idx = np.argmax(ppi_score)
-
     else:  # "dist_mean"
         mean_spectrum = np.mean(spectral_library, axis=0)
         distances = np.linalg.norm(spectral_library - mean_spectrum, axis=1)
@@ -320,12 +578,12 @@ def build_look_up_table(endmember_classes):
     return look_up_table
 
 
-def main(signatures_path: str, landsat_dir: str):
+def main(signatures_path: str, landsat_dir: str, ecoregion_mask: str):
     download_ecoregion()
 
     ecoregion_download = os.path.join(PROJ_DIR, 'data', 'Ecoregion', 'us_eco_l3.shp')
     ecoregions = gpd.read_file(ecoregion_download)
-    geometries = ecoregions[ecoregions['US_L3NAME'] == 'Southern Rockies']
+    geometries = ecoregions[ecoregions['US_L3NAME'] == ecoregion_mask]
 
     # Get transform and crs from first TIF file
     first_band_path = sorted(glob.glob(os.path.join(landsat_dir, "*SR_B*.TIF")))[0]
@@ -337,13 +595,16 @@ def main(signatures_path: str, landsat_dir: str):
 
     signatures = pd.read_csv(signatures_path)
     spectral_library = signatures.iloc[:, 0:7].to_numpy()
-    ies_results = ies_from_library(spectral_library, len(signatures.values), initial_selection='ppi')
 
-    endmember_library = signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5, 6]].copy()
-    signatures.iloc[ies_results['indices'], [0, 1, 2, 3, 4, 5, 6, 22]].copy().to_csv('endmembers.csv')
+    ies_results = ies_from_library(spectral_library, len(signatures.values), initial_selection='dist_mean')
+    #ies_results = nfindr_iterative_selection(spectral_library, max_iterations=1000)
+    indices = ies_results['indices']
+
+    endmember_library = signatures.iloc[indices, [0, 1, 2, 3, 4, 5, 6]].copy()
+    signatures.iloc[indices, [0, 1, 2, 3, 4, 5, 6, 22]].copy().to_csv('endmembers.csv')
     max_endmember = np.nanmax(endmember_library)
 
-    class_labels = signatures.iloc[ies_results['indices'], 22]
+    class_labels = signatures.iloc[indices, 22]
     class_list = np.asarray([str(x).lower() for x in class_labels])
     n_classes = len(np.unique(class_list))
     complexity_level = n_classes + 1
@@ -372,7 +633,6 @@ def main(signatures_path: str, landsat_dir: str):
     for start in tqdm(range(0, height, chunk_height), desc="Processing chunks"):
 
         chunk = landsat[:, start:start+chunk_height, :]
-        print(chunk.shape, chunk.size)
 
         best_all, fractions_all, rmse_all, _ = mesma.execute(
             image=chunk,
@@ -381,8 +641,6 @@ def main(signatures_path: str, landsat_dir: str):
             em_per_class=models_object.em_per_class,
             residual_image=False
         )
-
-        print(best_all.shape, fractions_all.shape, rmse_all.shape)
 
         model_best[:, start:start+chunk_height, :] = best_all
         model_fractions[:, start:start+chunk_height, :] = fractions_all
@@ -443,6 +701,204 @@ def main(signatures_path: str, landsat_dir: str):
         dtype=model_rmse.dtype,
         crs=crs,
         transform=transform
+    ) as dst:
+        dst.write(model_rmse, 1)
+        dst.set_band_description(1, 'rmse')
+
+
+def load_signatures_with_coords(hdr_dir: str) -> gpd.GeoDataFrame:
+    """
+    Reads every .img, masks invalid pixels, and for each valid pixel
+    returns its 7-band spectrum *and* its projected x/y coordinate.
+    """
+    records = []
+    for img_path in sorted(glob.glob(os.path.join(hdr_dir, "*masked_masked.img"))):
+        with rasterio.open(img_path) as src:
+            arr: np.ndarray = src.read()                # shape (7, H, W)
+            transform: Affine = src.transform           # maps col,row to x,y
+            mask = np.any(arr == -9999, axis=0)         # True = invalid
+            # get all valid row,col indices
+            rows, cols = np.where(~mask)
+            # for each valid pixel, extract spectrum and compute x,y
+            for r, c in zip(rows, cols):
+                spectrum = arr[:, r, c]                 # length 7
+                x, y = transform * (c, r)              # col,row → x,y
+                rec = dict(
+                    band_1 = float(spectrum[0]),
+                    band_2 = float(spectrum[1]),
+                    band_3 = float(spectrum[2]),
+                    band_4 = float(spectrum[3]),
+                    band_5 = float(spectrum[4]),
+                    band_6 = float(spectrum[5]),
+                    band_7 = float(spectrum[6]),
+                    geometry = Point(x, y)
+                )
+                records.append(rec)
+
+    # build GeoDataFrame
+    gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=src.crs)
+    return gdf
+
+
+def main_from_images(resampled_dir, landsat_file: str, ecoregion_mask: str):
+    # 1. download / read your ecoregions
+    download_ecoregion()
+    eco_shp = os.path.join(PROJ_DIR, 'data', 'Ecoregion', 'us_eco_l3.shp')
+    ecoregions = gpd.read_file(eco_shp)
+    geometries = ecoregions[ecoregions['US_L3NAME'] == ecoregion_mask]
+
+    # 2. load the pixel signatures from your ENVI files
+    sig_gdf = load_signatures_with_coords(resampled_dir)
+
+    cover_polys = gpd.read_file('data/aop_macrosystems_data_1_7_25.geojson').to_crs(epsg=4326)
+    if cover_polys.crs != sig_gdf.crs:
+        cover_polys = cover_polys.to_crs(sig_gdf.crs)
+    print('A')
+
+    sig_with_cover = gpd.sjoin(
+        sig_gdf,
+        cover_polys[["cover_category", "geometry"]],
+        how="left",
+        predicate="within"
+    )
+    sig_with_cover = sig_with_cover.dropna(subset=["cover_category"]).reset_index(drop=True)
+    print('B')
+    # Now sig_with_cover has columns band_1...band_7 and cover_category
+
+    # 5. Build your spectral library as before
+    spectral_library = sig_with_cover[[f"band_{i}" for i in range(1, 8)]].to_numpy()
+
+    print(len(spectral_library))
+
+    ies_results = ies_from_library(
+        spectral_library,
+        num_endmembers=spectral_library.shape[0],
+        initial_selection='dist_mean'
+    )
+    indices = ies_results["indices"]
+    print("Selected endmember indices:", indices)
+
+    # 6. Extract endmember spectra
+    endmember_spectra = spectral_library[indices, :]  # shape (k,7)
+    max_endmember = np.nanmax(endmember_spectra)
+
+    # 7. Pull out their cover_category
+    endmember_cats = sig_with_cover.iloc[indices]["cover_category"].values
+
+    # 8. Build your final endmember library DataFrame
+    df_end = pd.DataFrame(
+        endmember_spectra,
+        columns=[f"band_{i}" for i in range(1, 8)]
+    )
+    df_end["cover_category"] = endmember_cats
+
+    endmember_library = df_end
+
+    with rasterio.open(landsat_file) as src:
+        transform = src.transform
+        crs = src.crs
+
+    # class labels: here we lowercase the array indices;
+    # adapt if you have a separate label array
+    class_list = df_end["cover_category"].values
+    n_classes = len(np.unique(class_list))
+    complexity_level = n_classes + 1
+
+    print(class_list)
+
+    # 4. Now read the entire Landsat stack for MESMA
+    #    (assuming read_landsat_data returns the full cube and max value)
+    landsat, max_landsat = read_landsat_data(landsat_file, geometries)
+
+    # normalize
+    landsat = landsat / max_landsat
+    print(endmember_library, max_endmember)
+    endmember_library_arr = endmember_library[['band_1', 'band_2', 'band_3', 'band_4', 'band_5', 'band_6', 'band_7']].to_numpy()
+    endmember_library_arr /= max_endmember
+
+    # 5. setup MESMA models
+    models = MesmaModels()
+    models.setup(class_list)
+    for level in range(2, complexity_level):
+        models.select_level(True, level)
+        for i in range(n_classes):
+            models.select_class(True, i, level)
+
+    mesma = MesmaCore(n_cores=1)
+
+    # 6. run MESMA in chunks (same as your original code)
+    bands, height, width = landsat.shape
+    chunk_h = 5
+    model_best      = np.zeros((n_classes, height, width), dtype=np.uint32)
+    model_fractions = np.zeros((n_classes+1, height, width), dtype=np.float32)
+    model_rmse      = np.zeros((height, width),        dtype=np.float32)
+
+    for row in tqdm(range(0, height, chunk_h), desc="MESMA chunking"):
+        chunk = landsat[:, row:row+chunk_h, :]
+        best, fracs, rmse, _ = mesma.execute(
+            image=chunk,
+            library=endmember_library_arr.T.astype(np.float32),
+            look_up_table=models.return_look_up_table(),
+            em_per_class=models.em_per_class,
+            residual_image=False
+        )
+        model_best[:, row:row+chunk_h, :]      = best
+        model_fractions[:, row:row+chunk_h, :] = fracs
+        model_rmse[row:row+chunk_h, :]         = rmse
+
+    from rasterio.transform import from_origin
+    # Assume transform and crs are still available from read_landsat_data
+    # transform and crs are already loaded in the local scope
+    # Write model_best raster (one band per class)
+    model_best_path = os.path.join(PROJ_DIR, 'output', 'model_best.tif')
+    os.makedirs(os.path.dirname(model_best_path), exist_ok=True)
+    with rasterio.open(
+            model_best_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=n_classes,
+            dtype=model_best.dtype,
+            crs=crs,
+            transform=transform
+    ) as dst:
+        for i in range(n_classes):
+            dst.write(model_best[i, :, :], i + 1)
+            dst.set_band_description(i + 1, str(np.unique(class_list)[i]))
+
+    # Write model_fractions raster (one band per class + 1 for shade)
+    model_fractions_path = os.path.join(PROJ_DIR, 'output', 'model_fractions.tif')
+    os.makedirs(os.path.dirname(model_fractions_path), exist_ok=True)
+    with rasterio.open(
+            model_fractions_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=n_classes + 1,
+            dtype=model_fractions.dtype,
+            crs=crs,
+            transform=transform
+    ) as dst:
+        for i in range(n_classes):
+            dst.write(model_fractions[i, :, :], i + 1)
+            dst.set_band_description(i + 1, str(np.unique(class_list)[i]))
+        dst.write(model_fractions[-1, :, :], n_classes + 1)
+        dst.set_band_description(n_classes + 1, 'shade')
+
+    # Write model_rmse raster
+    model_rmse_path = os.path.join(PROJ_DIR, 'output', 'model_rmse.tif')
+    with rasterio.open(
+            model_rmse_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=1,
+            dtype=model_rmse.dtype,
+            crs=crs,
+            transform=transform
     ) as dst:
         dst.write(model_rmse, 1)
         dst.set_band_description(1, 'rmse')

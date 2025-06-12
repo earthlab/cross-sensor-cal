@@ -482,7 +482,6 @@ class MesmaCore:
             raise ValueError('The algorithm detected image values larger than 1: '
                              'reflectance scale factor not set correctly.')
 
-        print(library)
         if np.nanmax(library) > 1:
             raise ValueError('The algorithm detected library values larger than 1:'
                              'reflectance scale factor not set correctly.')
@@ -589,11 +588,10 @@ class MesmaModels:
 
         :param class_list: [array-of-strings] A class for each endmember in the library.
         """
-        print(class_list)
         class_list = np.asarray([str(x).lower() for x in class_list])  # set all in lowercase
-        print(class_list)
         self.unique_classes = np.unique(class_list)
-        print(self.unique_classes)
+        print(class_list, 'class_list')
+        print(self.unique_classes, 'unique classes')
         self.n_classes = len(self.unique_classes)
         self.n_em_per_class = np.zeros(self.n_classes, dtype=int)
 
@@ -605,7 +603,6 @@ class MesmaModels:
 
         # initialise x_em_model_yn to zero
         self.level_yn = np.zeros(self.n_classes + 2, dtype=bool)
-        print(self.level_yn, self.n_classes + 2)
         # initialise class_per_x_em_model to zeros
         for level in np.arange(2, self.n_classes + 2):
             self.class_per_level[level] = np.zeros(self.n_classes, dtype=bool)
