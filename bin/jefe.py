@@ -35,16 +35,14 @@ def go_forth_and_multiply(base_folder="output", envi_outdir: str = None, resampl
 
     # Step 2: Convert flight lines to ENVI format
     flight_lines_to_envi(input_dir=base_folder, output_dir=envi_outdir)
-
     # Step 3: Generate configuration JSON
     generate_config_json(envi_outdir)
-
     # Step 4: Apply topographic and BRDF corrections
-    apply_topo_and_brdf_corrections(envi_outdir)
+    apply_topo_and_brdf_corrections(Path(envi_outdir))
 
     # Step 5: Resample and translate data to other sensor formats
     if resample_method == 'convolution':
-        convolution_resample(envi_outdir, resample_outdir)
+        convolution_resample(Path(envi_outdir), Path(resample_outdir))
     elif resample_method == 'resample':
         resample_translation_to_other_sensors(envi_outdir)
 
@@ -57,30 +55,12 @@ def apply_topo_and_brdf_corrections(input_dir: Path):
 
     for envi_config_file in envi_config_files:
         print(f"\nProcessing folder for BRDF correction: {envi_config_file.directory}")
-
-        # Check if expected corrected output already exists
-        with open(envi_config_file.file_path, "r") as f:
-            config = json.load(f)
-
-        input_files = config.get("input_files", [])
-        suffix = config["export"]["suffix"]
-        output_dir = config["export"]["output_dir"]
-        expected_outputs = [
-            os.path.join(output_dir, f"{os.path.splitext(os.path.basename(img))[0]}_{suffix}")
-            for img in input_files
-        ]
-
-        all_exist = all(os.path.isfile(path) for path in expected_outputs)
-        if all_exist:
-            print(f"✅ BRDF corrected output already exists for {folder}. Skipping...")
-            continue
-
         try:
             topo_and_brdf_correction(envi_config_file.file_path)
         except Exception as e:
-            print(f"❌ Error executing BRDF correction: {e}")
+             print(f"❌ Error executing BRDF correction: {e}")
         else:
-            print(f"✅ Successfully processed BRDF correction for: {envi_config_file.file_path}")
+             print(f"✅ Successfully processed BRDF correction for: {envi_config_file.file_path}")
 
     print("\nAll topo and BRDF corrections completed.")
 
@@ -188,18 +168,18 @@ def jefe(base_folder, site_code, year_month, flight_lines, polygon_layer_path: s
         flight_lines=flight_lines
     )
 
-    process_base_folder(
-        base_folder=base_folder,
-        polygon_layer=polygon_layer_path,
-        raster_crs_override="EPSG:4326",  # Optional CRS override
-        polygons_crs_override="EPSG:4326",  # Optional CRS override
-        output_masked_suffix="_masked",  # Optional suffix for output
-        plot_output=False,  # Disable plotting
-        dpi=300  # Set plot resolution
-    )
+    # process_base_folder(
+    #     base_folder=base_folder,
+    #     polygon_layer=polygon_layer_path,
+    #     raster_crs_override="EPSG:4326",  # Optional CRS override
+    #     polygons_crs_override="EPSG:4326",  # Optional CRS override
+    #     output_masked_suffix="_masked",  # Optional suffix for output
+    #     plot_output=False,  # Disable plotting
+    #     dpi=300  # Set plot resolution
+    # )
 
     # Next, process all subdirectories within the base_folder
-    process_all_subdirectories(base_folder, polygon_layer_path)
+    # process_all_subdirectories(base_folder, polygon_layer_path)
 
     # Finally, clean the CSV files by removing rows with any NaN values
     # clean_csv_files_in_subfolders(base_folder)

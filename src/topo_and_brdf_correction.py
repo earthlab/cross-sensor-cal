@@ -3,6 +3,8 @@ import glob
 import json
 import os.path
 import warnings
+from pathlib import Path
+
 import ray
 import re
 import hytools as ht
@@ -12,7 +14,9 @@ from hytools.brdf import calc_brdf_coeffs
 from hytools.glint import set_glint_parameters
 from hytools.masks import mask_create
 
-from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceConfigFile, NEONReflectanceCoefficientsFile
+from src.file_types import (NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceConfigFile,
+                            NEONReflectanceCoefficientsFile, NEONReflectanceAncillaryENVIFile,
+                            NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFMaskENVIFile)
 
 warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
@@ -57,13 +61,19 @@ def topo_and_brdf_correction(config_file: str):
 
     images = config_dict["input_files"]
 
+    if len(images) != 1:
+        raise ValueError('Length of images in config file not equal to 1')
+
+    image = images[0]
+    reflectance_file = NEONReflectanceENVIFile.from_filename(Path(image))
+
     if ray.is_initialized():
         ray.shutdown()
     print("Using %s CPUs." % config_dict['num_cpus'])
     ray.init(num_cpus=config_dict['num_cpus'])
 
     HyTools = ray.remote(ht.HyTools)
-    actors = [HyTools.remote() for image in images]
+    actors = [HyTools.remote() for _ in images]
 
     if config_dict['file_type'] == 'envi':
         anc_files = config_dict["anc_files"]
@@ -75,7 +85,28 @@ def topo_and_brdf_correction(config_file: str):
 
     _ = ray.get([a.create_bad_bands.remote(config_dict['bad_bands']) for a in actors])
 
+    brdf_corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_components(
+        reflectance_file.domain,
+        reflectance_file.site,
+        reflectance_file.date,
+        reflectance_file.time,
+        config_dict['export']["suffix"],
+        Path(config_dict['export']['output_dir'])
+    )
+
     for correction in config_dict["corrections"]:
+        coefficients_file = NEONReflectanceCoefficientsFile.from_components(
+            reflectance_file.domain,
+            reflectance_file.site,
+            reflectance_file.date,
+            reflectance_file.time,
+            correction,
+            config_dict['export']["suffix"],
+            Path(config_dict['export']['output_dir'])
+        )
+        print(brdf_corrected_file.file_path, coefficients_file.file_path)
+        if brdf_corrected_file.path.exists() and coefficients_file.path.exists():
+            continue
         if correction == 'topo':
             calc_topo_coeffs(actors, config_dict['topo'])
         elif correction == 'brdf':
@@ -126,15 +157,22 @@ def export_coeffs(hy_obj, export_dict):
     Note:
     - The function currently skips exporting coefficients for 'glint' correction.
     """
-
+    reflectance_file = NEONReflectanceENVIFile.from_filename(Path(hy_obj.file_name))
     for correction in hy_obj.corrections:
-        coeff_file = os.path.join(
-            export_dict['output_dir'],
-            os.path.splitext(os.path.basename(hy_obj.file_name))[0] +
-            "_%s_coeffs_%s.json" % (correction, export_dict["suffix"])
+        coefficients_file = NEONReflectanceCoefficientsFile.from_components(
+            reflectance_file.domain,
+            reflectance_file.site,
+            reflectance_file.date,
+            reflectance_file.time,
+            correction,
+            export_dict["suffix"],
+            Path(export_dict["output_dir"])
         )
 
-        with open(coeff_file, 'w') as outfile:
+        if coefficients_file.path.exists():
+            continue
+
+        with open(coefficients_file.file_path, 'w') as outfile:
             if correction == 'topo':
                 corr_dict = hy_obj.topo
             elif correction == 'glint':
@@ -173,61 +211,66 @@ def apply_corrections(hy_obj, config_dict):
     - The function assumes that the 'hy_obj' has methods like 'get_header', 'iterate', and 'get_band' and attributes like 'corrections' and 'wavelengths'.
     - The 'WriteENVI' utility is used for writing the output, which should be predefined or imported.
     """
+    print(config_dict["corrections"], "CORRECTIONS")
     header_dict = hy_obj.get_header()
     header_dict['data ignore value'] = hy_obj.no_data
     header_dict['data type'] = 4
 
-    reflectance_file = NEONReflectanceFile.from_filename(os.path.basename(hy_obj.file_name))
-    coefficients_file = NEONReflectanceCoefficientsFile.from_components(
+    reflectance_file = NEONReflectanceENVIFile.from_filename(Path(os.path.basename(hy_obj.file_name)))
+    brdf_corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_components(
         reflectance_file.domain,
         reflectance_file.site,
         reflectance_file.date,
         reflectance_file.time,
-
+        config_dict['export']["suffix"],
+        Path(config_dict['export']['output_dir'])
     )
 
-    output_name = os.path.join(
-        config_dict['export']['output_dir'],
-        os.path.splitext(os.path.basename(hy_obj.file_name))[0] +
-        "_%s" % config_dict['export']["suffix"]
-    )
+    if not brdf_corrected_file.path.exists():
+        # Export all wavelengths
+        if len(config_dict['export']['subset_waves']) == 0:
+            if config_dict["resample"]:
+                hy_obj.resampler = config_dict['resampler']
+                waves = hy_obj.resampler['out_waves']
+            else:
+                waves = hy_obj.wavelengths
 
-    # Export all wavelengths
-    if len(config_dict['export']['subset_waves']) == 0:
-        if config_dict["resample"]:
-            hy_obj.resampler = config_dict['resampler']
-            waves = hy_obj.resampler['out_waves']
+            header_dict['bands'] = len(waves)
+            header_dict['wavelength'] = waves
+
+            writer = WriteENVI(brdf_corrected_file.file_path, header_dict)
+            iterator = hy_obj.iterate(by='line', corrections=hy_obj.corrections, resample=config_dict['resample'])
+            while not iterator.complete:
+                line = iterator.read_next()
+                writer.write_line(line, iterator.current_line)
+            writer.close()
+
+        # Export subset of wavelengths
         else:
-            waves = hy_obj.wavelengths
+            waves = config_dict['export']['subset_waves']
+            bands = [hy_obj.wave_to_band(x) for x in waves]
+            waves = [round(hy_obj.wavelengths[x], 2) for x in bands]
+            header_dict['bands'] = len(bands)
+            header_dict['wavelength'] = waves
 
-        header_dict['bands'] = len(waves)
-        header_dict['wavelength'] = waves
-
-        writer = WriteENVI(output_name, header_dict)
-        iterator = hy_obj.iterate(by='line', corrections=hy_obj.corrections,
-                                  resample=config_dict['resample'])
-        while not iterator.complete:
-            line = iterator.read_next()
-            writer.write_line(line, iterator.current_line)
-        writer.close()
-
-    # Export subset of wavelengths
-    else:
-        waves = config_dict['export']['subset_waves']
-        bands = [hy_obj.wave_to_band(x) for x in waves]
-        waves = [round(hy_obj.wavelengths[x], 2) for x in bands]
-        header_dict['bands'] = len(bands)
-        header_dict['wavelength'] = waves
-
-        writer = WriteENVI(output_name, header_dict)
-        for b, band_num in enumerate(bands):
-            band = hy_obj.get_band(band_num,
-                                   corrections=hy_obj.corrections)
-            writer.write_band(band, b)
-        writer.close()
+            writer = WriteENVI(brdf_corrected_file.file_path, header_dict)
+            for b, band_num in enumerate(bands):
+                band = hy_obj.get_band(band_num, corrections=hy_obj.corrections)
+                writer.write_band(band, b)
+            writer.close()
 
     # Export masks
-    if config_dict['export']['masks'] and len(config_dict["corrections"]) > 0:
+    brdf_corrected_masked_file = NEONReflectanceBRDFMaskENVIFile.from_components(
+        reflectance_file.domain,
+        reflectance_file.site,
+        reflectance_file.date,
+        reflectance_file.time,
+        config_dict['export']["suffix"],
+        Path(config_dict['export']['output_dir'])
+    )
+
+    if (config_dict['export']['masks'] and len(config_dict["corrections"]) > 0 and
+            not brdf_corrected_masked_file.path.exists()):
         masks = []
         mask_names = []
 
@@ -246,13 +289,7 @@ def apply_corrections(hy_obj, config_dict):
         header_dict['wavelength units'] = ''
         header_dict['data ignore value'] = 255
 
-        output_name = os.path.join(
-            config_dict['export']['output_dir'],
-            os.path.splitext(os.path.basename(hy_obj.file_name))[0] +
-            "_%s_mask" % config_dict['export']["suffix"]
-        )
-
-        writer = WriteENVI(output_name, header_dict)
+        writer = WriteENVI(brdf_corrected_masked_file.file_path, header_dict)
 
         for band_num, mask in enumerate(masks):
             mask = mask.astype(int)
@@ -272,9 +309,8 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceF
     bad_bands = [[300, 400], [1337, 1430], [1800, 1960], [2450, 2600]]
     file_type = 'envi'
 
-    # Glob pattern to find ancillary files within the same directory
-    anc_files_pattern = os.path.join(reflectance_file.directory, "*_ancillary*")
-    anc_files = glob.glob(anc_files_pattern)
+    anc_files = NEONReflectanceAncillaryENVIFile.find_in_directory(reflectance_file.directory)
+    print(f'ANC files {anc_files}')
     anc_files.sort()
 
     aviris_anc_names = ['path_length', 'sensor_az', 'sensor_zn', 'solar_az', 'solar_zn', 'slope', 'aspect', 'phase',
@@ -296,7 +332,7 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceF
         config_dict["input_files"] = [reflectance_file.file_path]
 
         config_dict["anc_files"] = {
-            reflectance_file.file_path: dict(zip(aviris_anc_names, [[anc_file, a] for a in range(len(aviris_anc_names))]))
+            reflectance_file.file_path: dict(zip(aviris_anc_names, [[anc_file.file_path, a] for a in range(len(aviris_anc_names))]))
         }
 
         # Export settings
@@ -305,7 +341,7 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceF
         config_dict['export']['image'] = True
         config_dict['export']['masks'] = True
         config_dict['export']['subset_waves'] = []
-        config_dict['export']['output_dir'] = reflectance_file.directory
+        config_dict['export']['output_dir'] = str(reflectance_file.directory)
         config_dict['export']["suffix"] = suffix_label
 
         # Detailed settings for export options, TOPO and BRDF corrections
@@ -395,9 +431,10 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceF
         config_file = NEONReflectanceConfigFile.from_components(
             reflectance_file.domain, reflectance_file.site, reflectance_file.date, reflectance_file.time, suffix,
             reflectance_file.directory)
-
+        print(f'CONFIG file {config_file.file_path}')
         # Save the configuration to a JSON file
-        with open(config_file.file_path, 'w') as outfile:
+        with open(config_file.file_path, 'w+') as outfile:
+            print(config_dict, outfile)
             json.dump(config_dict, outfile, indent=3)
 
         print(f"Configuration saved to {config_file.file_path}")
@@ -412,12 +449,15 @@ def generate_config_json(parent_directory):
     - parent_directory (str): The parent directory containing multiple subdirectories for which to generate configurations.
     """
     # Find all subdirectories within the parent directory, excluding the ones in `exclude_dirs`
-    reflectance_files = NEONReflectanceENVIFile.find_in_directory(parent_directory)
+    reflectance_files = NEONReflectanceENVIFile.find_in_directory(Path(parent_directory))
+    print(f"Reflectance files: {reflectance_files}")
 
     # Loop through each subdirectory and generate correction configurations
     for reflectance_file in reflectance_files:
+        print(type(reflectance_file))
+        print(reflectance_file.file_path, reflectance_file.directory)
         print(f"Generating configuration files for directory: {os.path.dirname(reflectance_file.file_path)}")
-        generate_correction_configs_for_directory(reflectance_file.directory)
+        generate_correction_configs_for_directory(reflectance_file)
         print("Configuration files generation completed.\n")
 
 

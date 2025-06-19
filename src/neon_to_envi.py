@@ -10,7 +10,7 @@ from pathlib import Path
 import hytools as ht
 from hytools.io.envi import WriteENVI
 import re
-from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile
+from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
 
 
 
@@ -59,11 +59,11 @@ def extract_site_code_from_filename(filename):
 
 
 def neon_to_envi_task(hy_obj, output_dir):
-    neon_input_file = NEONReflectanceFile.from_filename(hy_obj.file_name)
-    specific_output_dir = Path(os.path.join(output_dir, neon_input_file.output_dir_from_filename))
-    os.makedirs(specific_output_dir.name, exist_ok=True)
+    neon_input_file = NEONReflectanceFile.from_filename(Path(hy_obj.file_name))
+    specific_output_dir = Path(os.path.join(output_dir, neon_input_file.path.stem))
+    os.makedirs(specific_output_dir, exist_ok=True)
     envi_output_file = NEONReflectanceENVIFile.from_components(neon_input_file.domain, neon_input_file.site,
-                                                               neon_input_file.site, neon_input_file.time,
+                                                               neon_input_file.date, neon_input_file.time,
                                                                specific_output_dir)
 
     if envi_output_file.path.exists():
@@ -116,9 +116,9 @@ def envi_header_for_ancillary(hy_obj, ancillary_attributes, interleave='bil'):
 
 
 def export_anc(hy_obj, output_dir):
-    site_code = extract_site_code_from_filename(hy_obj.file_name)
+    neon_reflectance_file = NEONReflectanceFile.from_filename(Path(hy_obj.file_name))
     with h5py.File(hy_obj.file_name, 'r') as h5_file:
-        base_path = f"/{site_code}/Reflectance/Metadata/"
+        base_path = f"/{neon_reflectance_file.site}/Reflectance/Metadata/"
 
         ancillary_data_keys = [
             "Ancillary_Imagery/Path_Length",
@@ -149,28 +149,25 @@ def export_anc(hy_obj, output_dir):
 
         # Create the header for ancillary data
         header = envi_header_for_ancillary(hy_obj, ancillary_attributes, interleave='bil')
-        # Ensure output directory exists
-        specific_output_dir = os.path.join(output_dir, os.path.splitext(os.path.basename(hy_obj.file_name))[0])
-        # Ensure the specific output directory exists
-        if not os.path.exists(specific_output_dir):
-            os.makedirs(specific_output_dir, exist_ok=True)
-        output_name = os.path.join(
-            specific_output_dir, os.path.splitext(os.path.basename(hy_obj.file_name))[0] + "_ancillary")
-        if os.path.exists(output_name):
-            print(f"Skipping {output_name}, already exists")
-        # Initialize the ENVI writer with the generated header
-        anc_temp = "anc"
-        anc_temp_header = anc_temp + ".hdr"
-        writer = WriteENVI(anc_temp, header)
+
+        specific_output_dir = Path(os.path.join(output_dir, neon_reflectance_file.path.stem))
+        os.makedirs(specific_output_dir, exist_ok=True)
+
+        ancillary_file = NEONReflectanceAncillaryENVIFile.from_components(
+            neon_reflectance_file.domain,
+            neon_reflectance_file.site,
+            neon_reflectance_file.date,
+            neon_reflectance_file.time,
+            specific_output_dir
+        )
+        if ancillary_file.path.exists():
+            print(f"Skipping {ancillary_file.file_path}, already exists")
+        writer = WriteENVI(ancillary_file.file_path, header)
         for i, array in enumerate(data):
             if array.size > 0:
                 writer.write_band(array, i)
         writer.close()
-        shutil.copy(anc_temp, output_name)
-        shutil.copy(anc_temp_header, output_name + ".hdr")
-        os.remove(anc_temp)
-        os.remove(anc_temp_header)
-        print(f"Ancillary data exported to {output_name}")
+        print(f"Ancillary data exported to {ancillary_file.file_path}")
 
 
 def flight_lines_to_envi(input_dir: str, output_dir: str):

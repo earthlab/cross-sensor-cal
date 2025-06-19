@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import json
 from spectral import open_image
@@ -7,6 +9,8 @@ from scipy.stats import norm
 import os
 from glob import glob
 
+from src.file_types import (NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceResampledENVIFile,
+                            NEONReflectanceResampledHDRFile)
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
@@ -22,21 +26,12 @@ def gaussian_rsr(wavelengths, center, fwhm):
     return rsr / np.sum(rsr)
 
 
-def resample(input_dir: str, out_dir: str):
+def resample(input_dir: Path, out_dir: Path):
     print(f'Starting convolutional resample for {input_dir}')
-    for hyperspectral_header_file_path in glob(os.path.join(input_dir, '**', '*envi.hdr'), recursive=True):
-        print(f"\nFound: {hyperspectral_header_file_path}")
-
-        base_name = os.path.splitext(os.path.basename(hyperspectral_header_file_path))[0]
-        resampled_base = base_name.replace('_envi', '')
-
-        img_path = hyperspectral_header_file_path.replace('.hdr', '')
-        if not os.path.exists(img_path):
-            print(f"  [SKIP] No corresponding .img file")
-            continue
-
+    brdf_corrected_envi_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(input_dir, 'envi')
+    for brdf_corrected_envi_file in brdf_corrected_envi_files:
         try:
-            img = open_image(hyperspectral_header_file_path)
+            img = open_image(brdf_corrected_envi_file.file_path)
             hyperspectral_data = img.load()
         except Exception as e:
             print(f"  [ERROR] Could not load image: {e}")
