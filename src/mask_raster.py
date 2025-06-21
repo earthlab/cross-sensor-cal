@@ -1,5 +1,6 @@
 import os
 import glob
+from typing import Union
 
 import matplotlib.pyplot as plt
 import rasterio
@@ -9,13 +10,14 @@ from rasterio.crs import CRS
 from shapely.geometry import box
 from rasterio.features import rasterize
 
+from src.file_types import NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceResampledENVIFile
+
 
 def mask_raster_with_polygons(
-    envi_path,
+    envi_file: Union[NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceResampledENVIFile],
     geojson_path,
     raster_crs_override=None,
     polygons_crs_override=None,
-    output_masked_suffix="_masked",
     plot_output=False,  # Disable plotting by default when processing multiple files
     plot_filename=None,  # Not used when plot_output is False
     dpi=300
@@ -25,8 +27,8 @@ def mask_raster_with_polygons(
 
     Parameters:
     -----------
-    envi_path : str
-        Path to the ENVI raster file.
+    envi_file : DataFile
+        ENVI raster file type object.
     geojson_path : str
         Path to the GeoJSON file containing polygons.
     raster_crs_override : str, optional
@@ -164,12 +166,11 @@ def mask_raster_with_polygons(
         print(f"Masked data shape: {masked_data.shape}")
         return masked_data
 
-    def save_masked_raster(envi_path, masked_data, nodata, raster, suffix):
+    def save_masked_raster(envi_path: Union[NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile,
+                            NEONReflectanceResampledENVIFile], masked_data, nodata, raster):
         """
         Saves the masked raster to a new file.
         """
-        base_name, ext = os.path.splitext(envi_path)
-        output_file = f"{base_name}{suffix}{ext}"
         meta = raster.meta.copy()
         meta.update({
             'dtype': masked_data.dtype,
@@ -177,16 +178,16 @@ def mask_raster_with_polygons(
             'count': raster.count if raster.count > 1 else 1
         })
 
-        with rasterio.open(output_file, 'w', **meta) as dst:
+        with rasterio.open(envi_path.masked_path.name, 'w', **meta) as dst:
             if raster.count > 1:
                 for i in range(raster.count):
                     dst.write(masked_data[i], i + 1)
             else:
                 dst.write(masked_data, 1)
-        print(f"Masked raster saved to: {output_file}")
-        return output_file
+        print(f"Masked raster saved to: {envi_path.masked_path.name}")
+        return envi_path.masked_path.name
 
-    def plot_results(raster, masked_data, nodata, polygons_aligned, clipped_polygons, plot_path):
+    def plot_results(raster, masked_data, nodata, clipped_polygons, plot_path):
         """
         Plots the original raster, clipped polygons, clipped polygons on raster, and masked raster.
         Saves the result as a high-resolution PNG and displays the plot.
@@ -282,7 +283,7 @@ def mask_raster_with_polygons(
 
     # Start of the masking function logic
     try:
-        raster, polygons = load_data(envi_path, geojson_path)
+        raster, polygons = load_data(envi_file.file_path, geojson_path)
     except FileNotFoundError as e:
         print(e)
         raise
@@ -300,7 +301,6 @@ def mask_raster_with_polygons(
         raise
 
     polygons_aligned = align_crs(raster_crs, polygons)
-
     clipped_polygons = clip_polygons(raster, polygons_aligned)
 
     if clipped_polygons.empty:
@@ -317,7 +317,6 @@ def mask_raster_with_polygons(
         # For now, we'll proceed but be aware that spatial alignment may be incorrect
 
     mask = create_mask(raster, clipped_polygons)
-
     masked_data = apply_mask(raster, mask)
 
     # Handle rasters with no geotransform by informing the user
@@ -325,11 +324,10 @@ def mask_raster_with_polygons(
         print("Warning: Raster has an identity transform. Masked data may not be georeferenced correctly.")
 
     masked_raster_path = save_masked_raster(
-        envi_path,
+        envi_file,
         masked_data,
         raster.nodata,
         raster,
-        suffix=output_masked_suffix
     )
 
     # Plot results if enabled

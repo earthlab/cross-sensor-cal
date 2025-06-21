@@ -1,5 +1,7 @@
 import os
 import argparse
+from pathlib import Path
+
 from hytools.transform.resampling import calc_resample_coeffs
 import numpy as np
 import spectral
@@ -9,6 +11,8 @@ import sys
 from scipy.interpolate import interp1d
 import glob
 
+from src.file_types import NEONReflectanceBRDFCorrectedENVIHDRFile, NEONReflectanceResampledHDRFile, \
+    NEONReflectanceBRDFCorrectedENVIFile
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -228,7 +232,7 @@ def translate_to_sensor(sensor_type, json_file, hdr_path, resampling_file_path: 
                                         output_filename=output_file_path)
 
 
-def translate_to_other_sensors(folder_path):
+def translate_to_other_sensors(brdf_corrected_img_file: NEONReflectanceBRDFCorrectedENVIFile):
     # List of sensor types to loop through
     sensor_types = [
         'Landsat 5 TM',
@@ -240,27 +244,34 @@ def translate_to_other_sensors(folder_path):
         'MicaSense-to-match OLI and OLI-2'
     ]
 
-    # Find all files ending with '_envi' but not with 'config_envi' or '.json'
-    pattern = os.path.join(folder_path, '*_envi')
-    envi_files = [file for file in glob.glob(pattern) if
-                  not file.endswith('config_envi') and not file.endswith('.json')]
-
-    # Check if we found exactly one file that matches our criteria
-    if len(envi_files) != 1:
-        print(f"Error: Expected to find exactly one file with '_envi' but found {len(envi_files)}: {envi_files}")
-        return
-
-    resampling_file_path = envi_files[0]  # Use the first file found
     json_file = os.path.join(PROJ_DIR, 'data', 'landsat_band_parameters.json')
 
+    brdf_corrected_header_file = NEONReflectanceBRDFCorrectedENVIHDRFile.from_components(
+        brdf_corrected_img_file.domain,
+        brdf_corrected_img_file.site,
+        brdf_corrected_img_file.date,
+        brdf_corrected_img_file.time,
+        brdf_corrected_img_file.suffix,
+        brdf_corrected_img_file.directory
+    )
+
     for sensor_type in sensor_types:
-        hdr_path = f"{resampling_file_path}.hdr"
-        output_path = os.path.join(
-            folder_path, f"{os.path.basename(resampling_file_path)}_resample_"
-            f"{sensor_type.replace(' ', '_').replace('+', 'plus')}.hdr")
+        resampled_dir = Path(os.path.join(os.path.dirname(brdf_corrected_img_file.directory),
+                                     f"Standard_Reflectance_Resample_{sensor_type.replace(' ', '_')}"))
+
+        resampled_hdr_file = NEONReflectanceResampledHDRFile.from_components(
+            brdf_corrected_img_file.domain,
+            brdf_corrected_img_file.site,
+            brdf_corrected_img_file.date,
+            brdf_corrected_img_file.time,
+            sensor_type,
+            brdf_corrected_img_file.suffix,
+            resampled_dir
+        )
 
         try:
-            translate_to_sensor(sensor_type, json_file, hdr_path, resampling_file_path, output_path)
+            translate_to_sensor(sensor_type, json_file, brdf_corrected_header_file, brdf_corrected_img_file.file_path,
+                                resampled_hdr_file.file_path)
 
         # Check for errors
         except Exception as e:

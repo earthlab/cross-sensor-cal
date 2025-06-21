@@ -1,6 +1,9 @@
 import os
 import glob
 import re
+from pathlib import Path
+from typing import List
+
 import pandas as pd
 from shapely.geometry import box
 from rasterio.features import rasterize
@@ -9,6 +12,8 @@ import geopandas as gpd
 from tqdm import tqdm
 import numpy as np
 from rasterio.crs import CRS
+
+from src.file_types import DataFile, NEONReflectanceENVIFile
 
 
 def control_function_for_extraction(directory, polygon_path):
@@ -33,43 +38,39 @@ def control_function_for_extraction(directory, polygon_path):
             print(f"[ERROR] Error while processing raster file {raster_path}: {e}")
 
 
-def find_raster_files_for_extraction(directory):
-    """Finds raster files while prioritizing masked versions if they exist."""
-    all_files = glob.glob(os.path.join(directory, "**"), recursive=True)
+def find_best_reflectance_files(directory: Path) -> List[DataFile]:
+    all_paths = directory.rglob("*.img")
+    parsed = []
 
-    file_groups = {}
-    for file in all_files:
-        # Skip auxiliary files and ancillary files that are not meant for processing.
-        if file.endswith(('.hdr', '.aux.xml', '.json', '.csv', '.png')) or "_ancillary" in os.path.basename(file):
+    for path in all_paths:
+        try:
+            file = NEONReflectanceENVIFile.from_filename(path)
+            parsed.append(file)
+        except ValueError:
             continue
 
-        base_name = os.path.basename(file)
-        key = re.sub(r"_reflectance(_envi)?(_masked)?", "", base_name)
+    # Group by a unique ID (e.g., site + date + time)
+    from collections import defaultdict
 
-        if key not in file_groups:
-            file_groups[key] = {}
+    file_groups = defaultdict(list)
+    for f in parsed:
+        key = (f.domain, f.site, f.date, f.time)
+        file_groups[key].append(f)
 
-        if "_reflectance_envi_masked" in base_name:
-            file_groups[key]["envi_masked"] = file
-        elif "_reflectance_masked" in base_name:
-            file_groups[key]["masked"] = file
-        elif "_reflectance_envi" in base_name:
-            file_groups[key]["envi"] = file
-        elif "_reflectance" in base_name:
-            file_groups[key]["basic"] = file
+    # Select best file per group
+    selected = []
+    for versions in file_groups.values():
+        best = sorted(
+            versions,
+            key=lambda f: (
+                not getattr(f, "is_masked", False),   # prefer masked
+                f.suffix != "envi",                   # prefer envi
+            )
+        )[0]
+        selected.append(best)
 
-    selected_files = []
-    for key, versions in file_groups.items():
-        if "envi_masked" in versions:
-            selected_files.append(versions["envi_masked"])
-        elif "masked" in versions:
-            selected_files.append(versions["masked"])
-        elif "envi" in versions:
-            selected_files.append(versions["envi"])
-        elif "basic" in versions:
-            selected_files.append(versions["basic"])
+    return selected
 
-    return selected_files
 
 
 def get_crs_from_hdr(hdr_path):

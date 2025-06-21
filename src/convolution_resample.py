@@ -4,13 +4,11 @@ import numpy as np
 import json
 from spectral import open_image
 from spectral.io import envi
-import matplotlib.pyplot as plt
 from scipy.stats import norm
 import os
-from glob import glob
 
-from src.file_types import (NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceResampledENVIFile,
-                            NEONReflectanceResampledHDRFile)
+from src.file_types import (NEONReflectanceResampledENVIFile, NEONReflectanceResampledHDRFile,
+                            NEONReflectanceBRDFCorrectedENVIHDRFile)
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
@@ -28,16 +26,16 @@ def gaussian_rsr(wavelengths, center, fwhm):
 
 def resample(input_dir: Path, out_dir: Path):
     print(f'Starting convolutional resample for {input_dir}')
-    brdf_corrected_envi_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(input_dir, 'envi')
-    for brdf_corrected_envi_file in brdf_corrected_envi_files:
+    brdf_corrected_envi_hdr_files = NEONReflectanceBRDFCorrectedENVIHDRFile.find_in_directory(input_dir, 'envi')
+    for brdf_corrected_envi_hdr_file in brdf_corrected_envi_hdr_files:
         try:
-            img = open_image(brdf_corrected_envi_file.file_path)
+            img = open_image(brdf_corrected_envi_hdr_file.file_path)
             hyperspectral_data = img.load()
         except Exception as e:
             print(f"  [ERROR] Could not load image: {e}")
             continue
 
-        header = envi.read_envi_header(hyperspectral_header_file_path)
+        header = envi.read_envi_header(brdf_corrected_envi_hdr_file.file_path)
         wavelengths = header.get('wavelength')
 
         if wavelengths is None:
@@ -59,15 +57,30 @@ def resample(input_dir: Path, out_dir: Path):
             all_sensor_params = json.load(f)
         for sensor_name, sensor_params in all_sensor_params.items():
             resampled_dir = os.path.join(out_dir, f"Convolution_Reflectance_Resample_{sensor_name.replace(' ', '_')}")
-            print(resampled_dir)
-            os.makedirs(resampled_dir, exist_ok=True)
-            resampled_hdr_path = os.path.join(
-                resampled_dir,
-                f"{resampled_base}_resample_{sensor_name.replace(' ', '_')}.hdr"
-            )
-            resampled_img_path = resampled_hdr_path.replace('.hdr', '.img')
 
-            if os.path.exists(resampled_hdr_path) and os.path.exists(resampled_img_path):
+            resampled_hdr_file = NEONReflectanceResampledHDRFile.from_components(
+                brdf_corrected_envi_hdr_file.domain,
+                brdf_corrected_envi_hdr_file.site,
+                brdf_corrected_envi_hdr_file.date,
+                brdf_corrected_envi_hdr_file.time,
+                sensor_name,
+                brdf_corrected_envi_hdr_file.suffix,
+                Path(resampled_dir)
+            )
+
+            resampled_img_file = NEONReflectanceResampledENVIFile.from_components(
+                brdf_corrected_envi_hdr_file.domain,
+                brdf_corrected_envi_hdr_file.site,
+                brdf_corrected_envi_hdr_file.date,
+                brdf_corrected_envi_hdr_file.time,
+                sensor_name,
+                brdf_corrected_envi_hdr_file.suffix,
+                Path(resampled_dir)
+            )
+
+            os.makedirs(resampled_dir, exist_ok=True)
+
+            if resampled_hdr_file.path.exists() and resampled_img_file.path.exists():
                 print(f'Skipping resampling for {sensor_name}, files already exist')
                 continue
 
@@ -98,5 +111,5 @@ def resample(input_dir: Path, out_dir: Path):
                 'data ignore value': header.get('data ignore value'),
             }
 
-            envi.save_image(resampled_hdr_path, resampled, metadata=new_metadata, force=True)
-            print(f"  ✅ Convolution resampled file saved to {resampled_img_path}")
+            envi.save_image(resampled_hdr_file.file_path, resampled, metadata=new_metadata, force=True)
+            print(f"  ✅ Convolution resampled file saved to {resampled_hdr_file.file_path}")

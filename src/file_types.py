@@ -2,6 +2,18 @@ import re
 import os
 from pathlib import Path
 from typing import Optional, Type, Dict, List
+from enum import Enum
+
+
+class SensorType(str, Enum):
+    LANDSAT_5_TM = "Landsat_5_TM"
+    LANDSAT_7_ETM_PLUS = "Landsat 7 ETM+"
+    LANDSAT_8_OLI = "Landsat 8 OLI"
+    LANDSAT_9_OLI_2 = "Landsat 9 OLI-2"
+    MICASENSE = "MicaSense"
+    MICASENSE_MATCH_TM_ETM = "MicaSense-to-match TM and ETM+"
+    MICASENSE_MATCH_OLI = "MicaSense-to-match OLI and OLI-2"
+
 
 class DataFile:
     pattern: re.Pattern = re.compile('')  # Override in subclasses
@@ -41,6 +53,43 @@ class DataFile:
         ]
 
 
+class MaskedFileMixin:
+    @classmethod
+    def masked_pattern(cls) -> re.Pattern:
+        """
+        Wrap the class's regex pattern to allow optional '_masked' before the suffix.
+        Assumes the original pattern ends with: _<suffix>\.img$
+        """
+        base_pattern = cls.pattern.pattern
+        modified_pattern = base_pattern.replace(r"\.img$", r"(?:_masked)?\.img$")
+        return re.compile(modified_pattern)
+
+    @property
+    def is_masked(self) -> bool:
+        return self.path.stem.endswith("_masked")
+
+    @classmethod
+    def match(cls, path: Path) -> re.Match | None:
+        return cls.masked_pattern().match(path.name)
+
+    @property
+    def masked_path(self) -> Path:
+        """
+        Return a new Path with '_masked' inserted before the file extension.
+        """
+        return self.path.with_name(f"{self.path.stem}_masked{self.path.suffix}")
+
+    def masked_version(self):
+        """
+        Return a new instance of this class pointing to the masked version of the file.
+        Assumes the class's __init__ can accept 'path' as a keyword argument.
+        """
+        return self.__class__.from_filename(path=self.masked_path, **{
+            k: v for k, v in self.__dict__.items()
+            if k != "path"
+        })
+
+
 class NEONReflectanceFile(DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance\.h5$"
@@ -54,7 +103,7 @@ class NEONReflectanceFile(DataFile):
         self.time = time
 
 
-class NEONReflectanceENVIFile(DataFile):
+class NEONReflectanceENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance(?:[-_])envi\.img$"
     )
@@ -105,7 +154,7 @@ class NEONReflectanceAncillaryENVIFileHeader(DataFile):
         self.time = time
 
     @classmethod
-    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceAncillaryENVIFileHeader":
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_ancillary_envi.img"
         path = folder / filename
         return cls(path, domain=domain, site=site, date=date, time=time)
@@ -137,7 +186,34 @@ class NEONReflectanceConfigFile(DataFile):
         return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
 
 
-class NEONReflectanceBRDFCorrectedENVIFile(DataFile):
+class NEONReflectanceBRDFCorrectedENVIFile(MaskedFileMixin, DataFile):
+    pattern = re.compile(
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_(?P<suffix>[a-z]{3,4})\.img$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+        self.suffix = suffix
+
+    @classmethod
+    def from_components(
+        cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
+    ) -> "NEONReflectanceBRDFCorrectedENVIFile":
+        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_{suffix}.img"
+        path = folder / filename
+        return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
+
+    @classmethod
+    def find_in_directory(cls, directory: Path, suffix: str) -> List["NEONReflectanceBRDFCorrectedENVIFile"]:
+        return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
+
+
+class NEONReflectanceBRDFCorrectedENVIHDRFile(DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
         r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_(?P<suffix>[a-z]{3,4})\.img$"
@@ -256,7 +332,7 @@ class NEONReflectanceCoefficientsFile(DataFile):
 
         return results
 
-class NEONReflectanceResampledENVIFile(DataFile):
+class NEONReflectanceResampledENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
         r"(?P<date>\d{8})_(?P<time>\d{6})_resampled_"
@@ -289,6 +365,15 @@ class NEONReflectanceResampledENVIFile(DataFile):
         return [
             f for f in super().find_in_directory(directory)
             if f.sensor == sensor_safe and f.suffix == suffix
+        ]
+
+    @classmethod
+    def find_all_sensors_in_directory(
+            cls, directory: Path, suffix: str
+    ) -> List["NEONReflectanceResampledENVIFile"]:
+        return [
+            f for f in super().find_in_directory(directory)
+            if any(f.sensor == sensor.value.replace(' ', '_') and f.suffix == suffix for sensor in SensorType)
         ]
 
 
