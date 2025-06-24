@@ -69,8 +69,8 @@ class MaskedFileMixin:
         return self.path.stem.endswith("_masked")
 
     @classmethod
-    def match(cls, path: Path) -> re.Match | None:
-        return cls.masked_pattern().match(path.name)
+    def match(cls, path: str) -> re.Match | None:
+        return cls.masked_pattern().match(path)
 
     @property
     def masked_path(self) -> Path:
@@ -216,7 +216,7 @@ class NEONReflectanceBRDFCorrectedENVIFile(MaskedFileMixin, DataFile):
 class NEONReflectanceBRDFCorrectedENVIHDRFile(DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_(?P<suffix>[a-z]{3,4})\.img$"
+        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_(?P<suffix>[a-z]{3,4})\.hdr$"
     )
 
     def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
@@ -231,7 +231,7 @@ class NEONReflectanceBRDFCorrectedENVIHDRFile(DataFile):
     def from_components(
         cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
     ) -> "NEONReflectanceBRDFCorrectedENVIFile":
-        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_{suffix}.img"
+        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_{suffix}.hdr"
         path = folder / filename
         return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
 
@@ -483,3 +483,26 @@ class NEONReflectanceResampledMaskHDRFile(DataFile):
             f for f in super().find_in_directory(directory)
             if f.sensor == sensor_safe and f.suffix == suffix
         ]
+
+
+class SpectralDataCSVFile(DataFile):
+    pattern = re.compile(
+        r"(?P<base>NEON_.*)_spectral_data\.csv$"
+    )
+
+    def __init__(self, path: Path, base: str):
+        super().__init__(path)
+        self.base = base
+
+    @classmethod
+    def from_raster_file(cls, raster_file: DataFile) -> "SpectralDataCSVFile":
+        base = raster_file.path.stem  # removes .img
+        filename = f"{base}_spectral_data.csv"
+        return cls(raster_file.path.parent / filename, base=base)
+
+    @classmethod
+    def from_filename(cls, path: Path) -> "SpectralDataCSVFile":
+        match = cls.match(path)
+        if not match:
+            raise ValueError(f"Filename does not match SpectralDataCSVFile pattern: {path}")
+        return cls(path, base=match.group("base"))

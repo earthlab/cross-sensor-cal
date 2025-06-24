@@ -24,11 +24,13 @@ def gaussian_rsr(wavelengths, center, fwhm):
     return rsr / np.sum(rsr)
 
 
-def resample(input_dir: Path, out_dir: Path):
+def resample(input_dir: Path):
     print(f'Starting convolutional resample for {input_dir}')
     brdf_corrected_envi_hdr_files = NEONReflectanceBRDFCorrectedENVIHDRFile.find_in_directory(input_dir, 'envi')
+
     for brdf_corrected_envi_hdr_file in brdf_corrected_envi_hdr_files:
         try:
+            print(f'Opening {brdf_corrected_envi_hdr_file.file_path}')
             img = open_image(brdf_corrected_envi_hdr_file.file_path)
             hyperspectral_data = img.load()
         except Exception as e:
@@ -56,7 +58,8 @@ def resample(input_dir: Path, out_dir: Path):
         with open(os.path.join(PROJ_DIR, 'data', 'landsat_band_parameters.json'), 'r') as f:
             all_sensor_params = json.load(f)
         for sensor_name, sensor_params in all_sensor_params.items():
-            resampled_dir = os.path.join(out_dir, f"Convolution_Reflectance_Resample_{sensor_name.replace(' ', '_')}")
+            resampled_dir = os.path.join(input_dir, brdf_corrected_envi_hdr_file.directory.name,
+                                         f"Convolution_Reflectance_Resample_{sensor_name.replace(' ', '_')}")
 
             resampled_hdr_file = NEONReflectanceResampledHDRFile.from_components(
                 brdf_corrected_envi_hdr_file.domain,

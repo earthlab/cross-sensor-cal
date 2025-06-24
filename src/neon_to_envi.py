@@ -175,7 +175,7 @@ def flight_lines_to_envi(input_dir: str, output_dir: str):
     for neon_reflectance_file in neon_reflectance_files:
         print(f"Converting {neon_reflectance_file.name} to ENVI format")
         try:
-            neon_to_envi(images=[neon_reflectance_file.file_path], output_dir=output_dir, anc=True)
+            neon_to_envi(images=[neon_reflectance_file.file_path], output_dir=input_dir, anc=True)
         except Exception as e:
             print(f"Error processing {neon_reflectance_file.name}: {str(e)}")
         print("Command executed successfully")

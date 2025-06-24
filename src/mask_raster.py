@@ -281,6 +281,10 @@ def mask_raster_with_polygons(
         else:
             plt.close()
 
+    if envi_file.masked_path.exists():
+        print(f'Masked ')
+        return
+
     # Start of the masking function logic
     try:
         raster, polygons = load_data(envi_file.file_path, geojson_path)
@@ -327,7 +331,7 @@ def mask_raster_with_polygons(
         envi_file,
         masked_data,
         raster.nodata,
-        raster,
+        raster
     )
 
     # Plot results if enabled

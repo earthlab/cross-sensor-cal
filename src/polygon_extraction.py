@@ -3,6 +3,8 @@ import glob
 import re
 from pathlib import Path
 from typing import List
+from collections import defaultdict
+from typing import List, Type
 
 import pandas as pd
 from shapely.geometry import box
@@ -13,7 +15,8 @@ from tqdm import tqdm
 import numpy as np
 from rasterio.crs import CRS
 
-from src.file_types import DataFile, NEONReflectanceENVIFile
+from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, \
+    NEONReflectanceResampledENVIFile, SpectralDataCSVFile
 
 
 def control_function_for_extraction(directory, polygon_path):
@@ -21,55 +24,63 @@ def control_function_for_extraction(directory, polygon_path):
     Finds and processes raster files in a directory.
     Processes data in chunks and saves output to CSV.
     """
-    raster_paths = find_raster_files_for_extraction(directory)
-    print(raster_paths)
+    raster_files = get_all_priority_rasters(directory, 'envi')
 
-    if not raster_paths:
+    if not raster_files:
         print(f"[DEBUG] No matching raster files found in {directory}.")
         return
 
-    for raster_path in raster_paths:
+    for raster_file in raster_files:
         try:
-            base_name = os.path.basename(raster_path).replace('.img', '').replace('.tif', '')
-            output_csv_name = f"{base_name}_spectral_data.csv"
-            output_csv_path = os.path.join(directory, output_csv_name)
-            process_raster_in_chunks(raster_path, polygon_path, output_csv_path)
+            spectral_csv_file = SpectralDataCSVFile.from_raster_file(raster_file)
+            print(f"[DEBUG] Writing to {spectral_csv_file.path}")
+            process_raster_in_chunks(raster_file, polygon_path, spectral_csv_file)
         except Exception as e:
-            print(f"[ERROR] Error while processing raster file {raster_path}: {e}")
+            print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
 
 
-def find_best_reflectance_files(directory: Path) -> List[DataFile]:
-    all_paths = directory.rglob("*.img")
-    parsed = []
-
-    for path in all_paths:
-        try:
-            file = NEONReflectanceENVIFile.from_filename(path)
-            parsed.append(file)
-        except ValueError:
-            continue
-
-    # Group by a unique ID (e.g., site + date + time)
-    from collections import defaultdict
-
-    file_groups = defaultdict(list)
-    for f in parsed:
+def select_best_files(files: List[DataFile]) -> List[DataFile]:
+    grouped = defaultdict(list)
+    for f in files:
         key = (f.domain, f.site, f.date, f.time)
-        file_groups[key].append(f)
+        grouped[key].append(f)
 
-    # Select best file per group
     selected = []
-    for versions in file_groups.values():
+    for group in grouped.values():
+        # Sort using priority: masked + BRDF > masked > unmasked BRDF > unmasked
         best = sorted(
-            versions,
+            group,
             key=lambda f: (
-                not getattr(f, "is_masked", False),   # prefer masked
-                f.suffix != "envi",                   # prefer envi
+                not getattr(f, "is_masked", False),
+                "brdf" not in f.path.name.lower(),
+                getattr(f, "suffix", "") != "envi"
             )
         )[0]
         selected.append(best)
 
     return selected
+
+
+def find_best_resampled_files(directory: Path, suffix: str) -> List[NEONReflectanceResampledENVIFile]:
+    all_resampled = NEONReflectanceResampledENVIFile.find_all_sensors_in_directory(directory, suffix)
+    return select_best_files(all_resampled)
+
+
+def get_all_priority_rasters(base_dir: Path, suffix: str = 'envi') -> List[DataFile]:
+    # 1. Get BRDF-corrected reflectance files
+    brdf_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_dir, suffix)
+
+    # 2. Get original reflectance files
+    raw_files = NEONReflectanceENVIFile.find_in_directory(base_dir)
+
+    # 3. Combine and select best
+    all_candidates = brdf_files + raw_files
+    selected_originals = select_best_files(all_candidates)
+
+    # 4. Get best resampled files
+    selected_resampled = find_best_resampled_files(base_dir, suffix)
+
+    return selected_originals + selected_resampled
 
 
 
@@ -117,51 +128,34 @@ def get_crs_from_hdr(hdr_path):
         return None
 
 
-def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_size=100000):
+def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_csv_file: DataFile, chunk_size=100000):
     """
-    Processes a raster file in chunks, extracts CRS from an accompanying .hdr file if available,
-    assigns CRS to the polygon layer if missing, and writes out spectral data to a CSV file.
-
-    Additional metadata columns added:
-    - Raster_File: Name of the raster file.
-    - Polygon_File: Name of the polygon file.
-    - Chunk_Number: Current chunk index.
-    - CRS: Coordinate reference system of the raster.
-    - Pixel_ID: Unique pixel identifier computed from the global row and column indices.
-    - Pixel_X, Pixel_Y: X and Y coordinates of each pixel.
-
-    Args:
-        raster_path (str): Path to the raster file.
-        polygon_path (str): Path to the polygon (vector) file.
-        output_csv_path (str): Path where the output CSV will be saved.
-        chunk_size (int, optional): Number of pixels per chunk. Defaults to 100000.
+    Processes a raster file in chunks, intersects pixels with a polygon, and writes extracted
+    spectral and spatial data to a CSV file.
     """
-    hdr_path = raster_path.replace(".img", ".hdr").replace(".tif", ".hdr")
+
+    raster_path = raster_file.path
+    output_csv_path = output_csv_file.path
+    hdr_path = raster_path.with_suffix(".hdr")
 
     with rasterio.open(raster_path) as src:
         crs_from_hdr = None
-
-        # Check for .hdr file and extract CRS if available
-        if os.path.exists(hdr_path):
+        if hdr_path.exists():
             crs_from_hdr = get_crs_from_hdr(hdr_path)
 
         polygons = gpd.read_file(polygon_path)
 
-        # Assign CRS to polygons if missing
         if polygons.crs is None:
             print(f"[WARNING] {polygon_path} has no CRS. Assigning from .hdr file if available.")
             polygons = polygons.set_crs(crs_from_hdr if crs_from_hdr else "EPSG:4326")
 
-        # If the raster's CRS is missing, assign from .hdr file if available
         if src.crs is None and crs_from_hdr:
             print(f"[INFO] Assigning CRS from .hdr file: {crs_from_hdr}")
             src = src.to_crs(crs_from_hdr)
 
-        # Ensure both raster and polygons have the same CRS
         if polygons.crs != src.crs:
             polygons = polygons.to_crs(src.crs)
 
-        # Rasterize the polygon layer to create an array of polygon IDs
         polygon_values = rasterize(
             [(geom, idx + 1) for idx, geom in enumerate(polygons.geometry)],
             out_shape=(src.height, src.width),
@@ -174,30 +168,25 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
         height, width = src.height, src.width
         num_chunks = (height * width // chunk_size) + (1 if (height * width) % chunk_size else 0)
 
-        # Determine band prefix based on file naming
-        filename = os.path.basename(raster_path)
-        if "_masked" in filename:
+        # Smart prefixing
+        if getattr(raster_file, "is_masked", False):
             band_prefix = "Masked_band_"
-        elif "_envi" in filename:
+        elif getattr(raster_file, "suffix", "") == "envi":
             band_prefix = "ENVI_band_"
         else:
             band_prefix = "Original_band_"
-        print(f"[INFO] Processing {filename} as {band_prefix}")
-        print(f"[INFO] Processing raster: {raster_path} with {total_bands} bands.")
 
-        # Process raster in chunks
-        with tqdm(total=num_chunks, desc=f"Processing {filename}", unit="chunk") as pbar:
+        print(f"[INFO] Processing {raster_path.name} with {total_bands} bands as {band_prefix}")
+
+        with tqdm(total=num_chunks, desc=f"Processing {raster_path.name}", unit="chunk") as pbar:
             first_chunk = True
             for i in range(num_chunks):
                 row_start = (i * chunk_size) // width
                 row_end = min(((i + 1) * chunk_size) // width + 1, height)
 
-                # Read a chunk of rows using a window
                 data = src.read(window=((row_start, row_end), (0, width)))
-                # Reshape data from (bands, rows, cols) to (pixels, bands)
                 data_chunk = data.reshape(total_bands, -1).T
 
-                # Generate row and column indices for the chunk
                 row_indices, col_indices = np.meshgrid(
                     np.arange(row_start, row_end),
                     np.arange(width),
@@ -206,52 +195,36 @@ def process_raster_in_chunks(raster_path, polygon_path, output_csv_path, chunk_s
                 row_indices_flat = row_indices.flatten()
                 col_indices_flat = col_indices.flatten()
 
-                # Filter out rows with -9999 values
                 valid_mask = ~np.any(data_chunk == -9999, axis=1)
                 data_chunk = data_chunk[valid_mask]
 
-                # Filter row and column indices for valid pixels
                 valid_rows = row_indices_flat[valid_mask]
                 valid_cols = col_indices_flat[valid_mask]
-
-                # Calculate a unique Pixel ID using global row and column indices
                 pixel_ids = valid_rows * width + valid_cols
 
-                # Calculate pixel coordinates using the raster's affine transform
                 transform = src.transform
                 x_coords = transform.a * valid_cols + transform.b * valid_rows + transform.c
                 y_coords = transform.d * valid_cols + transform.e * valid_rows + transform.f
 
-                # Get corresponding polygon values for valid pixels
                 polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
 
-                # Create DataFrame for the spectral data
                 chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
-
-                # Add extra metadata columns
-                chunk_df["Raster_File"] = os.path.basename(raster_path)
-                chunk_df["Polygon_File"] = os.path.basename(polygon_path)
+                chunk_df["Raster_File"] = raster_path.name
+                chunk_df["Polygon_File"] = polygon_path
                 chunk_df["Chunk_Number"] = i
-                if src.crs is not None:
-                    chunk_df["CRS"] = src.crs.to_string()
-
-                # Add pixel ID and coordinate columns
                 chunk_df["Pixel_ID"] = pixel_ids
                 chunk_df["Pixel_X"] = x_coords
                 chunk_df["Pixel_Y"] = y_coords
-
-                # Add polygon ID column
                 chunk_df["Polygon_ID"] = polygon_chunk
+                if src.crs:
+                    chunk_df["CRS"] = src.crs.to_string()
 
-                # Rename band columns to include a prefix
                 chunk_df.rename(columns={f"Band_{b + 1}": f"{band_prefix}{b + 1}" for b in range(total_bands)},
                                 inplace=True)
 
-                # Merge with polygon attributes based on Polygon_ID
                 polygon_attributes = polygons.reset_index().rename(columns={'index': 'Polygon_ID'})
                 chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
 
-                # Write the chunk to CSV (using write mode for first chunk, then append)
                 mode = 'w' if first_chunk else 'a'
                 chunk_df.to_csv(output_csv_path, mode=mode, header=first_chunk, index=False)
 
