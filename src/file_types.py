@@ -1,7 +1,7 @@
 import re
 import os
 from pathlib import Path
-from typing import Optional, Type, Dict, List
+from typing import Optional, List
 from enum import Enum
 
 
@@ -118,6 +118,25 @@ class NEONReflectanceENVIFile(MaskedFileMixin, DataFile):
     @classmethod
     def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceENVIFile":
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_envi.img"
+        path = folder / filename
+        return cls(path, domain=domain, site=site, date=date, time=time)
+
+
+class NEONReflectanceENVHDRFile(MaskedFileMixin, DataFile):
+    pattern = re.compile(
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance(?:[-_])envi\.hdr$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+
+    @classmethod
+    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceENVIHDRFile":
+        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_envi.hdr"
         path = folder / filename
         return cls(path, domain=domain, site=site, date=date, time=time)
 
@@ -267,6 +286,33 @@ class NEONReflectanceBRDFMaskENVIFile(DataFile):
         return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
 
 
+class NEONReflectanceBRDFMaskENVIHDRFile(DataFile):
+    pattern = re.compile(
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_mask_(?P<suffix>[a-z]{3,4})\.hdr$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+        self.suffix = suffix
+
+    @classmethod
+    def from_components(
+        cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
+    ) -> "NEONReflectanceBRDFMaskENVIHDRFile":
+        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_mask_{suffix}.hdr"
+        path = folder / filename
+        return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
+
+    @classmethod
+    def find_in_directory(cls, directory: Path, suffix: str) -> List["NEONReflectanceBRDFMaskENVIHDRFile"]:
+        return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
+
+
 class NEONReflectanceCoefficientsFile(DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
@@ -317,19 +363,18 @@ class NEONReflectanceCoefficientsFile(DataFile):
         correction: Optional[str] = None,
         suffix: Optional[str] = None
     ) -> list["NEONReflectanceCoefficientsFile"]:
-        files = cls._iter_matching_files(directory)
+        # Use the base class find_in_directory to get all matching files
+        all_files = super().find_in_directory(directory)
+        
+        # Filter based on correction and suffix if provided
         results = []
-
-        for p in files:
-            match = cls.match(p.name)
-            if not match:
+        for file_obj in all_files:
+            if correction and file_obj.correction != correction:
                 continue
-            if correction and match.group("correction") != correction:
+            if suffix and file_obj.suffix != suffix:
                 continue
-            if suffix and match.group("suffix") != suffix:
-                continue
-            results.append(cls.from_filename(p))
-
+            results.append(file_obj)
+        
         return results
 
 class NEONReflectanceResampledENVIFile(MaskedFileMixin, DataFile):
@@ -502,7 +547,7 @@ class SpectralDataCSVFile(DataFile):
 
     @classmethod
     def from_filename(cls, path: Path) -> "SpectralDataCSVFile":
-        match = cls.match(path)
+        match = cls.match(path.name)
         if not match:
             raise ValueError(f"Filename does not match SpectralDataCSVFile pattern: {path}")
         return cls(path, base=match.group("base"))

@@ -13,10 +13,13 @@ from hytools.topo import calc_topo_coeffs
 from hytools.brdf import calc_brdf_coeffs
 from hytools.glint import set_glint_parameters
 from hytools.masks import mask_create
+from spectral import open_image
+from spectral.io import envi
 
 from src.file_types import (NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceConfigFile,
                             NEONReflectanceCoefficientsFile, NEONReflectanceAncillaryENVIFile,
-                            NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFMaskENVIFile)
+                            NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFMaskENVIFile,
+                            NEONReflectanceBRDFCorrectedENVIHDRFile)
 
 warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
@@ -461,3 +464,33 @@ def generate_config_json(parent_directory):
         print("Configuration files generation completed.\n")
 
 
+def apply_offset_to_envi(input_dir: Path, offset: float):
+    """
+    Applies a constant offset to all valid pixels in an ENVI image.
+    Invalid/masked pixels (NaN or -9999) are preserved. Values are clipped to a minimum of 0.
+
+    Args:
+        offset (float): Value to add to each pixel.
+    """
+    brdf_corrected_header_files = NEONReflectanceBRDFCorrectedENVIHDRFile.find_in_directory(input_dir, 'envi')
+
+    for brdf_corrected_header_file in brdf_corrected_header_files:
+        print(f'Applying offset of {offset} to {brdf_corrected_header_file.file_path}')
+        img = open_image(brdf_corrected_header_file.file_path)
+        data = img.load().copy()  # Load into memory so we can overwrite
+
+        # Create mask for invalid values (NaN or -9999)
+        mask = np.isnan(data) | (data == -9999)
+
+        # Apply offset where valid
+        data[~mask] += offset
+
+        # Clip values to be >= 0
+        data = np.clip(data, 0, None)
+
+        # Restore mask values
+        data[mask] = -9999  # Or np.nan if you prefer
+
+        # Overwrite original ENVI file
+        envi.save_image(brdf_corrected_header_file.file_path, data, interleave=str(img.interleave).lower(),
+                        byte_order=str(img.byte_order).lower(), metadata=img.metadata, force=True)
