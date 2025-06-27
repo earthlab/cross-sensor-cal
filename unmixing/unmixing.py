@@ -16,6 +16,12 @@ from tqdm import tqdm
 from rasterio.transform import Affine
 from shapely.geometry import Point
 
+import glob
+import numpy as np
+import rasterio
+from rasterio.mask import mask
+from shapely.geometry import mapping
+
 import os
 
 
@@ -44,7 +50,7 @@ def download_ecoregion():
 		# Unzip into the correct folder
 		os.makedirs(os.path.dirname(ecoregion_download), exist_ok=True)
 		with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-			zip_ref.extractall('data/Ecoregion')
+			zip_ref.extractall(os.path.join('data', 'Ecoregion'))
 
 		# Delete the zip file
 		os.remove(zip_path)
@@ -160,13 +166,6 @@ def read_landsat_data(landsat_file: str, geometries):
 
     return clipped_stack, nan_max
 
-
-import os
-import glob
-import numpy as np
-import rasterio
-from rasterio.mask import mask
-from shapely.geometry import mapping
 
 def read_landsat_data_with_transform(landsat_dir: str, geometries):
     """
@@ -351,88 +350,6 @@ def write_to_raster(tile_results):
     print(f"Wrote merged mosaic → {output_path}")
 
 
-def random_unit_vectors(n_vectors, n_bands, seed=None):
-    rng = np.random.default_rng(seed)
-    vectors = rng.normal(size=(n_vectors, n_bands))  # Gaussian sampling
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    return vectors / norms
-
-
-def ppi(spectral_library, n_samples, n_bands):
-    ruv = random_unit_vectors(3000, n_bands)
-    ppi_score = np.zeros(n_samples)
-
-    for v in ruv:
-        projections = np.dot(v, spectral_library.T)
-        max_idx = np.argmax(projections)
-        min_idx = np.argmin(projections)
-        ppi_score[max_idx] += 1
-        ppi_score[min_idx] += 1
-
-    return ppi_score
-
-
-# --- NFINDR Iterative Selection ---
-def nfindr_iterative_selection(spectral_library, max_endmembers=21, max_iterations=3):
-    """
-    True NFINDR implementation using simplex volume maximization.
-
-    Args:
-        spectral_library: (n_samples, n_bands) array of spectral vectors
-        max_endmembers: number of endmembers to extract
-        max_iterations: number of full replacement passes
-
-    Returns:
-        dict containing selected endmembers, their indices, and volume history
-    """
-    from scipy.spatial import ConvexHull
-    import random
-
-    n_samples, n_bands = spectral_library.shape
-    # if max_endmembers > n_bands + 1:
-    #     raise ValueError("max_endmembers cannot exceed number of bands + 1")
-
-    # Initialize by selecting random unique indices
-    selected_indices = random.sample(range(n_samples), max_endmembers)
-    current_endmembers = spectral_library[selected_indices, :]
-    volume_history = []
-
-    def compute_simplex_volume(endmembers):
-        # Subtract mean to ensure correct affine volume
-        centered = endmembers - np.mean(endmembers, axis=0)
-        try:
-            hull = ConvexHull(centered)
-            return hull.volume
-        except:
-            return 0.0
-
-    current_volume = compute_simplex_volume(current_endmembers)
-    volume_history.append(current_volume)
-
-    print('Running')
-    for _ in range(max_iterations):
-        improved = False
-        for i in range(max_endmembers):
-            for j in range(n_samples):
-                if j in selected_indices:
-                    continue
-                trial_indices = selected_indices.copy()
-                trial_indices[i] = j
-                trial_endmembers = spectral_library[trial_indices, :]
-                volume = compute_simplex_volume(trial_endmembers)
-                if volume > current_volume:
-                    selected_indices = trial_indices
-                    current_volume = volume
-                    improved = True
-        volume_history.append(current_volume)
-    print('Done')
-
-    return {
-        'endmembers': spectral_library[selected_indices, :],
-        'indices': selected_indices,
-        'volume_history': volume_history
-    }
-
 
 def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_mean", stop_threshold=0.01):
     if not isinstance(spectral_library, np.ndarray):
@@ -456,9 +373,6 @@ def ies_from_library(spectral_library, num_endmembers, initial_selection="dist_m
     if initial_selection == "max_norm":
         norms = np.linalg.norm(spectral_library, axis=1)
         first_idx = np.argmax(norms)
-    elif initial_selection == 'ppi':
-        ppi_score = ppi(spectral_library, n_samples, n_bands)
-        first_idx = np.argmax(ppi_score)
     else:  # "dist_mean"
         mean_spectrum = np.mean(spectral_library, axis=0)
         distances = np.linalg.norm(spectral_library - mean_spectrum, axis=1)
