@@ -1,5 +1,5 @@
 import collections
-from typing import List
+from typing import List, Union
 
 import requests
 import zipfile
@@ -15,6 +15,7 @@ from spectral.io import envi
 from tqdm import tqdm
 from rasterio.transform import Affine
 from shapely.geometry import Point
+from pathlib import Path
 
 import glob
 import numpy as np
@@ -23,6 +24,11 @@ from rasterio.mask import mask
 from shapely.geometry import mapping
 
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from src.file_types import MaskedSpectralCSVFile, EndmembersCSVFile, \
+    UnmixingModelBestTIF, UnmixingModelFractionsTIF, UnmixingModelRMSETIF
 
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -480,8 +486,22 @@ def build_look_up_table(endmember_classes):
     return look_up_table
 
 
-def main(signatures_path: str, landsat_dir: str, ecoregion_mask: str):
+def main(signatures_paths: Union[str, List[str]], landsat_dir: str, ecoregion_mask: str, output_dir: str = None):
+    """
+    Main unmixing function.
+    
+    Parameters:
+    - signatures_paths: Either a single path or list of paths to masked spectral CSV files
+    - landsat_dir: Directory containing Landsat data
+    - ecoregion_mask: Name of ecoregion to use as mask
+    - output_dir: Output directory for results (defaults to PROJ_DIR/output)
+    """
     download_ecoregion()
+
+    if output_dir is None:
+        output_dir = os.path.join(PROJ_DIR, 'output')
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
     ecoregion_download = os.path.join(PROJ_DIR, 'data', 'Ecoregion', 'us_eco_l3.shp')
     ecoregions = gpd.read_file(ecoregion_download)
@@ -495,15 +515,39 @@ def main(signatures_path: str, landsat_dir: str, ecoregion_mask: str):
 
     landsat, max_landsat = read_landsat_data(landsat_dir, geometries)
 
-    signatures = pd.read_csv(signatures_path)
+    # Handle single or multiple signature paths
+    if isinstance(signatures_paths, str):
+        signatures_paths = [signatures_paths]
+    
+    # Load and concatenate all signatures
+    all_signatures = []
+    signature_files = []
+    
+    for sig_path in signatures_paths:
+        # Try to create MaskedSpectralCSVFile from path
+        sig_file = MaskedSpectralCSVFile.from_filename(Path(sig_path))
+        signature_files.append(sig_file)
+        
+        signatures_df = pd.read_csv(sig_path)
+        all_signatures.append(signatures_df)
+    
+    # Concatenate all signatures
+    signatures = pd.concat(all_signatures, ignore_index=True)
+    
+    # Use the first signature file for naming outputs
+    primary_sig_file = signature_files[0]
+    
     spectral_library = signatures.iloc[:, 0:7].to_numpy()
 
     ies_results = ies_from_library(spectral_library, len(signatures.values), initial_selection='dist_mean')
-    #ies_results = nfindr_iterative_selection(spectral_library, max_iterations=1000)
     indices = ies_results['indices']
 
     endmember_library = signatures.iloc[indices, [0, 1, 2, 3, 4, 5, 6]].copy()
-    signatures.iloc[indices, [0, 1, 2, 3, 4, 5, 6, 22]].copy().to_csv('endmembers.csv')
+    
+    # Save endmembers with proper naming
+    endmembers_file = EndmembersCSVFile.from_signatures_file(primary_sig_file, output_path)
+    signatures.iloc[indices, [0, 1, 2, 3, 4, 5, 6, 22]].copy().to_csv(endmembers_file.path)
+    
     max_endmember = np.nanmax(endmember_library)
 
     class_labels = signatures.iloc[indices, 22]
@@ -551,13 +595,15 @@ def main(signatures_path: str, landsat_dir: str, ecoregion_mask: str):
     # === Write output arrays as rasters using rasterio ===
 
     from rasterio.transform import from_origin
-    # Assume transform and crs are still available from read_landsat_data
-    # transform and crs are already loaded in the local scope
+    
+    # Create file type objects for outputs
+    model_best_file = UnmixingModelBestTIF.from_signatures_file(primary_sig_file, output_path)
+    model_fractions_file = UnmixingModelFractionsTIF.from_signatures_file(primary_sig_file, output_path)
+    model_rmse_file = UnmixingModelRMSETIF.from_signatures_file(primary_sig_file, output_path)
+    
     # Write model_best raster (one band per class)
-    model_best_path = os.path.join(PROJ_DIR, 'output', 'model_best.tif')
-    os.makedirs(os.path.dirname(model_best_path), exist_ok=True)
     with rasterio.open(
-        model_best_path,
+        model_best_file.path,
         'w',
         driver='GTiff',
         height=height,
@@ -572,10 +618,8 @@ def main(signatures_path: str, landsat_dir: str, ecoregion_mask: str):
             dst.set_band_description(i + 1, str(np.unique(class_list)[i]))
 
     # Write model_fractions raster (one band per class + 1 for shade)
-    model_fractions_path = os.path.join(PROJ_DIR, 'output', 'model_fractions.tif')
-    os.makedirs(os.path.dirname(model_fractions_path), exist_ok=True)
     with rasterio.open(
-        model_fractions_path,
+        model_fractions_file.path,
         'w',
         driver='GTiff',
         height=height,
@@ -592,9 +636,8 @@ def main(signatures_path: str, landsat_dir: str, ecoregion_mask: str):
         dst.set_band_description(n_classes + 1, 'shade')
 
     # Write model_rmse raster
-    model_rmse_path = os.path.join(PROJ_DIR, 'output', 'model_rmse.tif')
     with rasterio.open(
-        model_rmse_path,
+        model_rmse_file.path,
         'w',
         driver='GTiff',
         height=height,
@@ -606,201 +649,9 @@ def main(signatures_path: str, landsat_dir: str, ecoregion_mask: str):
     ) as dst:
         dst.write(model_rmse, 1)
         dst.set_band_description(1, 'rmse')
-
-
-def load_signatures_with_coords(hdr_dir: str) -> gpd.GeoDataFrame:
-    """
-    Reads every .img, masks invalid pixels, and for each valid pixel
-    returns its 7-band spectrum *and* its projected x/y coordinate.
-    """
-    records = []
-    for img_path in sorted(glob.glob(os.path.join(hdr_dir, "*masked_masked.img"))):
-        with rasterio.open(img_path) as src:
-            arr: np.ndarray = src.read()                # shape (7, H, W)
-            transform: Affine = src.transform           # maps col,row to x,y
-            mask = np.any(arr == -9999, axis=0)         # True = invalid
-            # get all valid row,col indices
-            rows, cols = np.where(~mask)
-            # for each valid pixel, extract spectrum and compute x,y
-            for r, c in zip(rows, cols):
-                spectrum = arr[:, r, c]                 # length 7
-                x, y = transform * (c, r)              # col,row → x,y
-                rec = dict(
-                    band_1 = float(spectrum[0]),
-                    band_2 = float(spectrum[1]),
-                    band_3 = float(spectrum[2]),
-                    band_4 = float(spectrum[3]),
-                    band_5 = float(spectrum[4]),
-                    band_6 = float(spectrum[5]),
-                    band_7 = float(spectrum[6]),
-                    geometry = Point(x, y)
-                )
-                records.append(rec)
-
-    # build GeoDataFrame
-    gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=src.crs)
-    return gdf
-
-
-def main_from_images(resampled_dir, landsat_file: str, ecoregion_mask: str):
-    # 1. download / read your ecoregions
-    download_ecoregion()
-    eco_shp = os.path.join(PROJ_DIR, 'data', 'Ecoregion', 'us_eco_l3.shp')
-    ecoregions = gpd.read_file(eco_shp)
-    geometries = ecoregions[ecoregions['US_L3NAME'] == ecoregion_mask]
-
-    # 2. load the pixel signatures from your ENVI files
-    sig_gdf = load_signatures_with_coords(resampled_dir)
-
-    cover_polys = gpd.read_file('data/aop_macrosystems_data_1_7_25.geojson').to_crs(epsg=4326)
-    if cover_polys.crs != sig_gdf.crs:
-        cover_polys = cover_polys.to_crs(sig_gdf.crs)
-    print('A')
-
-    sig_with_cover = gpd.sjoin(
-        sig_gdf,
-        cover_polys[["cover_category", "geometry"]],
-        how="left",
-        predicate="within"
-    )
-    sig_with_cover = sig_with_cover.dropna(subset=["cover_category"]).reset_index(drop=True)
-    print('B')
-    # Now sig_with_cover has columns band_1...band_7 and cover_category
-
-    # 5. Build your spectral library as before
-    spectral_library = sig_with_cover[[f"band_{i}" for i in range(1, 8)]].to_numpy()
-
-    print(len(spectral_library))
-
-    ies_results = ies_from_library(
-        spectral_library,
-        num_endmembers=spectral_library.shape[0],
-        initial_selection='dist_mean'
-    )
-    indices = ies_results["indices"]
-    print("Selected endmember indices:", indices)
-
-    # 6. Extract endmember spectra
-    endmember_spectra = spectral_library[indices, :]  # shape (k,7)
-    max_endmember = np.nanmax(endmember_spectra)
-
-    # 7. Pull out their cover_category
-    endmember_cats = sig_with_cover.iloc[indices]["cover_category"].values
-
-    # 8. Build your final endmember library DataFrame
-    df_end = pd.DataFrame(
-        endmember_spectra,
-        columns=[f"band_{i}" for i in range(1, 8)]
-    )
-    df_end["cover_category"] = endmember_cats
-
-    endmember_library = df_end
-
-    with rasterio.open(landsat_file) as src:
-        transform = src.transform
-        crs = src.crs
-
-    # class labels: here we lowercase the array indices;
-    # adapt if you have a separate label array
-    class_list = df_end["cover_category"].values
-    n_classes = len(np.unique(class_list))
-    complexity_level = n_classes + 1
-
-    print(class_list)
-
-    # 4. Now read the entire Landsat stack for MESMA
-    #    (assuming read_landsat_data returns the full cube and max value)
-    landsat, max_landsat = read_landsat_data(landsat_file, geometries)
-
-    # normalize
-    landsat = landsat / max_landsat
-    print(endmember_library, max_endmember)
-    endmember_library_arr = endmember_library[['band_1', 'band_2', 'band_3', 'band_4', 'band_5', 'band_6', 'band_7']].to_numpy()
-    endmember_library_arr /= max_endmember
-
-    # 5. setup MESMA models
-    models = MesmaModels()
-    models.setup(class_list)
-    for level in range(2, complexity_level):
-        models.select_level(True, level)
-        for i in range(n_classes):
-            models.select_class(True, i, level)
-
-    mesma = MesmaCore(n_cores=1)
-
-    # 6. run MESMA in chunks (same as your original code)
-    bands, height, width = landsat.shape
-    chunk_h = 5
-    model_best      = np.zeros((n_classes, height, width), dtype=np.uint32)
-    model_fractions = np.zeros((n_classes+1, height, width), dtype=np.float32)
-    model_rmse      = np.zeros((height, width),        dtype=np.float32)
-
-    for row in tqdm(range(0, height, chunk_h), desc="MESMA chunking"):
-        chunk = landsat[:, row:row+chunk_h, :]
-        best, fracs, rmse, _ = mesma.execute(
-            image=chunk,
-            library=endmember_library_arr.T.astype(np.float32),
-            look_up_table=models.return_look_up_table(),
-            em_per_class=models.em_per_class,
-            residual_image=False
-        )
-        model_best[:, row:row+chunk_h, :]      = best
-        model_fractions[:, row:row+chunk_h, :] = fracs
-        model_rmse[row:row+chunk_h, :]         = rmse
-
-    from rasterio.transform import from_origin
-    # Assume transform and crs are still available from read_landsat_data
-    # transform and crs are already loaded in the local scope
-    # Write model_best raster (one band per class)
-    model_best_path = os.path.join(PROJ_DIR, 'output', 'model_best.tif')
-    os.makedirs(os.path.dirname(model_best_path), exist_ok=True)
-    with rasterio.open(
-            model_best_path,
-            'w',
-            driver='GTiff',
-            height=height,
-            width=width,
-            count=n_classes,
-            dtype=model_best.dtype,
-            crs=crs,
-            transform=transform
-    ) as dst:
-        for i in range(n_classes):
-            dst.write(model_best[i, :, :], i + 1)
-            dst.set_band_description(i + 1, str(np.unique(class_list)[i]))
-
-    # Write model_fractions raster (one band per class + 1 for shade)
-    model_fractions_path = os.path.join(PROJ_DIR, 'output', 'model_fractions.tif')
-    os.makedirs(os.path.dirname(model_fractions_path), exist_ok=True)
-    with rasterio.open(
-            model_fractions_path,
-            'w',
-            driver='GTiff',
-            height=height,
-            width=width,
-            count=n_classes + 1,
-            dtype=model_fractions.dtype,
-            crs=crs,
-            transform=transform
-    ) as dst:
-        for i in range(n_classes):
-            dst.write(model_fractions[i, :, :], i + 1)
-            dst.set_band_description(i + 1, str(np.unique(class_list)[i]))
-        dst.write(model_fractions[-1, :, :], n_classes + 1)
-        dst.set_band_description(n_classes + 1, 'shade')
-
-    # Write model_rmse raster
-    model_rmse_path = os.path.join(PROJ_DIR, 'output', 'model_rmse.tif')
-    with rasterio.open(
-            model_rmse_path,
-            'w',
-            driver='GTiff',
-            height=height,
-            width=width,
-            count=1,
-            dtype=model_rmse.dtype,
-            crs=crs,
-            transform=transform
-    ) as dst:
-        dst.write(model_rmse, 1)
-        dst.set_band_description(1, 'rmse')
+    
+    print(f"Unmixing complete!")
+    print(f"  - Endmembers: {endmembers_file.path}")
+    print(f"  - Model best: {model_best_file.path}")
+    print(f"  - Model fractions: {model_fractions_file.path}")
+    print(f"  - Model RMSE: {model_rmse_file.path}")

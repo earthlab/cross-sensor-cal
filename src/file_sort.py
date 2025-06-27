@@ -20,6 +20,11 @@ from src.file_types import (
     NEONReflectanceResampledMaskENVIFile,
     NEONReflectanceResampledMaskHDRFile,
     SpectralDataCSVFile,
+    MaskedSpectralCSVFile,
+    EndmembersCSVFile,
+    UnmixingModelBestTIF,
+    UnmixingModelFractionsTIF,
+    UnmixingModelRMSETIF,
     MaskedFileMixin,
     SensorType
 )
@@ -69,6 +74,14 @@ def categorize_file(file_obj: DataFile) -> str:
     elif isinstance(file_obj, (NEONReflectanceBRDFMaskENVIFile, NEONReflectanceBRDFMaskENVIHDRFile)):
         return "Reflectance_Masked"
     
+    # Unmixing output files
+    elif isinstance(file_obj, (UnmixingModelBestTIF, UnmixingModelFractionsTIF, UnmixingModelRMSETIF)):
+        return "Unmixing_Output"
+    
+    # Unmixing endmembers and masked spectral CSV files
+    elif isinstance(file_obj, (EndmembersCSVFile, MaskedSpectralCSVFile)):
+        return "Unmixing_Data"
+    
     # All other file types go to Generic
     # This includes: ancillary files, config files, coefficient files, 
     # spectral data CSV files, and base reflectance H5 files
@@ -108,7 +121,12 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
         NEONReflectanceResampledHDRFile,
         NEONReflectanceResampledMaskENVIFile,
         NEONReflectanceResampledMaskHDRFile,
-        SpectralDataCSVFile
+        SpectralDataCSVFile,
+        MaskedSpectralCSVFile,
+        EndmembersCSVFile,
+        UnmixingModelBestTIF,
+        UnmixingModelFractionsTIF,
+        UnmixingModelRMSETIF
     ]
     
     move_list = []

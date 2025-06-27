@@ -551,3 +551,113 @@ class SpectralDataCSVFile(DataFile):
         if not match:
             raise ValueError(f"Filename does not match SpectralDataCSVFile pattern: {path}")
         return cls(path, base=match.group("base"))
+
+
+class MaskedSpectralCSVFile(DataFile):
+    """Represents masked spectral data CSV files like NEON_D13_NIWO_DP1_*_with_mask_and_all_spectra.csv"""
+    pattern = re.compile(
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})_.*_with_mask_and_all_spectra\.csv$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+
+    @classmethod
+    def from_components(cls, domain: str, site: str, date: str, time: str, 
+                       base_name: str, folder: Path) -> "MaskedSpectralCSVFile":
+        filename = f"{base_name}_with_mask_and_all_spectra.csv"
+        path = folder / filename
+        return cls(path, domain=domain, site=site, date=date, time=time)
+
+
+class EndmembersCSVFile(DataFile):
+    """Represents endmembers CSV output from unmixing process"""
+    pattern = re.compile(
+        r"endmembers_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.csv$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+
+    @classmethod
+    def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
+                           output_dir: Path) -> "EndmembersCSVFile":
+        filename = f"endmembers_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.csv"
+        path = output_dir / filename
+        return cls(path, domain=signatures_file.domain, site=signatures_file.site, 
+                  date=signatures_file.date, time=signatures_file.time)
+
+
+class UnmixingModelBestTIF(DataFile):
+    """Represents model_best.tif output from unmixing"""
+    pattern = re.compile(
+        r"model_best_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+
+    @classmethod
+    def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
+                           output_dir: Path) -> "UnmixingModelBestTIF":
+        filename = f"model_best_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.tif"
+        path = output_dir / filename
+        return cls(path, domain=signatures_file.domain, site=signatures_file.site,
+                  date=signatures_file.date, time=signatures_file.time)
+
+
+class UnmixingModelFractionsTIF(DataFile):
+    """Represents model_fractions.tif output from unmixing"""
+    pattern = re.compile(
+        r"model_fractions_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+
+    @classmethod
+    def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
+                           output_dir: Path) -> "UnmixingModelFractionsTIF":
+        filename = f"model_fractions_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.tif"
+        path = output_dir / filename
+        return cls(path, domain=signatures_file.domain, site=signatures_file.site,
+                  date=signatures_file.date, time=signatures_file.time)
+
+
+class UnmixingModelRMSETIF(DataFile):
+    """Represents model_rmse.tif output from unmixing"""
+    pattern = re.compile(
+        r"model_rmse_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
+    )
+
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+        super().__init__(path)
+        self.domain = domain
+        self.site = site
+        self.date = date
+        self.time = time
+
+    @classmethod
+    def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
+                           output_dir: Path) -> "UnmixingModelRMSETIF":
+        filename = f"model_rmse_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.tif"
+        path = output_dir / filename
+        return cls(path, domain=signatures_file.domain, site=signatures_file.site,
+                  date=signatures_file.date, time=signatures_file.time)
