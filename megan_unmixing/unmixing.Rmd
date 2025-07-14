@@ -1,0 +1,784 @@
+---
+title: "NSF Macrosystems Unmixing"
+author: "Megan Cattau"
+date: "2025"
+output: html_document
+---
+  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+This project aims to present a workflow for using NEON AOP hyperspectral data as endmembers for unmixing Landsat data using the NEON Niwot Ridge (NIWO) site as a case study
+
+
+# 1. Set-up
+
+Set working directory
+```{r workingdir}
+setwd("/home/erickverleye/Work/unmixing")
+```
+
+Install, load, and call the packages and their dependencies. 
+
+If you do not already have these packages installed, run this line: \ 
+install.packages(c( "assertthat", "terra", "raster", "RStoolbox"))
+install.packages("RStoolbox")
+
+Load the packages
+```{r packages, echo=T, results='hide', message=FALSE, warning=FALSE}
+library(assertthat)
+library(terra)
+library(raster)
+library(RStoolbox)
+
+library(lubridate)
+library(sf)
+library(tidyr)
+library(dplyr)
+library(readr)
+```
+
+# 2. Download, Import, and Process Data  
+
+### Create a Data folder in your working directory 
+
+We will download all of the data that we will need for this analysis directly/programatically when possible, bring it into the programming environment, and complete any necessary preprocessing. Data will include the EPA Level III Ecoregions, a spectral library, and an example Landsat tile
+
+
+### 2.1 EPA Level III Ecoregion polygons 
+We will subset one ecoregion to use as our AOI: the Southern Rockies. More information on the data is available here: https://www.epa.gov/eco-research/ecoregions-north-america. \ 
+
+2.1.1 Download the data \
+The code below will create a data subfolder and download the data directly to that folder. If the download is successful, "TRUE" will be returned in your console. If you close your R session, you don't need to run this code chunk again, as the data will already be downloaded. This code also subsets the Southern Rockies, and visualizes it
+
+```{r ecoregion, echo=T, results='hide', message=FALSE, warning=FALSE}
+Ecoregion_download <- file.path('data/Ecoregion', 'us_eco_l3.shp')
+if (!file.exists(Ecoregion_download)) {
+  from <- "https://dmap-prod-oms-edc.s3.us-east-1.amazonaws.com/ORD/Ecoregions/us/us_eco_l3.zip"
+  to <- paste0('Ecoregion', ".zip")
+  download.file(from, to)
+  unzip(to, exdir = 'data/Ecoregion')
+  unlink(to)
+  assert_that(file.exists(Ecoregion_download))
+}
+```
+
+2.1.2 Import the data \
+Read the data into R, subset the Southern Rockies, and visualize it
+```{r ecoregionimport, echo=T, results='hide', message=FALSE, warning=FALSE}
+ecoregion<- vect("data/Ecoregion/us_eco_l3.shp")
+srockies<-subset(ecoregion, ecoregion$US_L3NAME == "Southern Rockies",)
+plot(srockies)
+```
+### 2.2 Spectral signatures
+From CyVerse earthlab>macrosystems>processed_flight_lines>NIWO_2023_08>NEON_D13_NIWO_DP1_L003-1_20230815_directional_reflectance>NEON_D13_NIWO_DP1_L003-1_20230815_directional_reflectance__envi_resample_Landsat_9_OLI-2_masked_spectral_data.csv
+Note: this is just one flight line. Need to do with all flight lines
+
+2.2.1 Import the data \
+Read the data into R
+```{r spectralsigimport, echo=T, results='hide', message=FALSE, warning=FALSE}
+sigs<- read.csv("data/Signatures/NEON_D13_NIWO_DP1_L003-1_20230815_directional_reflectance__envi_resample_Landsat_9_OLI-2_masked_spectral_data.csv")
+```
+
+
+names(sigs)
+nrow(sigs)
+head(sigs[,1:28])
+unique(sigs$cover_category)
+
+Outstanding:
+Is cover_category the right col to use?
+We want a shadow class as well
+
+### 2.3 Landsat data
+
+Import Landsat data (Landsat Level 2 product)
+range(sigs$og_flight_date)
+NEON AOP data from June 2023-June 2024
+So acquire Landsat data from that time range from Earth Explorer, Path 34, row 32 <15% cloud cover: August 20,2023, L9
+Just bands 1-6
+Scaling factor of 10,000?
+https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/s3fs-public/atoms/files/LSDS-1368_L8_C1-LandSurfaceReflectanceCode-LASRC_ProductGuide-v3.pdf
+Later, use data available in CyVerse
+library(raster)
+library(terra)
+```{r landsatimport, echo=T, results='hide', message=FALSE, warning=FALSE}
+all_landsat_bands <- list.files("data/Landsat/landsattest",
+           pattern = glob2rx("*SR_B*.TIF$"),
+           full.names = TRUE)
+# stack the data
+L1<-rast(all_landsat_bands[1])+0
+L2<-rast(all_landsat_bands[2])+0
+L3<-rast(all_landsat_bands[3])+0
+L4<-rast(all_landsat_bands[4])+0
+L5<-rast(all_landsat_bands[5])+0
+L6<-rast(all_landsat_bands[6])+0
+
+landsat_spatRas_scale<-c(L1, L2, L3, L4, L5, L6)
+range(landsat_spatRas_scale[[3]])
+
+# landsat_spatRas<-scale(landsat_spatRas_scale, center=FALSE)
+# Range of scaled Landsat data is about 0 to 6,000
+# Range of sigs is about 0 to 7,300
+# So, divide Landsat by 10
+landsat_spatRas<-(landsat_spatRas_scale)/10
+range(landsat_spatRas[[3]])
+```
+
+Outstanding:
+Use scale function rather than dividing by 10
+Need to remove NAs
+Need to weed out low-quality bands
+Use Landsat on Cyverse rather than downloading from Earth Explorer
+
+
+
+# 3. Endmember selection / library optimization
+
+Iterative endmember selection (IES) selects a set of endmembers from a spectral library using the IES algorithm.This allows us to select a small subset of spectra from an extensive spectral library. The selected spectra are intended to represent the "purest" or most distinct endmembers within that library based on an iterative error maximization criterion. IES is about finding a representative set.
+
+Note: After running this, I won't think that we want to retain this step in this same way. IES selects a smaller, optimized set of the "most pure" (i.e., spectrally distinct) endmember candidates, which could reduce redundancy and focus MESMA on the most representative spectra. We can select the final number of k (endmembers). I think we lose too much information when we select 5 k, as I have below (because that was the number of classes included in the sigs$cover_category))
+
+We should instead run IES for a range of k values (rather than just the 5 that we ultimately want to end up with) and use a rmse_history elbow plot to find where adding more endmembers yields diminishing returns in explaining the library's variance.
+```{r ies_func, echo=T, results='hide', message=FALSE, warning=FALSE}
+install.packages("nnls")
+
+### 3.1 Write the function
+
+library(nnls)
+
+#' @param spectral_library A numeric matrix where rows represent individual spectral
+#'   signatures (samples) and columns represent spectral bands (features).
+#'   Should not contain NA, NaN, or Inf values.
+#' @param num_endmembers The desired number of endmembers to select (integer > 0).
+#' @param initial_selection The method for selecting the first endmember: "dist_mean" or "max_norm".
+#' @param stop_threshold Numeric fraction (e.g. 0.01 for 1%) to detect diminishing returns.
+#' @param verbose Logical. TRUE: print progress messages during execution.
+#'
+#' @return A list containing:
+#'   - `endmembers`: matrix of selected endmember spectra.
+#'   - `indices`: integer vector of original row indices.
+#'   - `rmse_history`: numeric vector of max RMSE per iteration.
+#'   - `avg_rmse_history`: numeric vector of mean RMSE per iteration.
+#'   - `stop_max_idx`: index (iteration) when max-RMSE drop ≤ stop_threshold.
+#'   - `stop_mean_idx`: index when mean-RMSE drop ≤ stop_threshold.
+ies_from_library <- function(spectral_library,
+                             num_endmembers,
+                             initial_selection = "dist_mean",
+                             stop_threshold = 0.01,
+                             verbose = TRUE) {
+
+  if (verbose) cat("--- Starting Iterative Endmember Selection ---\n")
+
+  # --- Input Validation ---
+  if (!is.matrix(spectral_library) || !is.numeric(spectral_library)) {
+    stop("'spectral_library' must be a numeric matrix.")
+  }
+  if (any(!is.finite(spectral_library))) {
+      stop("Input 'spectral_library' contains NA, NaN, or Inf values. Please clean the data.")
+  }
+
+  n_samples <- nrow(spectral_library)
+  n_bands <- ncol(spectral_library)
+
+  if (n_samples == 0 || n_bands == 0) {
+      stop("'spectral_library' must have non-zero dimensions.")
+  }
+  if (missing(num_endmembers) || !is.numeric(num_endmembers) || num_endmembers < 1 || num_endmembers != round(num_endmembers)) {
+      stop("'num_endmembers' must be a positive integer.")
+  }
+  if (num_endmembers > n_samples) {
+    stop("'num_endmembers' cannot be greater than the number of spectra in the library (", n_samples, ").")
+  }
+    if (num_endmembers > n_bands && verbose){ # Theoretical limit often n_bands+1, but >n_bands is a good warning
+      warning("Number of endmembers requested (", num_endmembers, ") is greater than number of bands (", n_bands, "). Unmixing might be ill-conditioned.")
+  }
+  if (!initial_selection %in% c("max_norm", "dist_mean")) {
+    stop("'initial_selection' must be 'max_norm' or 'dist_mean'.")
+  }
+
+  # --- Initialization ---
+  selected_indices <- integer(0)
+  rmse_history    <- numeric(0)
+  avg_rmse_hist   <- numeric(0)
+  stop_max_idx    <- NA_integer_
+  stop_mean_idx   <- NA_integer_
+
+  # 1. Select the first endmember
+  if (verbose) cat("--- Selecting initial endmember (Iteration 1) ---\n")
+
+  if (initial_selection == "max_norm") {
+    # L2 norm (sqrt of sum of squares) for each spectrum (row)
+    norms <- sqrt(rowSums(spectral_library^2))
+    if (all(!is.finite(norms)) || all(norms == 0)) stop("Cannot calculate valid non-zero norms for initial 'max_norm' selection.")
+    first_idx <- which.max(norms)
+    if(length(first_idx) == 0) stop("Failed to find maximum norm index.") # Should not happen if norms are valid
+     if (verbose) cat(" Initial selection method: max_norm\n")
+  } else { # dist_mean (default)
+    # Calculate mean spectrum (vector of length n_bands)
+    mean_spectrum <- colMeans(spectral_library, na.rm = FALSE) # na.rm=F safe after initial check
+    if(any(!is.finite(mean_spectrum))) stop("Failed to calculate finite mean spectrum.")
+    # Euclidean distance of each spectrum (row) from the mean spectrum
+    distances <- sqrt(rowSums(sweep(spectral_library, 2, mean_spectrum, "-", check.margin = FALSE)^2))
+    if (all(!is.finite(distances)) || all(distances == 0)) stop("Cannot calculate valid non-zero distances for initial 'dist_mean' selection.")
+    first_idx <- which.max(distances)
+     if(length(first_idx) == 0) stop("Failed to find maximum distance index.") # Should not happen if distances are valid
+     if (verbose) cat(" Initial selection method: dist_mean\n")
+  }
+
+  selected_indices <- c(selected_indices, first_idx)
+  # Endmember matrix 'E' contains the spectra corresponding to selected_indices
+  # Ensure it remains a matrix even if only one row is selected initially
+  E <- spectral_library[selected_indices, , drop = FALSE]
+
+  if (verbose) {
+    cat(" Selected index 1:", first_idx, "\n")
+  }
+
+  # --- Iterative Selection ---
+  if (num_endmembers > 1) {
+    for (i in 2:num_endmembers) {
+      current_num_endmembers <- nrow(E)
+      all_rmse <- rep(NA_real_, n_samples) # Initialize RMSE vector with NA
+      # Transpose E once for efficiency inside the inner loop for NNLS
+      tryCatch({
+          E_t <- t(E)
+          if(any(!is.finite(E_t))) stop("Non-finite values found in transposed endmember matrix E_t")
+      }, error = function(e){
+          stop("Failed to transpose current endmember matrix E in iteration ", i, ": ", e$message)
+      })
+      # Loop through *all* spectra in the original library to calculate reconstruction error
+      for (j in 1:n_samples) {
+          # Skip if this spectrum is already an endmember
+          if(j %in% selected_indices) {
+              all_rmse[j] <- 0 # Error is zero if it's already an endmember
+              next
+          }
+        target_spectrum <- spectral_library[j, ]
+        # --- Unmixing Step using Non-Negative Least Squares (NNLS) ---
+        # Solve: target_spectrum ≈ t(E) %*% abundances  (where abundances >= 0)
+        # nnls::nnls(A, b) solves Ax = b for x >= 0.
+        # Here A = t(E), b = target_spectrum, x = abundances
+        nnls_result <- NULL
+        try_nnls <- tryCatch({
+          # Check dimensions before calling nnls
+          if(nrow(E_t) != length(target_spectrum)) {
+             stop(paste("Dimension mismatch: nrow(E_t) =", nrow(E_t), "but length(target_spectrum) =", length(target_spectrum)))
+          }
+          if(ncol(E_t) != current_num_endmembers){
+             stop(paste("Dimension mismatch: ncol(E_t) =", ncol(E_t), "but current_num_endmembers =", current_num_endmembers))
+          }
+           nnls_result <- nnls::nnls(A = E_t, b = target_spectrum)
+          TRUE # Indicate success
+        }, error = function(e) {
+          if(verbose) warning("NNLS failed for target spectrum index ", j, " in iteration ", i, ": ", e$message, call. = FALSE)
+          return(FALSE) # Indicate failure
+        })
+        if (!try_nnls || is.null(nnls_result)) {
+          all_rmse[j] <- NA # Mark RMSE as NA if NNLS failed
+          next # Skip to next spectrum
+        }
+        abundances <- nnls_result$x
+        # --- Reconstruction Step ---
+        # reconstructed = t(E) %*% abundances
+        reconstructed_spectrum <- NULL
+        try_recon <- tryCatch({
+            # Check dimensions before multiplication
+            if(nrow(E_t) != length(target_spectrum) || ncol(E_t) != length(abundances)){
+                 stop(paste("Dimension mismatch for reconstruction: dim(E_t)=", paste(dim(E_t), collapse="x"), " length(abundances)=", length(abundances)))
+            }
+          reconstructed_spectrum <- as.vector(E_t %*% abundances)
+          if (any(!is.finite(reconstructed_spectrum))) {
+             stop("Non-finite values in reconstructed spectrum.")
+          }
+          TRUE # Indicate success
+        }, error = function(e) {
+          if(verbose) warning("Reconstruction failed for target spectrum index ", j, " in iteration ", i, ": ", e$message, call. = FALSE)
+          return(FALSE) # Indicate failure
+        })
+        if (!try_recon || is.null(reconstructed_spectrum)) {
+            all_rmse[j] <- NA # Mark RMSE as NA if reconstruction failed
+            next # Skip to next spectrum
+        }
+        # --- Calculate Root Mean Squared Error (RMSE) ---
+        # Ensure target and reconstructed have same length (should be n_bands)
+         if(length(target_spectrum) != length(reconstructed_spectrum)){
+             if(verbose) warning("Length mismatch between target and reconstructed spectra for index ", j, " in iteration ", i, ". Skipping RMSE calculation.", call. = FALSE)
+             all_rmse[j] <- NA
+             next
+         }
+        rmse_val <- sqrt(mean((target_spectrum - reconstructed_spectrum)^2, na.rm = FALSE)) # Should be no NAs here if checks passed
+        all_rmse[j] <- rmse_val
+      } # End loop through all spectra j
+      # --- Select Next Endmember ---
+      # Find the spectrum with the maximum *valid* RMSE among those *not already selected*
+      valid_rmse_indices <- which(is.finite(all_rmse))
+      candidate_indices <- setdiff(valid_rmse_indices, selected_indices)
+      if (length(candidate_indices) == 0) {
+          if(length(selected_indices) < num_endmembers) {
+             warning("No valid candidate spectra found with finite RMSE in iteration ", i, " among non-selected spectra. Stopping early. Returning ", length(selected_indices), " endmembers.", call. = FALSE)
+          } else {
+             # This case shouldn't normally be reached if loop condition is correct, but is safe.
+             if(verbose) cat("All requested endmembers found or no more valid candidates.\n")
+          }
+        break # Exit the loop i
+      }
+      # Find index corresponding to the max RMSE among valid candidates
+      max_rmse_value_candidate <- max(all_rmse[candidate_indices], na.rm = TRUE) # na.rm is belt-and-braces
+      # Get the original index (relative to spectral_library)
+      # Handle potential ties by taking the first one
+      next_idx <- candidate_indices[which(all_rmse[candidate_indices] == max_rmse_value_candidate)][1]
+       if (is.na(next_idx) || !is.finite(next_idx)) {
+           warning("Failed to determine a valid next endmember index in iteration ", i, ". Stopping early. Returning ", length(selected_indices), " endmembers.", call. = FALSE)
+           break # Exit loop i
+       }
+      # Add this spectrum's index to the selected set
+      selected_indices <- c(selected_indices, next_idx)
+      # Update the endmember matrix E by adding the new row
+      E <- spectral_library[selected_indices, , drop = FALSE]
+      # Store the max RMSE value found in this iteration
+      mean_rmse <- mean(all_rmse, na.rm = TRUE)
+      rmse_history <- c(rmse_history, max_rmse_value_candidate)
+      mean_rmse <- mean(all_rmse, na.rm = TRUE)
+      avg_rmse_hist <- c(avg_rmse_hist, mean_rmse)
+      if (i > 2) {
+        pct_drop_max  <- (rmse_history[i-2] - rmse_history[i-1]) / rmse_history[i-2]
+        pct_drop_mean <- (avg_rmse_hist[i-2] - avg_rmse_hist[i-1]) / avg_rmse_hist[i-2]
+        # record first time percent drop ≤ stop_threshold
+        if (is.na(stop_max_idx) && pct_drop_max <= stop_threshold) {
+          stop_max_idx <- i - 1
+          if (verbose) cat("Diminishing max-RMSE return at iteration", stop_max_idx, "\n")
+        }
+        if (is.na(stop_mean_idx) && pct_drop_mean <= stop_threshold) {
+          stop_mean_idx <- i - 1
+          if (verbose) cat("Diminishing mean-RMSE return at iteration", stop_mean_idx, "\n")
+        }
+        # if both have been set, break early
+        if (!is.na(stop_max_idx) && !is.na(stop_mean_idx)) {
+          if (verbose) cat("Both criteria met; stopping early at iteration", i-1, "\n")
+          break
+        }
+      }
+      if (verbose) {
+        cat(" Max valid RMSE among candidates =", format(max_rmse_value_candidate, digits = 4), "found at original index", next_idx, "\n")
+        cat(" Selected indices so far:", paste(selected_indices, collapse=", "), "\n")
+      }
+       # Safety break if E becomes unusable somehow (e.g., all zeros added)
+       if(nrow(E) > 1 && all(rowSums(abs(E)) == 0)) {
+           warning("Endmember matrix E seems to contain only zero spectra after iteration ", i, ". Stopping early.", call. = FALSE)
+           break
+       }
+    } # End iteration loop i
+  } # End if(num_endmembers > 1)
+
+  # --- Return Results ---
+  if (verbose) cat("--- Iterative Endmember Selection Finished ---\n")
+  if (length(selected_indices) != num_endmembers && verbose && length(selected_indices) > 0) {
+      cat(" NOTE: Returned", length(selected_indices), "endmembers, although", num_endmembers, "were requested.\n")
+  } else if (length(selected_indices) == 0) {
+      cat(" WARNING: Failed to select any endmembers.\n")
+       return(list(
+          endmembers = matrix(NA_real_, nrow=0, ncol=n_bands), # Return empty matrix with correct columns
+          indices = integer(0),
+          rmse_history = numeric(0)
+      ))
+  }
+
+  iterations <- seq_len(length(rmse_history)) + 1
+  pct_max <- c(NA, diff(rmse_history) / head(rmse_history, -1))
+  pct_mean <- c(NA, diff(avg_rmse_hist) / head(avg_rmse_hist, -1))
+
+  png("max_rmse_percent_drop.png", width = 800, height = 600)
+  plot(iterations, pct_max * 100, type = "b", xlab = "Number of Endmembers",
+       ylab = "% drop in max RMSE", main = "Max RMSE % Decrease per Iteration")
+  dev.off()
+  
+  # Save second plot
+  png("mean_rmse_percent_drop.png", width = 800, height = 600)
+  plot(iterations, pct_mean * 100, type = "b", xlab = "Number of Endmembers",
+       ylab = "% drop in mean RMSE", main = "Mean RMSE % Decrease per Iteration")
+  dev.off()
+
+  return(list(
+    endmembers       = spectral_library[selected_indices, , drop = FALSE],
+    indices          = selected_indices,
+    rmse_history     = rmse_history,
+    avg_rmse_history = avg_rmse_hist,
+    stop_max_idx     = stop_max_idx,
+    stop_mean_idx    = stop_mean_idx
+  ))
+}
+
+
+```
+
+### 3.2 Run the function
+
+```{r ies, echo=T, message=TRUE, warning=TRUE}
+
+# A matrix of spectral signatures (rows = samples, cols = bands).
+signatures_7<-as.matrix(sigs[,1:7])
+#ies_results <- ies_from_library(spectral_library = signatures_7,
+                   #num_endmembers = 5,
+                   #initial_selection = "dist_mean",
+                   #verbose = TRUE)
+
+# Check the results
+#print(ies_results)
+
+#print(ies_results$endmembers)
+# the spectral signatures of the endmembers identified by the IES algorithm. Rows represent the selected endmember spectra, and columns represent the spectral bands/features. The number of selected endmembers will ideally be equal to the num_endmembers you requested (num_endmembers = 5), but could potentially be fewer if the algorithm stopped early (e.g., couldn't find more distinct spectra). Again, we'll want to up the num_endmembers to more potential endmembers.
+
+#print(ies_results$indices)
+# row number from original input spectral_library that were chosen as the endmembers. Can see how these rows were orignally specified in terms of cover class.
+
+#print(ies_results$rmse_history)
+# maximum Root Mean Squared Error (RMSE) value encountered at each step of the selection process after the first endmember was chosen. Basically how much each row/endmember reduces RMSE can tell you how important that sample/endmember is (e.g., -(ies_results$rmse_history[3]-ies_results$rmse_history[2]). Outstanding: does order that the row falls in the dataset affect that?
+
+# For example, but limited by number of bands?
+ies_results_50 <- ies_from_library(spectral_library = signatures_7,
+                   num_endmembers = 1000,
+		   stop_threshold = 0.01,
+                   initial_selection = "dist_mean",
+                   verbose = TRUE)
+print(ies_results_50$selected_indices)
+#plot(ies_results_50$rmse_history)
+```
+
+# 4. Unmixing with Multiple Endmember Spectral Mixture Analysis (MESMA)
+
+Multiple Endmember Spectral Mixture Analysis (MESMA) allows the number and type of endmembers used to model each pixel/spectrum to vary. The MESMA algorithm typically involves testing multiple combinations of endmembers (with varying numbers and types) from a library for each pixel to find the best fit and estimate corresponding abundances. This unmixing technique allows model complexity (number and type of endmembers) to vary spatially or per spectrum, selecting the best combination from a library for each individual case. MESMA is about using potentially different sets to best explain each part of an image/dataset.
+
+Note: here, I am using the full field spectral library as the input to define the endmembers, but you could use the output of IES (the "pruned" spectral library)
+
+```{r unmixing, echo=T, message=TRUE, warning=TRUE}
+
+endmember_library <- signatures_7[ies_results_50$indices, , drop = FALSE]
+endmember_library <- data.frame(class = paste0("EM_", seq_len(nrow(endmember_library))), endmember_library)
+
+# Rename bands to match raster
+names(landsat_spatRas) <- names(endmember_library)[2:ncol(endmember_library)]
+
+# Run MESMA
+test_unmix <- mesma(img = landsat_spatRas, em = endmember_library, method = "NNLS")
+#take a look
+png("mesma_unmix_result.png", width = 1000, height = 800)
+terra::plot(test_unmix)
+dev.off()
+
+# Can use this plot to identify areas with high RMSE where the models fit poorly and that may benefit from additional sampling:
+png("mesma_rmse_layer.png", width = 1000, height = 800)
+terra::plot(test_unmix[["RMSE"]], main = "Best Model RMSE")
+dev.off()
+# If we use endmembers selected by IES (more classes than the final classes we want), we could combine abundances from similar endmembers here as well
+
+```
+
+# Next steps:
+Use spectral signatures from all flightlines (instead of just one)
+Apply across Southern Rockies (instead of just one Landsat tile)
+Integrate UAS data once processed and convolution done
+
+
+
+
+
+
+
+
+
+
+# Scratch - IGNORE ALL THE BELOW
+# this was testing previous workflows
+
+# Info here on NEON data availability and data codes: https://data.neonscience.org/data-products/explore
+
+## Import NEON NIWO AOI
+# https://neon.maps.arcgis.com/home/item.html?id=4a381f124a73490aa9ad7b1df914d6d8
+AOI<-readOGR("AOI/NIWO.shp")
+crs(AOI)<-CRS("+init=epsg:4326")
+
+## Import NEON hyperspectral data for NIWO  - not needed here bc have V's data below
+# National Ecological Observatory Network. 2020. Data Product DP3.30006.001, Spectrometer orthorectified surface directional reflectance - mosaic. Provisional data downloaded from http://data.neonscience.org on January 7, 2020. Battelle, Boulder, CO, USA NEON. 2020.
+# will be downloaded directly to Data folder as zipped file
+# byFileAOP("DP3.30006.001", site="NIWO", year="2019", check.size=T)
+
+## Import NEON woody veg data for NIWO - not needed here bc have V's data below
+# National Ecological Observatory Network. 2020. Data Product DP1.10098.001, Woody plant vegetation structure. Provisional data downloaded from http://data.neonscience.org on January 7, 2020. Battelle, Boulder, CO, USA NEON. 2020.
+# will be downloaded directly to Data folder
+# zipsByProduct(dpID = "DP1.10098.001", 
+              site = "NIWO", 
+              savepath = ".", 
+              check.size = FALSE)
+
+## Import other landcover class samples (e.g., from Google Earth or Hispiri)  - not included here
+
+## Import spectral signatures - sub for above data
+# From Victoria Scholl
+spec_samp_full<-read.csv("veg_spectra_max_diameter.csv")
+spec_samp_full$ID<-1:nrow(spec_samp_full)
+spec_samp_full$max<-apply(spec_samp_full[,c(72:497)], 1, max, na.rm=TRUE)
+spec_samp_full<-spec_samp_full[spec_samp_full$max<=1,]
+
+
+################################################################
+### 2. Create spectral library and resample
+################################################################
+
+spectra<-data.matrix(spec_samp_full[,c(72:497)])
+wavelength1<-names(spec_samp_full[,c(72:497)])
+wavelength<-as.numeric(substring(wavelength1, 2))
+spectral_data <- speclib(spectra, wavelength)
+
+# assign IDSs and taxonID to Speclib
+idSpeclib(spectral_data) <- as.character(spec_samp_full$ID) 
+SI(spectral_data) <- spec_samp_full[,c(22)]
+
+#sp_spruce<- subset(spectral_data, V1 == "PIEN")
+# sp_fir<- subset(spectral_data, V1 == "ABLAL") 
+#sp_limber<- subset(spectral_data, V1 == "PIFL2")
+#sp_lodgepole<- subset(spectral_data, V1 == "PICOL")
+
+# plot(sp_fir, FUN = "mean", col = "darkgreen")
+#plot(sp_lodgepole, FUN = "mean", col = "darkred", new = FALSE)
+#plot(sp_spruce, FUN = "mean", col = "lightgreen", new = FALSE)
+#plot(sp_limber, FUN = "mean", col = "red", new = FALSE)
+
+# check out more - masking and interpolation
+# Mask areas of errors due to channel crossing of the spectrometer and those affected by water absorption and interpolate over those areas
+
+# Resample spectra to Landsat using spectral response function
+spectral_data_resampled <- spectralResampling(spectral_data, "Landsat8")
+plot(spectral_data_resampled)
+
+sp_fir_1<- subset(spectral_data_resampled, V1 == "ABLAL") 
+sp_lodgepole_1<- subset(spectral_data_resampled, V1 == "PICOL")
+sp_limber_1<- subset(spectral_data_resampled, V1 == "PIFL2")
+sp_spruce_1<- subset(spectral_data_resampled, V1 == "PIEN")
+
+# sp_all_l<-rbind(spectra(sp_fir_l), spectra(sp_spruce_l), spectra(sp_lodgepole_l), spectra(sp_limber_l))
+# NEON1<-speclib(spectra=sp_all_l/100,  wavelength = wavelength_l)
+
+
+### Just one 
+# just one sample for each - replace later
+spec_samp_sample<-spec_samp_full[c(1,58,82,1211),]
+
+spectra<-data.matrix(spec_samp_sample[,c(72:497)])
+wavelength1<-names(spec_samp_sample[,c(72:497)])
+wavelength<-as.numeric(substring(wavelength1, 2))
+spectral_data_sample <- speclib(spectra, wavelength)
+
+# assign IDSs and taxonID to Speclib
+idSpeclib(spectral_data_sample) <- as.character(spec_samp_sample$ID) 
+SI(spectral_data_sample) <- spec_samp_sample[,c(22)]
+
+spectral_data_sample_resampled <- spectralResampling(spectral_data_sample, "Landsat8")
+str(spectral_data_sample_resampled)
+
+sp_fir_l_sample<- subset(spectral_data_sample_resampled, V1 == "ABLAL") 
+sp_lodgepole_l_sample<- subset(spectral_data_sample_resampled, V1 == "PICOL")
+sp_limber_l_sample<- subset(spectral_data_sample_resampled, V1 == "PIFL2")
+sp_spruce_l_sample<- subset(spectral_data_sample_resampled, V1 == "PIEN")
+sp_all_l_sample<-rbind(spectra(sp_fir_l_sample), spectra(sp_spruce_l_sample), spectra(sp_lodgepole_l_sample), spectra(sp_limber_l_sample))
+NEON1_sample<-speclib(spectra=rbind(spectra(sp_fir_l_sample), spectra(sp_spruce_l_sample), spectra(sp_lodgepole_l_sample), spectra(sp_limber_l_sample))/100,  wavelength = wavelength_l)
+
+
+#### BELOW NOT RUN
+# ## Get endmember spectra
+## Retrieve all available spectra
+avl <- USGS_get_available_files()
+
+## Download all spectra matching each class
+limestone <- USGS_retrieve_files(avl = avl, pattern = "limestone")
+grass_spectra1 <- USGS_retrieve_files(avl = avl, pattern = "grass-fescue")
+
+aspen_spectra <- USGS_retrieve_files(avl = avl, pattern = "aspen")
+grass_spectra <- USGS_retrieve_files(avl = avl, pattern = "grass")
+pine_spectra <- USGS_retrieve_files(avl = avl, pattern = "pine")
+shrub_spectra <-USGS_retrieve_files(avl = avl, pattern = "brush")
+
+#fir_spectra <- USGS_retrieve_files(avl = avl, pattern = "fir")
+#spruce_spectra <- USGS_retrieve_files(avl = avl, pattern = "spruce")
+# conif_spectra<-merge(fir_spectra,pine_spectra, spruce_spectra)
+# Need to add all conif together
+# Need to check pattern for shrub
+
+## Integrate all spectra to Landsat
+decid_spectra_l <- spectralResampling(aspen_spectra, "Landsat8")
+grass_spectra_l <- spectralResampling(grass_spectra1, "Landsat8")
+conif_spectra_l <-spectralResampling(pine_spectra, "Landsat8")
+shrub_spectra_l <- spectralResampling(shrub_spectra, "Landsat8")
+
+aspen_spectra <- USGS_retrieve_files(avl = avl, pattern = "aspen")
+grass_spectra <- USGS_retrieve_files(avl = avl, pattern = "grass")
+pine_spectra <- USGS_retrieve_files(avl = avl, pattern = "pine")
+shrub_spectra <-USGS_retrieve_files(avl = avl, pattern = "brush")
+
+#fir_spectra <- USGS_retrieve_files(avl = avl, pattern = "fir")
+#spruce_spectra <- USGS_retrieve_files(avl = avl, pattern = "spruce")
+# conif_spectra<-merge(fir_spectra,pine_spectra, spruce_spectra)
+# Need to add all conif together
+# Need to check pattern for shrub
+
+em <- speclib(spectra = rbind(spectra(grass_spectra_l), 
+						spectra(conif_spectra_l),
+						spectra(shrub_spectra_l),
+                              spectra(decid_spectra_l))/100,
+              wavelength = wavelength(grass_spectra_l))
+
+
+######### Run above just for 1 sample
+## Integrate all spectra to Landsat
+decid_spectra1_l <- spectralResampling(aspen_spectra[1,], "Landsat8")
+grass_spectra1_l <- spectralResampling(grass_spectra[1,], "Landsat8")
+conif_spectra1_l <-spectralResampling(pine_spectra[1,], "Landsat8")
+shrub_spectra1_l <- spectralResampling(shrub_spectra[1,], "Landsat8")
+
+em1 <- speclib(spectra = rbind(spectra(grass_spectra1_l), 
+						spectra(conif_spectra1_l),
+						spectra(shrub_spectra1_l),
+                              spectra(decid_spectra1_l))/100,
+              wavelength = wavelength(grass_spectra_l))
+
+
+
+################################################################
+### 3. Import Landsat data
+################################################################
+
+### Import corresponding Landsat data - 
+# NEON AOP data from Aug 2019, so check summer 2019 Landsat
+# From Earth Explorer, H:11 V:09
+all_landsat_bands <- list.files("Landsat/Renamed",
+           pattern = glob2rx("*SRB*.tif$"),
+           full.names = TRUE)
+# stack the data
+
+L1<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB1.tif")
+L2<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB2.tif")
+L3<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB3.tif")
+L4<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB4.tif")
+L5<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB5.tif")
+L6<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB6.tif")
+L7<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB7.tif")
+L8<-raster("Landsat/Renamed/LC08_CU_011009_20190630_20190707_C01_V01_SRB8.tif")
+
+L1[L1 < 0] <- NA
+L2[L2 < 0] <- NA
+L3[L3 < 0] <- NA
+L4[L4 < 0] <- NA
+L5[L5 < 0] <- NA
+L6[L6 < 0] <- NA
+L7[L7 < 0] <- NA
+L8[L8 < 0] <- NA
+
+L1[L1 > 10000] <- NA
+L2[L2 > 10000] <- NA
+L3[L3 > 10000] <- NA
+L4[L4 > 10000] <- NA
+L5[L5 > 10000] <- NA
+L6[L6 > 10000] <- NA
+L7[L7 > 10000] <- NA
+L8[L8 > 10000] <- NA
+
+L1<- L1 * 0.0001
+L2<- L2 * 0.0001
+L3<- L3 * 0.0001
+L4<- L4 * 0.0001
+L5<- L5 * 0.0001
+L6<- L6 /255
+L7<- L7 * 0.0001
+L8<- L8 * 0.0001
+
+#landsat_stack_csf <- stack(all_landsat_bands)
+landsat_stack_csf <- stack(L1, L2, L3, L4, L5, L6, L7, L8)
+names(landsat_stack_csf )
+
+# then turn it into a brick
+landsat_csf_br <- brick(landsat_stack_csf)
+names(landsat_csf_br)
+# plot(landsat_csf_br,
+     col = gray(20:100 / 100))
+
+# add LC08_CU_011009_20190630_20190707_C01_V01_SRAEROSOLQA.tif as band '6' (cirrus, band 9) to match endmembers and sensor char below
+
+AOI_proj<-spTransform(AOI, crs(landsat_csf_br))
+plot(landsat_csf_br[[1]])
+plot(AOI_proj, add=TRUE)
+Landsat_crop<-crop(landsat_csf_br, AOI_proj)
+plot(Landsat_crop[[1]])
+plot(AOI_proj, add=TRUE)
+
+# Raster-methods
+get.sensor.characteristics("Landsat8")
+# wv_df<-data.frame(get.sensor.characteristics("Landsat8")[c(1:5, 7, 8),c(2,3)])
+wv_df<-data.frame(get.sensor.characteristics("Landsat8")[,c(2,3)])
+wavelength_l<-(wv_df[,1]+wv_df[,2])/2
+# spectral<-spectra(landsat_csf_br)
+
+#landsat_speclib<-speclib(spectra=landsat_csf_br, wavelength=wavelength_l)
+landsat_speclib<-speclib(spectra=Landsat_crop, wavelength=wavelength_l)
+
+################################################################
+### 4. Unmix
+################################################################
+
+
+NEON1 <- speclib(spectra = rbind(spectra(sp_fir_1), 
+						spectra(sp_spruce_1),
+						spectra(sp_lodgepole_1),
+                              spectra(sp_limber_1)),
+              wavelength = wavelength_l)
+plot(NEON1)
+
+unmix_res<-unmixed_Landsat<-unmix(landsat_speclib, NEON1) # NEON samples
+# unmix_res<-unmixed_Landsat<-unmix(landsat_speclib, em1)
+
+
+# Just one
+spectral_data_sample_resampled 
+NEON1_sample
+
+plot(NEON1_sample)
+unmix_res_sample<-unmix(spectra=landsat_speclib, spectral_data_sample_resampled, returnHCR = FALSE) # NEON samples
+# unmix_res_sample<-unmix(spectra=landsat_speclib, endmember=NEON1_sample, returnHCR = FALSE)
+class(unmix_res_sample)
+plot(unmix_res_sample)
+
+# test1<-raster("/private/var/folders/5x/4tpmvg_50tl0gwtc2_8ysmk80000gp/T/RtmpL2rjVy/raster/r_tmp_2020-01-15_200520_85369_22610.grd")
+
+test<-raster("/private/var/folders/5x/4tpmvg_50tl0gwtc2_8ysmk80000gp/T/RtmpL2rjVy/raster/r_tmp_2020-01-15_200133_85369_13181.grd")
+herb<-(test-.25)*6000
+tree<-1-herb
+
+pal=colorRamp(c("red", "blue"))
+NDVI<-(Landsat_crop[[5]]-Landsat_crop[[4]])/(Landsat_crop[[5]]+Landsat_crop[[4]])
+
+par(mfrow=c(2,1))
+plot(herb[[1]], col = topo.colors(100), axes=FALSE, legend=FALSE, box=FALSE)
+plot(AOI_proj, add=TRUE)
+plot(tree[[1]], col = rev(topo.colors(100)), axes=FALSE, box=FALSE, main="Woody Vegetation Cover", legend.args=list(text="Proportion"))
+
+plot(NDVI)
+plot(AOI_proj, add=TRUE)
+
+writeRaster(herb, "herb.grd", format="raster", overwrite=TRUE)
+writeRaster(tree, "tree.grd", format="raster", overwrite=TRUE)
+
+
+
+unmix_res_sample$fractions
+
+plot(unmix_res$fractions[1,] ~ SI(spectral_data_qb)$LAI, type = "l",
+     xlab = "LAI", ylab = "Unmixed fraction of vegetation")
+
+
+
+
+
+
+
