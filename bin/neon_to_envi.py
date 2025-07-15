@@ -1,7 +1,16 @@
+import sys
+from pathlib import Path
+
+# Add the repo root and src to sys.path
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root / "src"))
+
+from neon_to_envi import neon_to_envi_task, export_anc
+
 import argparse
 import ray
 import hytools as ht
-from src.neon_to_envi import neon_to_envi_task, export_anc
+
 
 
 def neon_to_envi(images: list[str] = None, output_dir: str = None, anc: bool = False):
@@ -27,7 +36,7 @@ if __name__ == "__main__":
         description="Convert NEON AOP H5 to ENVI format and optionally export ancillary data.")
     parser.add_argument('--images', nargs='+', required=True, help="Input image path names")
     parser.add_argument('--output_dir', required=True, help="Output directory")
-    parser.add_argument('-anc', action='store_true', help="Flag to output ancillary data", required=False)
+    parser.add_argument('-anc','--anc', action='store_true', help="Flag to output ancillary data", required=False)
     args = parser.parse_args()
 
     neon_to_envi(args.images, args.output_dir, args.anc)

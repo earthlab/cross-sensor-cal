@@ -1,33 +1,40 @@
 import re
-import os
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Type
 from enum import Enum
+
+try:
+    from typing import Self  # Python 3.11+
+except ImportError:
+    from typing_extensions import Self  # Backport for Python <3.11
+
+
 
 
 class SensorType(str, Enum):
     LANDSAT_5_TM = "Landsat_5_TM"
-    LANDSAT_7_ETM_PLUS = "Landsat 7 ETM+"
-    LANDSAT_8_OLI = "Landsat 8 OLI"
-    LANDSAT_9_OLI_2 = "Landsat 9 OLI-2"
+    LANDSAT_7_ETM_PLUS = "Landsat_7_ETM+"
+    LANDSAT_8_OLI = "Landsat_8_OLI"
+    LANDSAT_9_OLI_2 = "Landsat_9_OLI-2"
     MICASENSE = "MicaSense"
-    MICASENSE_MATCH_TM_ETM = "MicaSense-to-match TM and ETM+"
-    MICASENSE_MATCH_OLI = "MicaSense-to-match OLI and OLI-2"
+    MICASENSE_MATCH_TM_ETM = "MicaSense-to-match_TM_and_ETM+"
+    MICASENSE_MATCH_OLI = "MicaSense-to-match_OLI_and_OLI-2"
 
 
 class DataFile:
-    pattern: re.Pattern = re.compile('')  # Override in subclasses
+    """Base class for NEON data files."""
+    pattern: re.Pattern = re.compile("")  # Override in subclasses
 
     def __init__(self, path: Path):
-        self.path = path
+        self.path: Path = path
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.path.name
 
     @property
     def directory(self) -> Path:
-        return Path(os.path.dirname(self.path))
+        return self.path.parent
 
     @property
     def file_path(self) -> str:
@@ -38,14 +45,15 @@ class DataFile:
         return cls.pattern.match(filename)
 
     @classmethod
-    def from_filename(cls, path: Path):
+    def from_filename(cls, path: Path) -> Self:
         match = cls.match(path.name)
         if not match:
             raise ValueError(f"{cls.__name__} could not parse {path.name}")
-        return cls(path, **match.groupdict())
+        return cls(path, **match.groupdict())  # type: ignore[arg-type]
 
     @classmethod
-    def find_in_directory(cls, directory: Path) -> List["DataFile"]:
+    def find_in_directory(cls, directory: Path) -> List[Self]:
+        """Recursively find all matching files in a directory."""
         return [
             cls.from_filename(p)
             for p in directory.rglob("*")
@@ -54,282 +62,337 @@ class DataFile:
 
 
 class MaskedFileMixin:
+    """Mixin to handle optional '_masked' suffixes in filenames."""
+
     @classmethod
     def masked_pattern(cls) -> re.Pattern:
         """
-        Wrap the class's regex pattern to allow optional '_masked' before the suffix.
-        Assumes the original pattern ends with: _<suffix>\.img$
+        Adjust the class's regex pattern to allow optional '_masked' before file extensions.
+        Assumes the original pattern ends with: \.img$ or \.hdr$
         """
         base_pattern = cls.pattern.pattern
-        modified_pattern = base_pattern.replace(r"\.img$", r"(?:_masked)?\.img$")
+        modified_pattern = re.sub(r"(\\.img$|\\.hdr$)", r"(?:_masked)?\1", base_pattern)
         return re.compile(modified_pattern)
 
     @property
     def is_masked(self) -> bool:
+        """Return True if the filename indicates a masked file."""
         return self.path.stem.endswith("_masked")
 
     @classmethod
-    def match(cls, path: str) -> re.Match | None:
-        return cls.masked_pattern().match(path)
+    def match(cls, filename: str) -> Optional[re.Match]:
+        """Override match to use the masked-aware pattern."""
+        return cls.masked_pattern().match(filename)
 
     @property
     def masked_path(self) -> Path:
-        """
-        Return a new Path with '_masked' inserted before the file extension.
-        """
+        """Return a new Path with '_masked' inserted before the file extension."""
+        if self.is_masked:
+            return self.path
         return self.path.with_name(f"{self.path.stem}_masked{self.path.suffix}")
 
-    def masked_version(self):
-        """
-        Return a new instance of this class pointing to the masked version of the file.
-        Assumes the class's __init__ can accept 'path' as a keyword argument.
-        """
-        return self.__class__.from_filename(path=self.masked_path, **{
-            k: v for k, v in self.__dict__.items()
-            if k != "path"
-        })
+    def masked_version(self) -> Self:
+        """Return a new instance pointing to the masked version of the file."""
+        return self.__class__.from_filename(self.masked_path)  # type: ignore[call-arg]
 
 
 class NEONReflectanceFile(DataFile):
     pattern = re.compile(
-        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance\.h5$"
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})"
+        r"(?:_(?P<time>\d{6}))?"              # Optional time
+        r"(?:_directional)?"                  # Optional "_directional"
+        r"_reflectance(?:[-_])?(?P<suffix>[a-z0-9]+)?\.h5$"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+    def __init__(
+        self, 
+        path: Path, 
+        domain: str, 
+        site: str, 
+        date: str, 
+        time: Optional[str] = None,
+        suffix: Optional[str] = None,
+        tile: Optional[str] = None
+    ):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
+        self.tile = tile  # Optional
+        self.suffix = suffix  # Optional for cases like "ancillary", "corrected", etc.
 
 
 class NEONReflectanceENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
-        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance(?:[-_])envi\.img$"
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})"
+        r"(?:_(?P<time>\d{6}))?"            # Time is optional
+        r"(?:_directional)?"               # Optional "_directional"
+        r"_reflectance_envi\.img$"         # Matches ENVI .img files
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_envi.img"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time)
+        return cls(path, domain, site, date, time)
 
 
-class NEONReflectanceENVHDRFile(MaskedFileMixin, DataFile):
+class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
-        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance(?:[-_])envi\.hdr$"
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})"
+        r"(?:_(?P<time>\d{6}))?"            # Time is optional
+        r"(?:_directional)?"               # Optional "_directional"
+        r"_reflectance_envi\.hdr$"         # Matches ENVI .hdr files
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceENVIHDRFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_envi.hdr"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time)
+        return cls(path, domain, site, date, time)
 
 
-class NEONReflectanceAncillaryENVIFile(DataFile):
+class NEONReflectanceAncillaryENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
-        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance(?:[-_])ancillary(?:[-_])envi\.img$"
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})"
+        r"(?:_(?P<time>\d{6}))?"                # Time is optional
+        r"(?:_directional)?"                   # Optional "_directional"
+        r"_reflectance_ancillary_envi\.img$"   # Matches ancillary ENVI .img files
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_ancillary_envi.img"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time)
+        return cls(path, domain, site, date, time)
 
 
-class NEONReflectanceAncillaryENVIFileHeader(DataFile):
+
+class NEONReflectanceAncillaryENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
-        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_reflectance(?:[-_])ancillary(?:[-_])envi\.hdr$"
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})"
+        r"(?:_(?P<time>\d{6}))?"                    # Time is optional
+        r"(?:_directional)?"                       # Optional "_directional"
+        r"_reflectance_ancillary_envi\.hdr$"       # Matches ancillary ENVI .hdr files
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> "NEONReflectanceAncillaryENVIFileHeader":
-        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_ancillary_envi.img"
+    def from_components(cls, domain: str, site: str, date: str, time: str, folder: Path) -> Self:
+        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_ancillary_envi.hdr"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time)
+        return cls(path, domain, site, date, time)
 
 
 class NEONReflectanceConfigFile(DataFile):
     pattern = re.compile(
-        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_(?P<date>\d{8})_(?P<time>\d{6})_config_(?P<suffix>[a-z]{3,4})\.json$"
+        r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})"
+        r"(?:_(?P<time>\d{6}))?"                    # Time is optional
+        r"(?:_directional)?"                        # Optional "_directional"
+        r"_config_(?P<suffix>[a-z]{3,4})\.json$"    # Matches _config_*.json
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
-    ) -> "NEONReflectanceConfigFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_config_{suffix}.json"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
+        return cls(path, domain, site, date, time, suffix)
 
     @classmethod
-    def find_in_directory(cls, directory: Path, suffix: str) -> List["NEONReflectanceConfigFile"]:
-        return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
+    def find_in_directory(cls, directory: Path, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
+        return [f for f in files if suffix is None or f.suffix == suffix]
 
+        
 
 class NEONReflectanceBRDFCorrectedENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_(?P<suffix>[a-z]{3,4})\.img$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"            # Optional time
+        r"(?:_directional)?"                               # Optional "_directional"
+        r"_brdf_corrected_(?P<suffix>[a-z]{3,4})\.img$"    # Matches _brdf_corrected_*.img
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
-    ) -> "NEONReflectanceBRDFCorrectedENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_{suffix}.img"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
+        return cls(path, domain, site, date, time, suffix)
 
     @classmethod
-    def find_in_directory(cls, directory: Path, suffix: str) -> List["NEONReflectanceBRDFCorrectedENVIFile"]:
-        return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
+    def find_in_directory(cls, directory: Path, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
+        return [f for f in files if suffix is None or f.suffix == suffix]
 
 
-class NEONReflectanceBRDFCorrectedENVIHDRFile(DataFile):
+
+class NEONReflectanceBRDFCorrectedENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_(?P<suffix>[a-z]{3,4})\.hdr$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"            # Optional time
+        r"(?:_directional)?"                               # Optional "_directional"
+        r"_brdf_corrected_(?P<suffix>[a-z]{3,4})\.hdr$"    # Matches .hdr files
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
-    ) -> "NEONReflectanceBRDFCorrectedENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_{suffix}.hdr"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
+        return cls(path, domain, site, date, time, suffix)
 
     @classmethod
-    def find_in_directory(cls, directory: Path, suffix: str) -> List["NEONReflectanceBRDFCorrectedENVIFile"]:
-        return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
+    def find_in_directory(cls, directory: Path, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
+        return [f for f in files if suffix is None or f.suffix == suffix]
 
 
-class NEONReflectanceBRDFMaskENVIFile(DataFile):
+
+class NEONReflectanceBRDFMaskENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_mask_(?P<suffix>[a-z]{3,4})\.img$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"                 # Optional time
+        r"(?:_directional)?"                                    # Optional "_directional"
+        r"_brdf_corrected_mask_(?P<suffix>[a-z]{3,4})\.img$"    # Matches .img files with "mask"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
-    ) -> "NEONReflectanceBRDFMaskENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_mask_{suffix}.img"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
+        return cls(path, domain, site, date, time, suffix)
 
     @classmethod
-    def find_in_directory(cls, directory: Path, suffix: str) -> List["NEONReflectanceBRDFMaskENVIFile"]:
-        return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
+    def find_in_directory(cls, directory: Path, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
+        return [f for f in files if suffix is None or f.suffix == suffix]
 
 
-class NEONReflectanceBRDFMaskENVIHDRFile(DataFile):
+
+class NEONReflectanceBRDFMaskENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_brdf_corrected_mask_(?P<suffix>[a-z]{3,4})\.hdr$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"                   # Optional time
+        r"(?:_directional)?"                                      # Optional "_directional"
+        r"_brdf_corrected_mask_(?P<suffix>[a-z]{3,4})\.hdr$"      # Matches .hdr files with "mask"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path
-    ) -> "NEONReflectanceBRDFMaskENVIHDRFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, suffix: str, folder: Path) -> Self:
         filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_brdf_corrected_mask_{suffix}.hdr"
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time, suffix=suffix)
+        return cls(path, domain, site, date, time, suffix)
 
     @classmethod
-    def find_in_directory(cls, directory: Path, suffix: str) -> List["NEONReflectanceBRDFMaskENVIHDRFile"]:
-        return [f for f in super().find_in_directory(directory) if f.suffix == suffix]
+    def find_in_directory(cls, directory: Path, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
+        return [f for f in files if suffix is None or f.suffix == suffix]
+
+
 
 
 class NEONReflectanceCoefficientsFile(DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_reflectance_"
-        r"(?P<correction>[a-z]+)_coeffs_(?P<suffix>[a-z0-9]+)\.json$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"                  # Optional time
+        r"(?:_directional)?"                                     # Optional "_directional"
+        r"_reflectance_(?P<correction>[a-z]+)_coeffs_(?P<suffix>[a-z0-9]+)\.json$"
     )
 
-    def __init__(
-        self,
-        path: Path,
-        domain: str,
-        site: str,
-        date: str,
-        time: str,
-        correction: str,
-        suffix: str
-    ):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, correction: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
@@ -337,54 +400,40 @@ class NEONReflectanceCoefficientsFile(DataFile):
         self.time = time
         self.correction = correction
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls,
-        domain: str,
-        site: str,
-        date: str,
-        time: str,
-        correction: str,
-        suffix: str,
-        folder: Path
-    ) -> "NEONReflectanceCoefficientsFile":
+    def from_components(cls, domain: str, site: str, date: str, time: str, correction: str, suffix: str, folder: Path) -> Self:
         filename = (
-            f"NEON_{domain}_{site}_DP1_{date}_{time}_"
-            f"reflectance_{correction}_coeffs_{suffix}.json"
+            f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_"
+            f"{correction}_coeffs_{suffix}.json"
         )
         path = folder / filename
-        return cls(path, domain=domain, site=site, date=date, time=time, correction=correction, suffix=suffix)
+        return cls(path, domain, site, date, time, correction, suffix)
 
     @classmethod
     def find_in_directory(
-        cls,
-        directory: Path,
-        correction: Optional[str] = None,
-        suffix: Optional[str] = None
-    ) -> list["NEONReflectanceCoefficientsFile"]:
-        # Use the base class find_in_directory to get all matching files
-        all_files = super().find_in_directory(directory)
-        
-        # Filter based on correction and suffix if provided
-        results = []
-        for file_obj in all_files:
-            if correction and file_obj.correction != correction:
-                continue
-            if suffix and file_obj.suffix != suffix:
-                continue
-            results.append(file_obj)
-        
-        return results
+        cls, directory: Path, correction: Optional[str] = None, suffix: Optional[str] = None
+    ) -> List[Self]:
+        files = super().find_in_directory(directory)
+        return [
+            f for f in files
+            if (correction is None or f.correction == correction)
+            and (suffix is None or f.suffix == suffix)
+        ]
+
+
 
 class NEONReflectanceResampledENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_resampled_"
-        r"(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.img$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"     # Optional time
+        r"(?:_directional)?"                        # Optional "_directional"
+        r"_resampled_(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.img$"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
@@ -392,44 +441,42 @@ class NEONReflectanceResampledENVIFile(MaskedFileMixin, DataFile):
         self.time = time
         self.sensor = sensor
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, folder: Path
-    ) -> "NEONReflectanceResampledENVIFile":
-        sensor_str = sensor.replace(" ", "_")
-        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_resampled_{sensor_str}_{suffix}.img"
+    def from_components(cls, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, folder: Path) -> Self:
+        sensor_safe = sensor.replace(" ", "_")
+        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_resampled_{sensor_safe}_{suffix}.img"
         path = folder / filename
         return cls(path, domain, site, date, time, sensor, suffix)
 
     @classmethod
-    def find_in_directory(
-        cls, directory: Path, sensor: str, suffix: str
-    ) -> List["NEONReflectanceResampledENVIFile"]:
-        sensor_safe = sensor.replace(" ", "_")
+    def find_in_directory(cls, directory: Path, sensor: Optional[str] = None, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
         return [
-            f for f in super().find_in_directory(directory)
-            if f.sensor == sensor_safe and f.suffix == suffix
+            f for f in files
+            if (sensor is None or f.sensor == sensor) and (suffix is None or f.suffix == suffix)
         ]
 
     @classmethod
-    def find_all_sensors_in_directory(
-            cls, directory: Path, suffix: str
-    ) -> List["NEONReflectanceResampledENVIFile"]:
+    def find_all_sensors_in_directory(cls, directory: Path, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
         return [
-            f for f in super().find_in_directory(directory)
-            if any(f.sensor == sensor.value.replace(' ', '_') and f.suffix == suffix for sensor in SensorType)
+            f for f in files
+            if (suffix is None or f.suffix == suffix)
         ]
 
 
 class NEONReflectanceResampledHDRFile(DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_resampled_"
-        r"(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.hdr$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"      # Optional time
+        r"(?:_directional)?"                         # Optional "_directional"
+        r"_resampled_(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.hdr$"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
@@ -437,35 +484,34 @@ class NEONReflectanceResampledHDRFile(DataFile):
         self.time = time
         self.sensor = sensor
         self.suffix = suffix
+        self.tile = tile  # Optional
 
     @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, folder: Path
-    ) -> "NEONReflectanceResampledHDRFile":
-        sensor_str = sensor.replace(" ", "_")
-        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_resampled_{sensor_str}_{suffix}.hdr"
+    def from_components(cls, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, folder: Path) -> Self:
+        sensor_safe = sensor.replace(" ", "_")
+        filename = f"NEON_{domain}_{site}_DP1_{date}_{time}_resampled_{sensor_safe}_{suffix}.hdr"
         path = folder / filename
         return cls(path, domain, site, date, time, sensor, suffix)
 
     @classmethod
-    def find_in_directory(
-        cls, directory: Path, sensor: str, suffix: str
-    ) -> List["NEONReflectanceResampledHDRFile"]:
-        sensor_safe = sensor.replace(" ", "_")
+    def find_in_directory(cls, directory: Path, sensor: Optional[str] = None, suffix: Optional[str] = None) -> List[Self]:
+        files = super().find_in_directory(directory)
         return [
-            f for f in super().find_in_directory(directory)
-            if f.sensor == sensor_safe and f.suffix == suffix
+            f for f in files
+            if (sensor is None or f.sensor == sensor) and (suffix is None or f.suffix == suffix)
         ]
 
 
-class NEONReflectanceResampledMaskENVIFile(DataFile):
+class NEONReflectanceResampledMaskENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_resampled_mask_"
-        r"(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.img$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"         # Optional time
+        r"(?:_directional)?"                            # Optional "_directional"
+        r"_resampled_mask_(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.img$"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
@@ -473,6 +519,7 @@ class NEONReflectanceResampledMaskENVIFile(DataFile):
         self.time = time
         self.sensor = sensor
         self.suffix = suffix
+        self.tile = tile  # Optional tile support
 
     @classmethod
     def from_components(
@@ -485,23 +532,26 @@ class NEONReflectanceResampledMaskENVIFile(DataFile):
 
     @classmethod
     def find_in_directory(
-        cls, directory: Path, sensor: str, suffix: str
+        cls, directory: Path, sensor: Optional[str] = None, suffix: Optional[str] = None
     ) -> List["NEONReflectanceResampledMaskENVIFile"]:
-        sensor_safe = sensor.replace(" ", "_")
+        files = super().find_in_directory(directory)
         return [
-            f for f in super().find_in_directory(directory)
-            if f.sensor == sensor_safe and f.suffix == suffix
+            f for f in files
+            if (sensor is None or f.sensor == sensor) and (suffix is None or f.suffix == suffix)
         ]
 
 
-class NEONReflectanceResampledMaskHDRFile(DataFile):
+
+class NEONReflectanceResampledMaskHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
-        r"(?P<date>\d{8})_(?P<time>\d{6})_resampled_mask_"
-        r"(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.hdr$"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"         # Optional time
+        r"(?:_directional)?"                            # Optional "_directional"
+        r"_resampled_mask_(?P<sensor>.+?)_(?P<suffix>[a-z0-9]+)\.hdr$"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, sensor: str, suffix: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
@@ -509,6 +559,7 @@ class NEONReflectanceResampledMaskHDRFile(DataFile):
         self.time = time
         self.sensor = sensor
         self.suffix = suffix
+        self.tile = tile  # Optional tile support
 
     @classmethod
     def from_components(
@@ -521,15 +572,13 @@ class NEONReflectanceResampledMaskHDRFile(DataFile):
 
     @classmethod
     def find_in_directory(
-        cls, directory: Path, sensor: str, suffix: str
+        cls, directory: Path, sensor: Optional[str] = None, suffix: Optional[str] = None
     ) -> List["NEONReflectanceResampledMaskHDRFile"]:
-        sensor_safe = sensor.replace(" ", "_")
+        files = super().find_in_directory(directory)
         return [
-            f for f in super().find_in_directory(directory)
-            if f.sensor == sensor_safe and f.suffix == suffix
+            f for f in files
+            if (sensor is None or f.sensor == sensor) and (suffix is None or f.suffix == suffix)
         ]
-
-
 class SpectralDataCSVFile(DataFile):
     pattern = re.compile(
         r"(?P<base>NEON_.*)_spectral_data\.csv$"
@@ -557,19 +606,21 @@ class MaskedSpectralCSVFile(DataFile):
     """Represents masked spectral data CSV files like NEON_D13_NIWO_DP1_*_with_mask_and_all_spectra.csv"""
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
+        r"(?:(?P<tile>L\d{3}-\d)_)?"
         r"(?P<date>\d{8})_(?P<time>\d{6})_.*_with_mask_and_all_spectra\.csv$"
     )
 
-    def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: str, tile: Optional[str] = None):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
+        self.tile = tile
 
     @classmethod
     def from_components(cls, domain: str, site: str, date: str, time: str, 
-                       base_name: str, folder: Path) -> "MaskedSpectralCSVFile":
+                        base_name: str, folder: Path) -> "MaskedSpectralCSVFile":
         filename = f"{base_name}_with_mask_and_all_spectra.csv"
         path = folder / filename
         return cls(path, domain=domain, site=site, date=date, time=time)
@@ -578,7 +629,8 @@ class MaskedSpectralCSVFile(DataFile):
 class EndmembersCSVFile(DataFile):
     """Represents endmembers CSV output from unmixing process"""
     pattern = re.compile(
-        r"endmembers_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.csv$"
+        r"endmembers_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})\.csv$"
     )
 
     def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
@@ -590,17 +642,18 @@ class EndmembersCSVFile(DataFile):
 
     @classmethod
     def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
-                           output_dir: Path) -> "EndmembersCSVFile":
+                             output_dir: Path) -> "EndmembersCSVFile":
         filename = f"endmembers_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.csv"
         path = output_dir / filename
         return cls(path, domain=signatures_file.domain, site=signatures_file.site, 
-                  date=signatures_file.date, time=signatures_file.time)
+                   date=signatures_file.date, time=signatures_file.time)
 
 
 class UnmixingModelBestTIF(DataFile):
     """Represents model_best.tif output from unmixing"""
     pattern = re.compile(
-        r"model_best_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
+        r"model_best_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
     )
 
     def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
@@ -612,17 +665,18 @@ class UnmixingModelBestTIF(DataFile):
 
     @classmethod
     def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
-                           output_dir: Path) -> "UnmixingModelBestTIF":
+                             output_dir: Path) -> "UnmixingModelBestTIF":
         filename = f"model_best_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.tif"
         path = output_dir / filename
         return cls(path, domain=signatures_file.domain, site=signatures_file.site,
-                  date=signatures_file.date, time=signatures_file.time)
+                   date=signatures_file.date, time=signatures_file.time)
 
 
 class UnmixingModelFractionsTIF(DataFile):
     """Represents model_fractions.tif output from unmixing"""
     pattern = re.compile(
-        r"model_fractions_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
+        r"model_fractions_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
     )
 
     def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
@@ -634,17 +688,18 @@ class UnmixingModelFractionsTIF(DataFile):
 
     @classmethod
     def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
-                           output_dir: Path) -> "UnmixingModelFractionsTIF":
+                             output_dir: Path) -> "UnmixingModelFractionsTIF":
         filename = f"model_fractions_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.tif"
         path = output_dir / filename
         return cls(path, domain=signatures_file.domain, site=signatures_file.site,
-                  date=signatures_file.date, time=signatures_file.time)
+                   date=signatures_file.date, time=signatures_file.time)
 
 
 class UnmixingModelRMSETIF(DataFile):
     """Represents model_rmse.tif output from unmixing"""
     pattern = re.compile(
-        r"model_rmse_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
+        r"model_rmse_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})\.tif$"
     )
 
     def __init__(self, path: Path, domain: str, site: str, date: str, time: str):
@@ -656,8 +711,8 @@ class UnmixingModelRMSETIF(DataFile):
 
     @classmethod
     def from_signatures_file(cls, signatures_file: MaskedSpectralCSVFile, 
-                           output_dir: Path) -> "UnmixingModelRMSETIF":
+                             output_dir: Path) -> "UnmixingModelRMSETIF":
         filename = f"model_rmse_{signatures_file.domain}_{signatures_file.site}_{signatures_file.date}_{signatures_file.time}.tif"
         path = output_dir / filename
         return cls(path, domain=signatures_file.domain, site=signatures_file.site,
-                  date=signatures_file.date, time=signatures_file.time)
+                   date=signatures_file.date, time=signatures_file.time)
