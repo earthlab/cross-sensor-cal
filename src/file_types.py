@@ -424,62 +424,41 @@ class NEONReflectanceConfigFile(DataFile):
         return [f for f in files if suffix is None or f.suffix == suffix]
 
 
-        
-
 class NEONReflectanceBRDFCorrectedENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
         r"(?:(?P<tile>L\d{3}-\d)_)?"
-        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"              # Optional time
-        r"(?:_directional)?"                                 # Optional "_directional"
-        r"_brdf_corrected_(?P<suffix>[a-z]{3,4})\.img$"      # Matches _brdf_corrected_*.img
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"              
+        r"(?:_directional)?"                                 
+        r"_reflectance_brdfandtopo_corrected_(?P<suffix>[a-z]{3,20})\.img$"
     )
 
-    def __init__(
-        self, path: Path, domain: str, site: str, date: str, time: Optional[str],
-        suffix: str, tile: Optional[str] = None, directional: bool = False
-    ):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: Optional[str],
+                 suffix: str, tile: Optional[str] = None, directional: bool = False):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
-        self.tile = tile  # Optional
-        self.directional = directional  # True if "_directional" present
+        self.tile = tile
+        self.directional = directional
 
     @classmethod
-    def from_filename(cls, path: Path) -> "NEONReflectanceBRDFCorrectedENVIFile":
-        match = cls.match(path.name)
-        if not match:
-            raise ValueError(f"{cls.__name__} could not parse {path.name}")
-        groups = match.groupdict()
-        directional = "_directional" in path.name
-        return cls(path, directional=directional, **groups)
-
-    @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, suffix: str, folder: Path,
-        time: Optional[str] = None, tile: Optional[str] = None,
-        directional: bool = False
-    ) -> "NEONReflectanceBRDFCorrectedENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, suffix: str, folder: Path,
+                        time: Optional[str] = None, tile: Optional[str] = None,
+                        directional: bool = False) -> "NEONReflectanceBRDFCorrectedENVIFile":
+        # 🛠 Sanitize suffix to avoid double "corrected"
+        suffix_clean = suffix.replace("corrected", "").replace("__", "_").strip("_")
         tile_part = f"{tile}_" if tile else ""
         time_part = f"_{time}" if time else ""
         directional_part = "_directional" if directional else ""
         filename = (
             f"NEON_{domain}_{site}_DP1_{tile_part}{date}{time_part}"
-            f"{directional_part}_brdf_corrected_{suffix}.img"
+            f"{directional_part}_reflectance_brdfandtopo_corrected_{suffix_clean}.img"
         )
         path = folder / filename
-        return cls(path, domain, site, date, time, suffix, tile, directional)
-
-    @classmethod
-    def find_in_directory(
-        cls, directory: Path, suffix: Optional[str] = None
-    ) -> List["NEONReflectanceBRDFCorrectedENVIFile"]:
-        files = super().find_in_directory(directory)
-        return [f for f in files if suffix is None or f.suffix == suffix]
-
+        return cls(path, domain, site, date, time, suffix_clean, tile, directional)
 
 
 
@@ -487,56 +466,36 @@ class NEONReflectanceBRDFCorrectedENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
         r"(?:(?P<tile>L\d{3}-\d)_)?"
-        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"               # Optional time
-        r"(?:_directional)?"                                  # Optional "_directional"
-        r"_brdf_corrected_(?P<suffix>[a-z]{3,4})\.hdr$"       # Matches _brdf_corrected_*.hdr
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"               
+        r"(?:_directional)?"                                  
+        r"_reflectance_brdfandtopo_corrected_(?P<suffix>[a-z]{3,20})\.hdr$"
     )
 
-    def __init__(
-        self, path: Path, domain: str, site: str, date: str, time: Optional[str],
-        suffix: str, tile: Optional[str] = None, directional: bool = False
-    ):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: Optional[str],
+                 suffix: str, tile: Optional[str] = None, directional: bool = False):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
-        self.tile = tile  # Optional
-        self.directional = directional  # True if "_directional" present
+        self.tile = tile
+        self.directional = directional
 
     @classmethod
-    def from_filename(cls, path: Path) -> "NEONReflectanceBRDFCorrectedENVIHDRFile":
-        match = cls.match(path.name)
-        if not match:
-            raise ValueError(f"{cls.__name__} could not parse {path.name}")
-        groups = match.groupdict()
-        directional = "_directional" in path.name
-        return cls(path, directional=directional, **groups)
-
-    @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, suffix: str, folder: Path,
-        time: Optional[str] = None, tile: Optional[str] = None,
-        directional: bool = False
-    ) -> "NEONReflectanceBRDFCorrectedENVIHDRFile":
+    def from_components(cls, domain: str, site: str, date: str, suffix: str, folder: Path,
+                        time: Optional[str] = None, tile: Optional[str] = None,
+                        directional: bool = False) -> "NEONReflectanceBRDFCorrectedENVIHDRFile":
+        suffix_clean = suffix.replace("corrected", "").replace("__", "_").strip("_")
         tile_part = f"{tile}_" if tile else ""
         time_part = f"_{time}" if time else ""
         directional_part = "_directional" if directional else ""
         filename = (
             f"NEON_{domain}_{site}_DP1_{tile_part}{date}{time_part}"
-            f"{directional_part}_brdf_corrected_{suffix}.hdr"
+            f"{directional_part}_reflectance_brdfandtopo_corrected_{suffix_clean}.hdr"
         )
         path = folder / filename
-        return cls(path, domain, site, date, time, suffix, tile, directional)
-
-    @classmethod
-    def find_in_directory(
-        cls, directory: Path, suffix: Optional[str] = None
-    ) -> List["NEONReflectanceBRDFCorrectedENVIHDRFile"]:
-        files = super().find_in_directory(directory)
-        return [f for f in files if suffix is None or f.suffix == suffix]
-
+        return cls(path, domain, site, date, time, suffix_clean, tile, directional)
 
 
 
@@ -544,111 +503,72 @@ class NEONReflectanceBRDFMaskENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
         r"(?:(?P<tile>L\d{3}-\d)_)?"
-        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"                  # Optional time
-        r"(?:_directional)?"                                     # Optional "_directional"
-        r"_brdf_corrected_mask_(?P<suffix>[a-z]{3,4})\.img$"     # Matches .img files with "mask"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"                  
+        r"(?:_directional)?"                                     
+        r"_reflectance_brdfandtopo_corrected_mask_(?P<suffix>[a-z]{3,20})\.img$"
     )
 
-    def __init__(
-        self, path: Path, domain: str, site: str, date: str, time: Optional[str],
-        suffix: str, tile: Optional[str] = None, directional: bool = False
-    ):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: Optional[str],
+                 suffix: str, tile: Optional[str] = None, directional: bool = False):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
-        self.tile = tile  # Optional
-        self.directional = directional  # True if "_directional" present
+        self.tile = tile
+        self.directional = directional
 
     @classmethod
-    def from_filename(cls, path: Path) -> "NEONReflectanceBRDFMaskENVIFile":
-        match = cls.match(path.name)
-        if not match:
-            raise ValueError(f"{cls.__name__} could not parse {path.name}")
-        groups = match.groupdict()
-        directional = "_directional" in path.name
-        return cls(path, directional=directional, **groups)
-
-    @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, suffix: str, folder: Path,
-        time: Optional[str] = None, tile: Optional[str] = None,
-        directional: bool = False
-    ) -> "NEONReflectanceBRDFMaskENVIFile":
+    def from_components(cls, domain: str, site: str, date: str, suffix: str, folder: Path,
+                        time: Optional[str] = None, tile: Optional[str] = None,
+                        directional: bool = False) -> "NEONReflectanceBRDFMaskENVIFile":
+        suffix_clean = suffix.replace("corrected", "").replace("__", "_").strip("_")
         tile_part = f"{tile}_" if tile else ""
         time_part = f"_{time}" if time else ""
         directional_part = "_directional" if directional else ""
         filename = (
             f"NEON_{domain}_{site}_DP1_{tile_part}{date}{time_part}"
-            f"{directional_part}_brdf_corrected_mask_{suffix}.img"
+            f"{directional_part}_reflectance_brdfandtopo_corrected_mask_{suffix_clean}.img"
         )
         path = folder / filename
-        return cls(path, domain, site, date, time, suffix, tile, directional)
-
-    @classmethod
-    def find_in_directory(
-        cls, directory: Path, suffix: Optional[str] = None
-    ) -> List["NEONReflectanceBRDFMaskENVIFile"]:
-        files = super().find_in_directory(directory)
-        return [f for f in files if suffix is None or f.suffix == suffix]
-
+        return cls(path, domain, site, date, time, suffix_clean, tile, directional)
 
 
 class NEONReflectanceBRDFMaskENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"NEON_(?P<domain>D\d+?)_(?P<site>[A-Z]+?)_DP1_"
         r"(?:(?P<tile>L\d{3}-\d)_)?"
-        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"                   # Optional time
-        r"(?:_directional)?"                                      # Optional "_directional"
-        r"_brdf_corrected_mask_(?P<suffix>[a-z]{3,4})\.hdr$"      # Matches .hdr files with "mask"
+        r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"                   
+        r"(?:_directional)?"                                      
+        r"_reflectance_brdfandtopo_corrected_mask_(?P<suffix>[a-z]{3,20})\.hdr$"
     )
 
-    def __init__(
-        self, path: Path, domain: str, site: str, date: str, time: Optional[str],
-        suffix: str, tile: Optional[str] = None, directional: bool = False
-    ):
+    def __init__(self, path: Path, domain: str, site: str, date: str, time: Optional[str],
+                 suffix: str, tile: Optional[str] = None, directional: bool = False):
         super().__init__(path)
         self.domain = domain
         self.site = site
         self.date = date
         self.time = time
         self.suffix = suffix
-        self.tile = tile  # Optional
-        self.directional = directional  # True if "_directional" present
+        self.tile = tile
+        self.directional = directional
 
     @classmethod
-    def from_filename(cls, path: Path) -> "NEONReflectanceBRDFMaskENVIHDRFile":
-        match = cls.match(path.name)
-        if not match:
-            raise ValueError(f"{cls.__name__} could not parse {path.name}")
-        groups = match.groupdict()
-        directional = "_directional" in path.name
-        return cls(path, directional=directional, **groups)
-
-    @classmethod
-    def from_components(
-        cls, domain: str, site: str, date: str, suffix: str, folder: Path,
-        time: Optional[str] = None, tile: Optional[str] = None,
-        directional: bool = False
-    ) -> "NEONReflectanceBRDFMaskENVIHDRFile":
+    def from_components(cls, domain: str, site: str, date: str, suffix: str, folder: Path,
+                        time: Optional[str] = None, tile: Optional[str] = None,
+                        directional: bool = False) -> "NEONReflectanceBRDFMaskENVIHDRFile":
+        suffix_clean = suffix.replace("corrected", "").replace("__", "_").strip("_")
         tile_part = f"{tile}_" if tile else ""
         time_part = f"_{time}" if time else ""
         directional_part = "_directional" if directional else ""
         filename = (
             f"NEON_{domain}_{site}_DP1_{tile_part}{date}{time_part}"
-            f"{directional_part}_brdf_corrected_mask_{suffix}.hdr"
+            f"{directional_part}_reflectance_brdfandtopo_corrected_mask_{suffix_clean}.hdr"
         )
         path = folder / filename
-        return cls(path, domain, site, date, time, suffix, tile, directional)
-
-    @classmethod
-    def find_in_directory(
-        cls, directory: Path, suffix: Optional[str] = None
-    ) -> List["NEONReflectanceBRDFMaskENVIHDRFile"]:
-        files = super().find_in_directory(directory)
-        return [f for f in files if suffix is None or f.suffix == suffix]
+        return cls(path, domain, site, date, time, suffix_clean, tile, directional)
 
 
 
