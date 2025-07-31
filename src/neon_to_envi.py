@@ -101,10 +101,22 @@ def envi_header_for_ancillary(hy_obj, attributes, interleave='bil'):
     }
 
 
+def find_reflectance_metadata_group(h5_file):
+    for group in h5_file.keys():
+        candidate = f"{group}/Reflectance/Metadata"
+        if candidate in h5_file:
+            return candidate
+    raise ValueError("Could not find Reflectance/Metadata group.")
+
 def export_anc(hy_obj, output_dir):
     neon_file = NEONReflectanceFile.from_filename(Path(hy_obj.file_name))
     with h5py.File(hy_obj.file_name, 'r') as h5_file:
-        base_path = f"/{neon_file.site}/Reflectance/Metadata/"
+        try:
+            base_path = find_reflectance_metadata_group(h5_file) + "/"
+        except ValueError as e:
+            print(f"❌ {e} in file: {hy_obj.file_name}")
+            return
+
         ancillary_keys = [
             "Ancillary_Imagery/Path_Length",
             "to-sensor_Azimuth_Angle",
@@ -114,15 +126,16 @@ def export_anc(hy_obj, output_dir):
             "Ancillary_Imagery/Slope",
             "Ancillary_Imagery/Aspect"
         ]
+
         data = [
-            h5_file[get_actual_key(h5_file, f"{base_path}{key}")][...]
-            if get_actual_key(h5_file, f"{base_path}{key}") else np.array([], dtype=np.float32)
+            h5_file.get(base_path + key)[()]
+            if h5_file.get(base_path + key) is not None else np.array([], dtype=np.float32)
             for key in ancillary_keys
         ]
 
         attributes = {
-            'samples': max((d.shape[1] for d in data if d.size > 1), default=0),
-            'lines': max((d.shape[0] for d in data if d.size > 1), default=0),
+            'samples': max((d.shape[1] for d in data if d.ndim == 2), default=0),
+            'lines': max((d.shape[0] for d in data if d.ndim == 2), default=0),
             'data type': 4,
             'band names': ['Path Length', 'Sensor Azimuth', 'Sensor Zenith',
                            'Solar Azimuth', 'Solar Zenith', 'Slope', 'Aspect']
@@ -151,7 +164,6 @@ def export_anc(hy_obj, output_dir):
                 writer.write_band(array, i)
         writer.close()
         print(f"📦 Ancillary data saved: {ancillary_file.file_path}")
-
 
 def neon_to_envi(images: list[str], output_dir: str, anc: bool = False):
     if ray.is_initialized():

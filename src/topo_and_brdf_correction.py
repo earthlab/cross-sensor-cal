@@ -209,6 +209,7 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceE
     """
     Generate correction configs with complete ancillary mapping and parameters for HyTools.
     """
+    # 1) find your single ancillary ENVI (all bands in one file)
     anc_files = NEONReflectanceAncillaryENVIFile.find_in_directory(reflectance_file.directory)
     print(f"🔗 Found {len(anc_files)} ancillary files for {reflectance_file.file_path}")
 
@@ -216,17 +217,26 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceE
         print(f"⚠️ No ancillary files found for {reflectance_file.file_path}. Skipping.")
         return
 
-    # Build ancillary mapping
+    # we expect exactly one ancillary .img with bands:
+    # ['Path Length', 'Sensor Azimuth', 'Sensor Zenith', 'Solar Azimuth', 'Solar Zenith', 'Slope', 'Aspect']
     ancillary_bands = [
         'path_length', 'sensor_az', 'sensor_zn',
-        'solar_az', 'solar_zn', 'slope', 'aspect', 'phase', 'cosine_i'
+        'solar_az', 'solar_zn', 'slope', 'aspect'
     ]
+    anc_file = anc_files[0]
+
+    # 2) build mapping: band name → [path, band index]
     ancillary_mapping = {
-        band_name: [str(anc_files[0].file_path), band_index]
-        for band_index, band_name in enumerate(ancillary_bands)
+        band_name: [str(anc_file.file_path), idx]
+        for idx, band_name in enumerate(ancillary_bands)
     }
 
-    # Build config file path
+    # 3) warn if any expected are missing
+    missing = set(ancillary_bands) - set(ancillary_mapping.keys())
+    if missing:
+        print(f"⚠️ Missing ancillary mappings for: {missing}")
+
+    # 4) build the config JSON path
     suffix = "envi"
     config_file = NEONReflectanceConfigFile.from_components(
         domain=reflectance_file.domain,
@@ -240,7 +250,7 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceE
     )
     print(f"📄 Writing config JSON: {config_file.file_path}")
 
-    # Build config dictionary matching example
+    # 5) assemble your config dict
     config_dict = {
         "bad_bands": [
             [300, 400],
@@ -266,18 +276,17 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceE
             "type": "scs+c",
             "calc_mask": [
                 ["ndi", {"band_1": 850, "band_2": 660, "min": 0.1, "max": 1.0}],
-                ["ancillary", {"name": "slope", "min": 0.0873, "max": "+inf"}],
-                ["ancillary", {"name": "cosine_i", "min": 0.12, "max": "+inf"}],
+                ["ancillary", {"name": "slope",    "min": 0.0873, "max": "+inf"}],
+                ["ancillary", {"name": "cosine_i", "min": 0.12,   "max": "+inf"}],
                 ["cloud", {
-                    "method": "zhai_2018",
-                    "cloud": True, "shadow": True,
+                    "method": "zhai_2018", "cloud": True, "shadow": True,
                     "T1": 0.01, "t2": 0.1, "t3": 0.25, "t4": 0.5, "T7": 9, "T8": 9
                 }]
             ],
             "apply_mask": [
-                ["ndi", {"band_1": 850, "band_2": 660, "min": 0.1, "max": 1.0}],
-                ["ancillary", {"name": "slope", "min": 0.0873, "max": "+inf"}],
-                ["ancillary", {"name": "cosine_i", "min": 0.12, "max": "+inf"}]
+                ["ndi",      {"band_1": 850, "band_2": 660, "min": 0.1, "max": 1.0}],
+                ["ancillary",{"name": "slope",    "min": 0.0873, "max": "+inf"}],
+                ["ancillary",{"name": "cosine_i", "min": 0.12,   "max": "+inf"}]
             ],
             "c_fit_type": "nnls"
         },
@@ -315,7 +324,7 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceE
         }
     }
 
-    # Write JSON to file
+    # 6) write it out
     with open(config_file.file_path, 'w') as f:
         json.dump(config_dict, f, indent=2)
     print(f"✅ Config saved: {config_file.file_path}")
