@@ -38,24 +38,41 @@ def ensure_directory_exists(directory_path):
     Path(directory_path).mkdir(parents=True, exist_ok=True)
 
 
-def neon_to_envi_task(hy_obj, output_dir):
+def neon_to_envi_task(hy_obj, output_dir, metadata=None):
     original_path = Path(hy_obj.file_name)
 
-    # Parse metadata from filename
-    try:
-        neon_file = NEONReflectanceFile.from_filename(original_path)
-    except ValueError:
-        print(f"⚠️ Could not parse {original_path}, using fallback naming.")
+    # === Always force metadata if supplied ===
+    if metadata:
+        print(f"📎 Forcing injected metadata for: {original_path.name}")
         neon_file = NEONReflectanceFile(
-            path=original_path, domain="D00", site="UNK",
-            date="00000000", time=None, tile=None, suffix="fallback"
+            path=original_path,
+            domain=metadata.get("domain", "D00"),
+            site=metadata.get("site", "UNK"),
+            date=metadata.get("date", "00000000"),
+            time=metadata.get("time", "000000"),
+            tile=metadata.get("tile", "L000-0"),
+            suffix=metadata.get("suffix", None)
         )
+    else:
+        try:
+            neon_file = NEONReflectanceFile.from_filename(original_path)
+        except ValueError:
+            print(f"⚠️ Could not parse {original_path}, using minimal fallback.")
+            neon_file = NEONReflectanceFile(
+                path=original_path,
+                domain="D00",
+                site="UNK",
+                date="00000000",
+                time="000000",
+                tile="L000-0",
+                suffix="fallback"
+            )
 
-    # Create output directory
+    # Output folder setup
     specific_output_dir = Path(output_dir) / original_path.stem
     specific_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build ENVI output file (tile passed as keyword)
+    # Build ENVI output path with correct time included
     envi_file = NEONReflectanceENVIFile.from_components(
         domain=neon_file.domain,
         site=neon_file.site,
@@ -69,7 +86,7 @@ def neon_to_envi_task(hy_obj, output_dir):
         print(f"⚠️ Skipping existing file: {envi_file.file_path}")
         return
 
-    # Process and write data
+    # Process and write
     hy_obj.load_data()
     writer = WriteENVI(envi_file.file_path, hy_obj.get_header())
     iterator = hy_obj.iterate(by='chunk')
