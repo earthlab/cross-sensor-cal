@@ -51,7 +51,7 @@ def neon_to_envi_task(hy_obj, output_dir, metadata=None):
             date=metadata.get("date", "00000000"),
             time=metadata.get("time", "000000"),
             tile=metadata.get("tile", "L000-0"),
-            suffix=metadata.get("suffix", None)
+            suffix=metadata.get("suffix") or "directional_reflectance"
         )
     else:
         try:
