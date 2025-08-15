@@ -418,10 +418,27 @@ class NEONReflectanceConfigFile(DataFile):
 
     @classmethod
     def find_in_directory(
-        cls, directory: Path, suffix: Optional[str] = None
+        cls, directory: Path, suffix: Optional[str] = None, verbose: bool = False
     ) -> List["NEONReflectanceConfigFile"]:
         files = super().find_in_directory(directory)
-        return [f for f in files if suffix is None or f.suffix == suffix]
+        matched: List["NEONReflectanceConfigFile"] = []
+        for f in files:
+            if suffix is None or f.suffix == suffix:
+                matched.append(f)
+            elif verbose:
+                print(
+                    f"Ignoring config file {f.path} due to suffix '{f.suffix}' != '{suffix}'"
+                )
+        if verbose:
+            if matched:
+                print(
+                    f"Found {len(matched)} config file(s) in {directory} with suffix='{suffix}'"
+                )
+            else:
+                print(
+                    f"No config files found in {directory} with suffix='{suffix}'"
+                )
+        return matched
 
 
 class NEONReflectanceBRDFCorrectedENVIFile(MaskedFileMixin, DataFile):
