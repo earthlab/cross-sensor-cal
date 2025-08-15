@@ -90,6 +90,11 @@ def go_forth_and_multiply(base_folder="output", resample_method: str = 'convolut
     # Step 2: Convert flight lines to ENVI format
     flight_lines_to_envi(input_dir=base_folder, output_dir=base_folder)
 
+    print("\U0001F4C1 Listing generated ENVI files:")
+    base_path = Path(base_folder)
+    for file in sorted(base_path.rglob("*envi.hdr")):
+        print("  \U0001F4C4", file)
+
     # Step 3: Generate configuration JSON
     generate_config_json(base_folder)
 
