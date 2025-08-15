@@ -1,6 +1,7 @@
 import json
 import warnings
 from pathlib import Path
+from typing import Optional, List
 
 import ray
 import numpy as np
@@ -205,9 +206,12 @@ def apply_corrections(hy_obj, config_dict):
 
 
 
-def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceENVIFile):
+def generate_correction_configs_for_directory(
+    reflectance_file: NEONReflectanceENVIFile,
+) -> Optional[NEONReflectanceConfigFile]:
     """
     Generate correction configs with complete ancillary mapping and parameters for HyTools.
+    Returns the generated config file on success, else None.
     """
     # 1) find your single ancillary ENVI (all bands in one file)
     anc_files = NEONReflectanceAncillaryENVIFile.find_in_directory(reflectance_file.directory)
@@ -215,7 +219,7 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceE
 
     if not anc_files:
         print(f"⚠️ No ancillary files found for {reflectance_file.file_path}. Skipping.")
-        return
+        return None
 
     # we expect exactly one ancillary .img with bands:
     # ['Path Length', 'Sensor Azimuth', 'Sensor Zenith', 'Solar Azimuth', 'Solar Zenith', 'Slope', 'Aspect']
@@ -328,19 +332,31 @@ def generate_correction_configs_for_directory(reflectance_file: NEONReflectanceE
     with open(config_file.file_path, 'w') as f:
         json.dump(config_dict, f, indent=2)
     print(f"✅ Config saved: {config_file.file_path}")
+    return config_file
 
 
-def generate_config_json(parent_directory: str):
+def generate_config_json(parent_directory: str) -> int:
     """
     Generate correction JSONs for all reflectance files in the parent directory.
+    Returns the number of configuration files written.
     """
     reflectance_files = NEONReflectanceENVIFile.find_in_directory(Path(parent_directory))
     print(f"📂 Found {len(reflectance_files)} reflectance files.")
 
+    written: List[Path] = []
     for reflectance_file in reflectance_files:
         print(f"📝 Processing: {reflectance_file.file_path}")
-        generate_correction_configs_for_directory(reflectance_file)
-    print("🎉 All configuration JSONs generated.")
+        cfg = generate_correction_configs_for_directory(reflectance_file)
+        if cfg:
+            written.append(Path(cfg.file_path))
+
+    if not written:
+        print("⚠️ No configuration JSONs were generated.")
+    else:
+        print("🎉 Generated configuration JSONs:")
+        for path in written:
+            print("  \U0001F4C4", path)
+    return len(written)
 
 
 
