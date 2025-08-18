@@ -65,8 +65,4 @@ assert (abund.filter(like="EM").sum(axis=1) <= 1.01).all()
 assert (abund.filter(like="EM") >= 0).all().all()
 ```
 
-### Example Screenshots
-| Pass | Fail |
-|------|------|
-| ![pass example](img/validation_pass.png) | ![fail example](img/validation_fail.png) |
 <!-- FILLME:END -->
