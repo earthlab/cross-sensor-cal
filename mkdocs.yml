@@ -1,0 +1,22 @@
+site_name: Cross Sensor Cal
+theme: material
+nav:
+  - Overview: overview.md
+  - Quickstart: quickstart.md
+  - Environment Setup: env-setup.md
+  - CyVerse iRODS: cyverse-irods.md
+  - Configuration: configuration.md
+  - Naming Conventions: naming-conventions.md
+  - Schemas: schemas.md
+  - Stage 01 Raster Processing: stage-01-raster-processing.md
+  - Stage 02 Sorting: stage-02-sorting.md
+  - Stage 03 Pixel Extraction: stage-03-pixel-extraction.md
+  - Stage 04 Spectral Library: stage-04-spectral-library.md
+  - Stage 05 MESMA: stage-05-mesma.md
+  - Validation: validation.md
+  - Benchmarks: benchmarks.md
+  - Troubleshooting: troubleshooting.md
+  - FAQ: faq.md
+  - Extending: extending.md
+  - Glossary: glossary.md
+  - References: references.md
