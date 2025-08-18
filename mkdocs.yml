@@ -1,5 +1,17 @@
+# <!-- FILLME:START -->
 site_name: Cross Sensor Cal
-theme: material
+repo_url: https://github.com/earthlab/cross-sensor-cal
+theme:
+  name: material
+plugins:
+  - search
+  - mkdocstrings
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - footnotes
+  - tables
 nav:
   - Overview: overview.md
   - Quickstart: quickstart.md
@@ -20,3 +32,5 @@ nav:
   - Extending: extending.md
   - Glossary: glossary.md
   - References: references.md
+# <!-- FILLME:END -->
+
