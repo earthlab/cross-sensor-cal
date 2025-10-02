@@ -2,31 +2,17 @@ import argparse
 import os
 import subprocess
 from pathlib import Path
-import sys
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from cross_sensor_cal.convolution_resample import resample as convolution_resample
-from cross_sensor_cal.envi_download import download_neon_flight_lines
-from cross_sensor_cal.file_sort import generate_file_move_list
-from cross_sensor_cal.file_types import (
-    NEONReflectanceBRDFCorrectedENVIFile,
-    NEONReflectanceConfigFile,
-    NEONReflectanceENVIFile,
-    NEONReflectanceResampledENVIFile,
-)
-from cross_sensor_cal.mask_raster import mask_raster_with_polygons
-from cross_sensor_cal.neon_to_envi import flight_lines_to_envi
-from cross_sensor_cal.polygon_extraction import control_function_for_extraction
-from cross_sensor_cal.standard_resample import translate_to_other_sensors
-from cross_sensor_cal.topo_and_brdf_correction import (
-    apply_offset_to_envi,
-    generate_config_json,
-    topo_and_brdf_correction,
-)
+from src.envi_download import download_neon_flight_lines
+from src.file_types import NEONReflectanceConfigFile, \
+    NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceENVIFile, NEONReflectanceResampledENVIFile
+from src.neon_to_envi import flight_lines_to_envi
+from src.topo_and_brdf_correction import generate_config_json, topo_and_brdf_correction, apply_offset_to_envi
+from src.convolution_resample import resample as convolution_resample
+from src.standard_resample import translate_to_other_sensors
+from src.mask_raster import mask_raster_with_polygons
+from src.polygon_extraction import control_function_for_extraction
+from src.file_sort import generate_file_move_list
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 

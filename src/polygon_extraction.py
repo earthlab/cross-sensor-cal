@@ -15,13 +15,8 @@ from tqdm import tqdm
 import numpy as np
 from rasterio.crs import CRS
 
-from .file_types import (
-    DataFile,
-    NEONReflectanceENVIFile,
-    NEONReflectanceBRDFCorrectedENVIFile,
-    NEONReflectanceResampledENVIFile,
-    SpectralDataCSVFile,
-)
+from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, \
+    NEONReflectanceResampledENVIFile, SpectralDataCSVFile
 
 
 def control_function_for_extraction(directory, polygon_path):

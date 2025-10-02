@@ -4,17 +4,17 @@
 > the status boxes and notes as tasks are completed.
 
 ## 1. Package Structure & Metadata
-- [x] Confirm the canonical package name (`cross-sensor-cal` vs `cross_sensor_cal`) and ensure the code lives under a single importable package directory (e.g., `src/cross_sensor_cal`). *(2024-03-22: moved modules into `src/cross_sensor_cal/` and updated imports project-wide.)*
-- [x] Replace the minimal `setup.py` with a `pyproject.toml` using PEP 621 metadata (name, version, description, authors, URLs, keywords, classifiers) and optional `setup.cfg` for configuration. Align metadata with README and docs. *(Added `pyproject.toml` with setuptools build-backend and metadata; removed `setup.py`.)*
-- [x] Add `__init__.py` exports and package-level documentation so users can discover public APIs easily. *(Created `cross_sensor_cal/__init__.py` exposing key pipeline functions.)*
-- [x] Decide on versioning scheme (CalVer or SemVer) and document it in CONTRIBUTING along with release tagging conventions. *(Documented SemVer workflow and release tagging steps in CONTRIBUTING.)*
+- [ ] Confirm the canonical package name (`cross-sensor-cal` vs `cross_sensor_cal`) and ensure the code lives under a single importable package directory (e.g., `src/cross_sensor_cal`).
+- [ ] Replace the minimal `setup.py` with a `pyproject.toml` using PEP 621 metadata (name, version, description, authors, URLs, keywords, classifiers) and optional `setup.cfg` for configuration. Align metadata with README and docs.
+- [ ] Add `__init__.py` exports and package-level documentation so users can discover public APIs easily.
+- [ ] Decide on versioning scheme (CalVer or SemVer) and document it in CONTRIBUTING along with release tagging conventions.
 - [ ] Audit repository for large data or notebooks that should be excluded from source distributions. Use `.gitignore`/`MANIFEST.in` to prevent shipping bulky artifacts.
 
 ## 2. Dependencies & Environment
 - [ ] Inventory runtime vs. optional dependencies by reviewing modules (e.g., GDAL, HyTools, Ray) and refactor imports so optional features are guarded or extra-requirements are defined.
 - [ ] Translate `environment.yaml` into concise dependency groups (`install_requires`, `extras_require`, dev/test/doc extras). Remove pinned Windows-specific or conda-only packages that do not belong on PyPI.
 - [ ] Provide a lightweight sample dataset or clearly document external data requirements so users can run example pipelines after installing from PyPI.
-- [x] Add a `requirements-dev.txt` or equivalent to unify tooling for contributors (formatters, linters, docs builders). *(Created `requirements-dev.txt` aligned with the `[project.optional-dependencies]` section.)*
+- [ ] Add a `requirements-dev.txt` or equivalent to unify tooling for contributors (formatters, linters, docs builders).
 
 ## 3. Code Quality, Testing & Tooling
 - [ ] Expand automated test coverage beyond `tests/test_file_sort.py` to cover each major pipeline stage (`neon_to_envi`, resampling, masking, polygon extraction, MESMA). Include integration tests with fixture data.
@@ -38,7 +38,7 @@
 - [ ] Establish release checklist (tagging, GitHub release notes, PyPI upload) and capture in this document or `RELEASING.md`.
 
 ## 6. Licensing & Governance
-- [x] Confirm license (GPLv3) is acceptable for target distribution venues; include `LICENSE` file in repository and package manifest. *(Added the GPLv3 text at `LICENSE` and referenced it from `pyproject.toml`.)*
+- [ ] Confirm license (GPLv3) is acceptable for target distribution venues; include `LICENSE` file in repository and package manifest.
 - [ ] Ensure all third-party code, data, and documentation comply with the chosen license and attribution requirements.
 - [ ] Identify maintainers and add contact information/support policy in README and docs.
 

@@ -9,12 +9,10 @@ from unittest.mock import Mock, patch
 
 # Add parent directory to path to import modules
 import sys
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-sys.path.insert(0, str(SRC_DIR))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cross_sensor_cal.file_sort import categorize_file, generate_file_move_list
-from cross_sensor_cal.file_types import (
+from src.file_sort import categorize_file, generate_file_move_list
+from src.file_types import (
     NEONReflectanceFile,
     NEONReflectanceENVIFile,
     NEONReflectanceENVHDRFile,
@@ -135,7 +133,7 @@ class TestCategorizeFile(unittest.TestCase):
         mock_file.__class__ = NEONReflectanceENVIFile
         
         # Mock the isinstance checks
-        with patch('cross_sensor_cal.file_sort.isinstance') as mock_isinstance:
+        with patch('src.file_sort.isinstance') as mock_isinstance:
             def isinstance_side_effect(obj, class_or_tuple):
                 if class_or_tuple == (NEONReflectanceResampledENVIFile, NEONReflectanceResampledHDRFile,
                                      NEONReflectanceResampledMaskENVIFile, NEONReflectanceResampledMaskHDRFile):

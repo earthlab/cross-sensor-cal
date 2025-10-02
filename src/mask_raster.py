@@ -10,11 +10,7 @@ from rasterio.crs import CRS
 from shapely.geometry import box
 from rasterio.features import rasterize
 
-from .file_types import (
-    NEONReflectanceENVIFile,
-    NEONReflectanceBRDFCorrectedENVIFile,
-    NEONReflectanceResampledENVIFile,
-)
+from src.file_types import NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceResampledENVIFile
 
 
 def mask_raster_with_polygons(
