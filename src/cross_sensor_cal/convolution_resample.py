@@ -9,7 +9,7 @@ import os
 from .file_types import (
     NEONReflectanceResampledENVIFile,
     NEONReflectanceResampledHDRFile,
-    NEONReflectanceBRDFCorrectedENVIHDRFile
+    NEONReflectanceBRDFCorrectedENVIHDRFile,
 )
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -25,8 +25,9 @@ def gaussian_rsr(wavelengths, center, fwhm):
 def resample(input_dir: Path):
     """Perform convolutional resampling for BRDF+TOPO corrected hyperspectral data"""
     print(f"🚀 Starting convolutional resample for {input_dir}")
-    brdf_corrected_hdr_files = NEONReflectanceBRDFCorrectedENVIHDRFile.find_in_directory(input_dir)
-
+    brdf_corrected_hdr_files = (
+        NEONReflectanceBRDFCorrectedENVIHDRFile.find_in_directory(input_dir)
+    )
 
     for hdr_file in brdf_corrected_hdr_files:
         try:
@@ -38,11 +39,13 @@ def resample(input_dir: Path):
             continue
 
         header = envi.read_envi_header(hdr_file.file_path)
-        wavelengths = header.get('wavelength')
+        wavelengths = header.get("wavelength")
 
         if wavelengths is None:
-            with open(os.path.join(PROJ_DIR, 'data', 'hyperspectral_bands.json'), 'r') as f:
-                wavelengths = json.load(f).get('bands')
+            with open(
+                os.path.join(PROJ_DIR, "data", "hyperspectral_bands.json"), "r"
+            ) as f:
+                wavelengths = json.load(f).get("bands")
 
         if not wavelengths:
             print("❌ ERROR: No wavelengths found.")
@@ -52,14 +55,21 @@ def resample(input_dir: Path):
 
         rows, cols, bands = hyperspectral_data.shape
         if len(wavelengths) != bands:
-            print(f"❌ ERROR: Band mismatch ({len(wavelengths)} wavelengths vs {bands} bands).")
+            print(
+                f"❌ ERROR: Band mismatch ({len(wavelengths)} wavelengths vs {bands} bands)."
+            )
             continue
 
-        with open(os.path.join(PROJ_DIR, 'data', 'landsat_band_parameters.json'), 'r') as f:
+        with open(
+            os.path.join(PROJ_DIR, "data", "landsat_band_parameters.json"), "r"
+        ) as f:
             all_sensor_params = json.load(f)
 
         for sensor_name, sensor_params in all_sensor_params.items():
-            resampled_dir = hdr_file.directory / f"Convolution_Reflectance_Resample_{sensor_name.replace(' ', '_')}"
+            resampled_dir = (
+                hdr_file.directory
+                / f"Convolution_Reflectance_Resample_{sensor_name.replace(' ', '_')}"
+            )
             os.makedirs(resampled_dir, exist_ok=True)
 
             # Build output file paths using corrected naming conventions
@@ -72,7 +82,7 @@ def resample(input_dir: Path):
                 folder=resampled_dir,
                 time=hdr_file.time,
                 tile=hdr_file.tile,
-                directional=hdr_file.directional
+                directional=hdr_file.directional,
             )
 
             resampled_img_file = NEONReflectanceResampledENVIFile.from_components(
@@ -84,7 +94,7 @@ def resample(input_dir: Path):
                 folder=resampled_dir,
                 time=hdr_file.time,
                 tile=hdr_file.tile,
-                directional=hdr_file.directional
+                directional=hdr_file.directional,
             )
 
             if resampled_hdr_file.path.exists() and resampled_img_file.path.exists():
@@ -94,7 +104,12 @@ def resample(input_dir: Path):
             # Perform convolutional resampling
             band_centers = np.array(sensor_params["wavelengths"])
             band_fwhms = np.array(sensor_params["fwhms"])
-            rsr_matrix = np.array([gaussian_rsr(wavelengths, c, f) for c, f in zip(band_centers, band_fwhms)])
+            rsr_matrix = np.array(
+                [
+                    gaussian_rsr(wavelengths, c, f)
+                    for c, f in zip(band_centers, band_fwhms)
+                ]
+            )
             n_out_bands = len(band_centers)
             resampled = np.zeros((rows, cols, n_out_bands), dtype=np.float32)
 
@@ -104,20 +119,25 @@ def resample(input_dir: Path):
                 resampled[:, :, i] = np.sum(weighted, axis=2)
 
             new_metadata = {
-                'description': f'Resampled hyperspectral image using {sensor_name} RSR',
-                'samples': cols,
-                'lines': rows,
-                'bands': n_out_bands,
-                'data type': 4,
-                'interleave': 'bsq',
-                'byte order': 0,
-                'sensor type': sensor_name,
-                'wavelength units': 'nanometers',
-                'wavelength': [str(w) for w in band_centers],
-                'map info': header.get('map info'),
-                'coordinate system string': header.get('coordinate system string'),
-                'data ignore value': header.get('data ignore value'),
+                "description": f"Resampled hyperspectral image using {sensor_name} RSR",
+                "samples": cols,
+                "lines": rows,
+                "bands": n_out_bands,
+                "data type": 4,
+                "interleave": "bsq",
+                "byte order": 0,
+                "sensor type": sensor_name,
+                "wavelength units": "nanometers",
+                "wavelength": [str(w) for w in band_centers],
+                "map info": header.get("map info"),
+                "coordinate system string": header.get("coordinate system string"),
+                "data ignore value": header.get("data ignore value"),
             }
 
-            envi.save_image(resampled_hdr_file.file_path, resampled, metadata=new_metadata, force=True)
+            envi.save_image(
+                resampled_hdr_file.file_path,
+                resampled,
+                metadata=new_metadata,
+                force=True,
+            )
             print(f"✅ Resampled file saved: {resampled_hdr_file.file_path}")

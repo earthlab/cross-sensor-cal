@@ -29,7 +29,7 @@ def control_function_for_extraction(directory, polygon_path):
     Finds and processes raster files in a directory.
     Processes data in chunks and saves output to CSV.
     """
-    raster_files = get_all_priority_rasters(directory, 'envi')
+    raster_files = get_all_priority_rasters(directory, "envi")
 
     if not raster_files:
         print(f"[DEBUG] No matching raster files found in {directory}.")
@@ -41,7 +41,9 @@ def control_function_for_extraction(directory, polygon_path):
             print(f"[DEBUG] Writing to {spectral_csv_file.path}")
             process_raster_in_chunks(raster_file, polygon_path, spectral_csv_file)
         except Exception as e:
-            print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
+            print(
+                f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}"
+            )
 
 
 def select_best_files(files: List[DataFile]) -> List[DataFile]:
@@ -58,22 +60,28 @@ def select_best_files(files: List[DataFile]) -> List[DataFile]:
             key=lambda f: (
                 not getattr(f, "is_masked", False),
                 "brdf" not in f.path.name.lower(),
-                getattr(f, "suffix", "") != "envi"
-            )
+                getattr(f, "suffix", "") != "envi",
+            ),
         )[0]
         selected.append(best)
 
     return selected
 
 
-def find_best_resampled_files(directory: Path, suffix: str) -> List[NEONReflectanceResampledENVIFile]:
-    all_resampled = NEONReflectanceResampledENVIFile.find_all_sensors_in_directory(directory, suffix)
+def find_best_resampled_files(
+    directory: Path, suffix: str
+) -> List[NEONReflectanceResampledENVIFile]:
+    all_resampled = NEONReflectanceResampledENVIFile.find_all_sensors_in_directory(
+        directory, suffix
+    )
     return select_best_files(all_resampled)
 
 
-def get_all_priority_rasters(base_dir: Path, suffix: str = 'envi') -> List[DataFile]:
+def get_all_priority_rasters(base_dir: Path, suffix: str = "envi") -> List[DataFile]:
     # 1. Get BRDF-corrected reflectance files
-    brdf_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_dir, suffix)
+    brdf_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(
+        base_dir, suffix
+    )
 
     # 2. Get original reflectance files
     raw_files = NEONReflectanceENVIFile.find_in_directory(base_dir)
@@ -88,7 +96,6 @@ def get_all_priority_rasters(base_dir: Path, suffix: str = 'envi') -> List[DataF
     return selected_originals + selected_resampled
 
 
-
 def get_crs_from_hdr(hdr_path):
     """
     Reads an ENVI .hdr file and extracts the CRS as a Proj string or EPSG code.
@@ -101,22 +108,24 @@ def get_crs_from_hdr(hdr_path):
     """
     try:
         # Open file with 'latin1' encoding and ignore errors to bypass problematic bytes.
-        with open(hdr_path, 'r', encoding='latin1', errors='ignore') as f:
+        with open(hdr_path, "r", encoding="latin1", errors="ignore") as f:
             lines = f.readlines()
 
         for line in lines:
             lower_line = line.lower()
             if "coordinate system string" in lower_line:
-                proj_str = re.search(r'coordinate system string = (.*)', line, re.IGNORECASE)
+                proj_str = re.search(
+                    r"coordinate system string = (.*)", line, re.IGNORECASE
+                )
                 if proj_str:
                     wkt = proj_str.group(1).strip()
                     if wkt:
                         return CRS.from_wkt(wkt)  # Convert WKT to CRS
 
             elif "map info" in lower_line:
-                map_info = re.search(r'map info = {(.*?)}', line, re.IGNORECASE)
+                map_info = re.search(r"map info = {(.*?)}", line, re.IGNORECASE)
                 if map_info:
-                    values = map_info.group(1).split(',')
+                    values = map_info.group(1).split(",")
                     try:
                         utm_zone = int(values[7])
                     except (IndexError, ValueError):
@@ -124,7 +133,11 @@ def get_crs_from_hdr(hdr_path):
                     hemisphere = values[8].strip().lower()
                     datum = values[9].strip() if len(values) > 9 else ""
                     if datum == "WGS-84":
-                        return CRS.from_epsg(32600 + utm_zone) if hemisphere == "north" else CRS.from_epsg(32700 + utm_zone)
+                        return (
+                            CRS.from_epsg(32600 + utm_zone)
+                            if hemisphere == "north"
+                            else CRS.from_epsg(32700 + utm_zone)
+                        )
 
         return None  # Return None if no CRS is found
 
@@ -133,7 +146,12 @@ def get_crs_from_hdr(hdr_path):
         return None
 
 
-def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_csv_file: DataFile, chunk_size=100000):
+def process_raster_in_chunks(
+    raster_file: DataFile,
+    polygon_path: Path,
+    output_csv_file: DataFile,
+    chunk_size=100000,
+):
     """
     Processes a raster file in chunks, intersects pixels with a polygon, and writes extracted
     spectral and spatial data to a CSV file.
@@ -151,7 +169,9 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
         polygons = gpd.read_file(polygon_path)
 
         if polygons.crs is None:
-            print(f"[WARNING] {polygon_path} has no CRS. Assigning from .hdr file if available.")
+            print(
+                f"[WARNING] {polygon_path} has no CRS. Assigning from .hdr file if available."
+            )
             polygons = polygons.set_crs(crs_from_hdr if crs_from_hdr else "EPSG:4326")
 
         if src.crs is None and crs_from_hdr:
@@ -166,12 +186,14 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
             out_shape=(src.height, src.width),
             transform=src.transform,
             fill=0,
-            dtype="int32"
+            dtype="int32",
         ).ravel()
 
         total_bands = src.count
         height, width = src.height, src.width
-        num_chunks = (height * width // chunk_size) + (1 if (height * width) % chunk_size else 0)
+        num_chunks = (height * width // chunk_size) + (
+            1 if (height * width) % chunk_size else 0
+        )
 
         # Smart prefixing
         if getattr(raster_file, "is_masked", False):
@@ -181,9 +203,13 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
         else:
             band_prefix = "Original_band_"
 
-        print(f"[INFO] Processing {raster_path.name} with {total_bands} bands as {band_prefix}")
+        print(
+            f"[INFO] Processing {raster_path.name} with {total_bands} bands as {band_prefix}"
+        )
 
-        with tqdm(total=num_chunks, desc=f"Processing {raster_path.name}", unit="chunk") as pbar:
+        with tqdm(
+            total=num_chunks, desc=f"Processing {raster_path.name}", unit="chunk"
+        ) as pbar:
             first_chunk = True
             for i in range(num_chunks):
                 row_start = (i * chunk_size) // width
@@ -193,9 +219,7 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
                 data_chunk = data.reshape(total_bands, -1).T
 
                 row_indices, col_indices = np.meshgrid(
-                    np.arange(row_start, row_end),
-                    np.arange(width),
-                    indexing='ij'
+                    np.arange(row_start, row_end), np.arange(width), indexing="ij"
                 )
                 row_indices_flat = row_indices.flatten()
                 col_indices_flat = col_indices.flatten()
@@ -208,12 +232,20 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
                 pixel_ids = valid_rows * width + valid_cols
 
                 transform = src.transform
-                x_coords = transform.a * valid_cols + transform.b * valid_rows + transform.c
-                y_coords = transform.d * valid_cols + transform.e * valid_rows + transform.f
+                x_coords = (
+                    transform.a * valid_cols + transform.b * valid_rows + transform.c
+                )
+                y_coords = (
+                    transform.d * valid_cols + transform.e * valid_rows + transform.f
+                )
 
-                polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
+                polygon_chunk = polygon_values[row_start * width : row_end * width][
+                    valid_mask
+                ]
 
-                chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
+                chunk_df = pd.DataFrame(
+                    data_chunk, columns=[f"Band_{b + 1}" for b in range(total_bands)]
+                )
                 chunk_df["Raster_File"] = raster_path.name
                 chunk_df["Polygon_File"] = polygon_path
                 chunk_df["Chunk_Number"] = i
@@ -224,14 +256,25 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
                 if src.crs:
                     chunk_df["CRS"] = src.crs.to_string()
 
-                chunk_df.rename(columns={f"Band_{b + 1}": f"{band_prefix}{b + 1}" for b in range(total_bands)},
-                                inplace=True)
+                chunk_df.rename(
+                    columns={
+                        f"Band_{b + 1}": f"{band_prefix}{b + 1}"
+                        for b in range(total_bands)
+                    },
+                    inplace=True,
+                )
 
-                polygon_attributes = polygons.reset_index().rename(columns={'index': 'Polygon_ID'})
-                chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
+                polygon_attributes = polygons.reset_index().rename(
+                    columns={"index": "Polygon_ID"}
+                )
+                chunk_df = pd.merge(
+                    chunk_df, polygon_attributes, on="Polygon_ID", how="left"
+                )
 
-                mode = 'w' if first_chunk else 'a'
-                chunk_df.to_csv(output_csv_path, mode=mode, header=first_chunk, index=False)
+                mode = "w" if first_chunk else "a"
+                chunk_df.to_csv(
+                    output_csv_path, mode=mode, header=first_chunk, index=False
+                )
 
                 first_chunk = False
                 pbar.update(1)

@@ -5,17 +5,17 @@ import requests
 
 
 def list_neon_products():
-    resp = requests.get('https://data.neonscience.org/api/v0/products')
-    products = resp.json()['data']
+    resp = requests.get("https://data.neonscience.org/api/v0/products")
+    products = resp.json()["data"]
     for product in products:  # just first 10 for demo
-        print(product['productCode'], '-', product['productName'])
+        print(product["productCode"], "-", product["productName"])
 
 
 def download_neon_file(site_code, product_code, year_month, flight_line, out_dir: str):
     os.makedirs(out_dir, exist_ok=True)
 
-    server = 'http://data.neonscience.org/api/v0/'
-    data_url = f'{server}data/{product_code}/{site_code}/{year_month}'
+    server = "http://data.neonscience.org/api/v0/"
+    data_url = f"{server}data/{product_code}/{site_code}/{year_month}"
 
     # Make the API request
     response = requests.get(data_url)
@@ -26,12 +26,12 @@ def download_neon_file(site_code, product_code, year_month, flight_line, out_dir
         file_found = False
 
         # Iterate through files in the JSON response to find the specific flight line
-        for file_info in data_json['data']['files']:
-            file_name = file_info['name']
+        for file_info in data_json["data"]["files"]:
+            file_name = file_info["name"]
             if flight_line in file_name:
                 out_path = os.path.join(out_dir, file_name)
                 if os.path.exists(out_path):
-                    print(f'Skipping {out_path}, already exists')
+                    print(f"Skipping {out_path}, already exists")
                     file_found = True
                     continue
                 print(f"Downloading {file_name} from {file_info['url']} to {out_path}")
@@ -39,7 +39,13 @@ def download_neon_file(site_code, product_code, year_month, flight_line, out_dir
                 # Use subprocess.run to handle output
                 try:
                     result = subprocess.run(
-                        ['wget', '--no-check-certificate', file_info["url"], '-O', out_path],
+                        [
+                            "wget",
+                            "--no-check-certificate",
+                            file_info["url"],
+                            "-O",
+                            out_path,
+                        ],
                         capture_output=True,
                         text=True,
                         check=False,
@@ -60,9 +66,17 @@ def download_neon_file(site_code, product_code, year_month, flight_line, out_dir
             print(f"Flight line {flight_line} not found in the data for {year_month}.")
     else:
         print(
-            f"Failed to retrieve data for {year_month}. Status code: {response.status_code}, Response: {response.text}")
+            f"Failed to retrieve data for {year_month}. Status code: {response.status_code}, Response: {response.text}"
+        )
 
-def download_neon_flight_lines(site_code: str, year_month: str, flight_lines: str, out_dir: str, product_code: str = 'DP1.30006.001'):
+
+def download_neon_flight_lines(
+    site_code: str,
+    year_month: str,
+    flight_lines: str,
+    out_dir: str,
+    product_code: str = "DP1.30006.001",
+):
     """
     Downloads NEON flight line files given a site code, product code, year, month, and flight line(s).
 

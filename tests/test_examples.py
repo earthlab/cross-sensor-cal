@@ -17,6 +17,12 @@ def test_demo_calibrate_aligns_statistics():
 
 
 def test_example_script_runs(tmp_path):
-    script = Path(__file__).resolve().parents[1] / "examples" / "basic_calibration_workflow.py"
-    result = subprocess.run([sys.executable, str(script)], check=True, capture_output=True, text=True)
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "basic_calibration_workflow.py"
+    )
+    result = subprocess.run(
+        [sys.executable, str(script)], check=True, capture_output=True, text=True
+    )
     assert "calibrated mean/std" in result.stdout

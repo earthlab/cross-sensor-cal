@@ -40,8 +40,12 @@ class MesmaCore:
         # library variable
         self.library = None
         self.n_classes = None  # number of different classes
-        self.look_up_table = None  # dict with all models (library indices): org. per level & class model
-        self.em_per_class = None  # dict with for each endmember class, a list of all library indices
+        self.look_up_table = (
+            None  # dict with all models (library indices): org. per level & class model
+        )
+        self.em_per_class = (
+            None  # dict with for each endmember class, a list of all library indices
+        )
 
         # constraints ('-9999' when not used): min max fraction, min max shade, max rmse, residual threshold, # bands
         self.constraints = None
@@ -60,7 +64,7 @@ class MesmaCore:
         self.log = print
 
     def _set_image(self, image: np.array, no_data_pixels: np.array):
-        """ Store the image as a line (2D array).
+        """Store the image as a line (2D array).
 
         :param image: first dimension are bands, scaled to reflectance (between 0 and 1), without bad bands
         :param no_data_pixels: 1D indices of pixels that contain no data
@@ -78,14 +82,14 @@ class MesmaCore:
             self.n_pixels = n_pixels - len(no_data_pixels)
 
     def _set_library(self, library: np.array):
-        """ Store the library as a float 32 object
+        """Store the library as a float 32 object
 
         :param library: spectra as rows, scaled to reflectance (between 0 and 1), without bad bands
         """
         self.library = np.float32(library)
 
     def _subtract_shade(self, shade_spectrum: np.array):
-        """ Correct image and library for the photometric shade.
+        """Correct image and library for the photometric shade.
 
         :param shade_spectrum: single spectrum of photometric shade
         """
@@ -93,7 +97,7 @@ class MesmaCore:
         self.library = self.library - shade_spectrum
 
     def _sma(self, look_up_table: np.array, bands: np.array):
-        """ SMA (Signal Mixture Analysis): calculate the fraction of each endmember, based on SVD.
+        """SMA (Signal Mixture Analysis): calculate the fraction of each endmember, based on SVD.
 
         :param look_up_table: all endmember combinations (=models) for a given complexity level and class-model
         :param bands: the bands used for unmixing
@@ -114,10 +118,14 @@ class MesmaCore:
         endmembers_inverse = np.array([np.dot(y, x) for (x, y) in zip(temp, u)])
 
         # fractions
-        fractions = np.einsum('ijk, kl -> ijl', endmembers_inverse, self.image_as_line[bands, :])
+        fractions = np.einsum(
+            "ijk, kl -> ijl", endmembers_inverse, self.image_as_line[bands, :]
+        )
 
         # residuals + root mean square error
-        residuals = self.image_as_line[bands, np.newaxis, :] - np.einsum('ijk, kjl -> ikl', endmembers, fractions)
+        residuals = self.image_as_line[bands, np.newaxis, :] - np.einsum(
+            "ijk, kjl -> ikl", endmembers, fractions
+        )
         rmse = np.sqrt(np.sum(residuals * residuals, axis=0) / len(bands))
 
         # shade fraction (last column of the fractions array)
@@ -135,8 +143,10 @@ class MesmaCore:
 
         return best_model, best_fraction, best_rmse
 
-    def _sma_weighted(self, look_up_table: np.array, bands: np.array, class_model: np.array):
-        """ SMA (Signal Mixture Analysis): calculate - per pixel - the fraction of each endmember, based on SVD.
+    def _sma_weighted(
+        self, look_up_table: np.array, bands: np.array, class_model: np.array
+    ):
+        """SMA (Signal Mixture Analysis): calculate - per pixel - the fraction of each endmember, based on SVD.
 
         :param look_up_table: all endmember combinations (=models) for a given complexity level and class-model
         :param bands: the bands used for unmixing
@@ -147,12 +157,16 @@ class MesmaCore:
         pixels = self.image_as_line[bands, :] * weights
 
         rmse = np.zeros((self.n_pixels, len(look_up_table)), dtype=np.float32)
-        fractions = np.zeros((self.n_pixels, len(class_model) + 1, len(look_up_table)), dtype=np.float32)
+        fractions = np.zeros(
+            (self.n_pixels, len(class_model) + 1, len(look_up_table)), dtype=np.float32
+        )
         residuals = None
 
         for m, model in enumerate(look_up_table):
             # get the endmembers from the library and weigh them
-            endmembers = self.library[:, model][bands, :, np.newaxis] * weights[:, np.newaxis, :]
+            endmembers = (
+                self.library[:, model][bands, :, np.newaxis] * weights[:, np.newaxis, :]
+            )
 
             # run a singular value decomposition on the endmember array where:
             #   w = vector (n_em) with the eigenvalues
@@ -164,10 +178,14 @@ class MesmaCore:
             # inverse endmembers + fraction for each endmember
             temp = v * 1 / w[:, :, np.newaxis]
             endmembers_inverse = np.array([np.dot(y, x) for (x, y) in zip(temp, u)])
-            fractions[:, 0:-1, m] = np.einsum('ijk, ki -> ji', endmembers_inverse, pixels).T
+            fractions[:, 0:-1, m] = np.einsum(
+                "ijk, ki -> ji", endmembers_inverse, pixels
+            ).T
 
             # residuals + root mean square error
-            residuals = pixels - np.einsum('ijk, jk -> ik', endmembers, fractions[:, 0:-1, m].T)
+            residuals = pixels - np.einsum(
+                "ijk, jk -> ik", endmembers, fractions[:, 0:-1, m].T
+            )
             rmse[:, m] = np.sqrt(np.sum(residuals * residuals, axis=0) / len(bands))
 
         # shade fraction (last column of the fractions array)
@@ -184,8 +202,10 @@ class MesmaCore:
 
         return best_model, best_fraction, best_rmse
 
-    def _sma_constraints(self, rmse: np.array, fractions: np.array, residuals: np.array) -> np.array:
-        """ Apply the constraints on fractions, rmse and possibly residuals and set RMSE = 9999 where breached
+    def _sma_constraints(
+        self, rmse: np.array, fractions: np.array, residuals: np.array
+    ) -> np.array:
+        """Apply the constraints on fractions, rmse and possibly residuals and set RMSE = 9999 where breached
 
         :param rmse: rmse from sma algorithm
         :param fractions: fractions from sma algorithm
@@ -220,14 +240,21 @@ class MesmaCore:
             good_bands = np.abs(residuals) < self.constraints[5]
             self.constraints[6] = int(self.constraints[6])
             for band in np.arange(self.n_bands - self.constraints[6] + 1):
-                bad_models[np.where(np.sum(good_bands[band:band + self.constraints[6], :, :], axis=0) == 0)] = 1
+                bad_models[
+                    np.where(
+                        np.sum(
+                            good_bands[band : band + self.constraints[6], :, :], axis=0
+                        )
+                        == 0
+                    )
+                ] = 1
 
         rmse[bad_models] = 9999
 
         return rmse
 
     def _mesma_per_model(self, class_model: np.array, level: int):
-        """ Run SMA for all models in a given  classes (e.g. GV-WATER) of a given levels (e.g. 2-EM, 3-EM)
+        """Run SMA for all models in a given  classes (e.g. GV-WATER) of a given levels (e.g. 2-EM, 3-EM)
 
         :param class_model: class model (e.g. GV-SOIL)
         :param level: the complexity level
@@ -242,7 +269,9 @@ class MesmaCore:
         look_up_table = self.look_up_table[level][class_model]
 
         # decide on block number and size
-        block_size = math.ceil(len(look_up_table) / (len(bands) * look_up_table.size * 4 / 50000))
+        block_size = math.ceil(
+            len(look_up_table) / (len(bands) * look_up_table.size * 4 / 50000)
+        )
         n_blocks = math.ceil(len(look_up_table) / block_size)
 
         # divide the look_up_table in blocks
@@ -255,13 +284,20 @@ class MesmaCore:
         # pool
         # run sma per block
         if self.use_band_weighing and level > 2:
-            pool_output = self.pool.map(partial(self._sma_weighted, bands=bands, class_model=class_model), lut_blocks)
+            pool_output = self.pool.map(
+                partial(self._sma_weighted, bands=bands, class_model=class_model),
+                lut_blocks,
+            )
         else:
             pool_output = self.pool.map(partial(self._sma, bands=bands), lut_blocks)
 
         # place each model output on the correct place
-        models = np.zeros((self.n_pixels, len(class_model), n_blocks), dtype=np.int32) - 1
-        fractions = np.zeros((self.n_pixels, len(class_model) + 1, n_blocks), dtype=np.float32)
+        models = (
+            np.zeros((self.n_pixels, len(class_model), n_blocks), dtype=np.int32) - 1
+        )
+        fractions = np.zeros(
+            (self.n_pixels, len(class_model) + 1, n_blocks), dtype=np.float32
+        )
         rmse = np.zeros((self.n_pixels, n_blocks), dtype=np.float32)
         for i, part in enumerate(pool_output):
             models[:, :, i] = part[0]
@@ -276,7 +312,7 @@ class MesmaCore:
         return best_model, best_fractions, best_rmse
 
     def _mesma_per_level(self, level: int):
-        """ Run SMA for different model classes (e.g. GV-WATER) of a given levels (e.g. 2-EM, 3-EM, ... combinations)
+        """Run SMA for different model classes (e.g. GV-WATER) of a given levels (e.g. 2-EM, 3-EM, ... combinations)
 
         :param: level: the complexity level
         :return: for each pixel the best model and the fractions and rmse belonging to that model
@@ -286,14 +322,23 @@ class MesmaCore:
 
         class_models = self.look_up_table[level].keys()
 
-        models = np.zeros((self.n_pixels, self.n_classes, len(class_models)), dtype=np.int32) - 1
-        fractions = np.zeros((self.n_pixels, self.n_classes + 1, len(class_models)), dtype=np.float32)
+        models = (
+            np.zeros((self.n_pixels, self.n_classes, len(class_models)), dtype=np.int32)
+            - 1
+        )
+        fractions = np.zeros(
+            (self.n_pixels, self.n_classes + 1, len(class_models)), dtype=np.float32
+        )
         rmse = np.zeros((self.n_pixels, len(class_models)), dtype=np.float32)
 
         for m, model in enumerate(class_models):
             m_indices = np.array(model)
-            f_indices = np.append(m_indices, self.n_classes)  # append shade as last index
-            models[:, m_indices, m], fractions[:, f_indices, m], rmse[:, m] = self._mesma_per_model(model, level)
+            f_indices = np.append(
+                m_indices, self.n_classes
+            )  # append shade as last index
+            models[:, m_indices, m], fractions[:, f_indices, m], rmse[:, m] = (
+                self._mesma_per_model(model, level)
+            )
 
         # find the best model within each complexity level
         index = np.argmin(rmse, axis=1)
@@ -303,7 +348,7 @@ class MesmaCore:
         return best_model, best_fractions, best_rmse
 
     def _mesma(self, fusion_value: float = 0.007):
-        """ Run MESMA for different levels (e.g. 2-EM, 3-EM, ... combinations)
+        """Run MESMA for different levels (e.g. 2-EM, 3-EM, ... combinations)
 
         :param fusion_value: only select a model of higher complexity (e.g. 3-EM over 2-EM) if the RMSE is better
                                    with at least this value
@@ -315,12 +360,16 @@ class MesmaCore:
         # run MESMA per complexity level
         rmse = np.zeros((self.n_pixels, n_levels), dtype=np.float32)
         models = np.zeros((self.n_pixels, self.n_classes, n_levels), dtype=np.int32)
-        fractions = np.zeros((self.n_pixels, self.n_classes + 1, n_levels), dtype=np.float32)
+        fractions = np.zeros(
+            (self.n_pixels, self.n_classes + 1, n_levels), dtype=np.float32
+        )
 
-        self.log("processing ", end='')
+        self.log("processing ", end="")
         for l, level in enumerate(levels):
-            self.log("{}-EM models..".format(level), end='')
-            models[:, :, l], fractions[:, :, l], rmse[:, l] = self._mesma_per_level(level)
+            self.log("{}-EM models..".format(level), end="")
+            models[:, :, l], fractions[:, :, l], rmse[:, l] = self._mesma_per_level(
+                level
+            )
 
         # reset RMSE if it is not at least *complexity_threshold* better than the previous complexity level
         difference = rmse[:, :-1] - rmse[:, 1:]
@@ -341,16 +390,22 @@ class MesmaCore:
         return best_model, best_fractions, best_rmse
 
     def _isi_preparation(self):
-        """ Preparation for the ISI (Instability Index): mean and standard deviation spectrum of each class. """
+        """Preparation for the ISI (Instability Index): mean and standard deviation spectrum of each class."""
 
         self.class_mean = np.zeros((self.n_classes, self.n_bands), dtype=np.float32)
         self.class_std = np.zeros((self.n_classes, self.n_bands), dtype=np.float32)
         for i, key in enumerate(self.em_per_class):
-            self.class_mean[i, :] = np.mean(self.library[:, self.em_per_class[key]], axis=1)
+            self.class_mean[i, :] = np.mean(
+                self.library[:, self.em_per_class[key]], axis=1
+            )
             if self.library[:, self.em_per_class[key]].shape[1] != 1:
-                self.class_std[i, :] = np.std(self.library[:, self.em_per_class[key]], axis=1, ddof=1)
+                self.class_std[i, :] = np.std(
+                    self.library[:, self.em_per_class[key]], axis=1, ddof=1
+                )
             else:
-                self.class_std[i, :] = np.std(self.library[:, self.em_per_class[key]], axis=1)
+                self.class_std[i, :] = np.std(
+                    self.library[:, self.em_per_class[key]], axis=1
+                )
 
     def _isi(self, class_model: np.array) -> np.array:
         """
@@ -362,9 +417,10 @@ class MesmaCore:
         # Equation 6 from Somers et al, 2009, p. 142
         divisor = len(combos)
         denominator = np.zeros(self.n_bands)
-        for (one, two) in combos:
-            denominator += (self.class_std[one, :] + self.class_std[two, :]) / \
-                           np.abs(self.class_mean[one, :] - self.class_mean[two, :])
+        for one, two in combos:
+            denominator += (self.class_std[one, :] + self.class_std[two, :]) / np.abs(
+                self.class_mean[one, :] - self.class_mean[two, :]
+            )
 
         return denominator / divisor
 
@@ -374,7 +430,11 @@ class MesmaCore:
         :param bands: the bands used for unmixing
         :return: weights for the spectral band weighing. Somers et al (2009), p141-142, equation 3, 4 and 7
         """
-        a = 1 / self.image_as_line[bands, :] * np.max(self.image_as_line[bands, :], axis=0)
+        a = (
+            1
+            / self.image_as_line[bands, :]
+            * np.max(self.image_as_line[bands, :], axis=0)
+        )
         # a = max(pixel) / pixel
         b = 1 / self._isi(class_model)[bands]
         return (a.T * b).T
@@ -401,12 +461,14 @@ class MesmaCore:
             # correlation
             corr = np.ones(len(si), dtype=np.float32) + threshold
             for band in np.where(si != -1)[0]:
-                corr[band] = np.corrcoef(self.library[si_max_ind, :], self.library[band, :])[1, 0]
+                corr[band] = np.corrcoef(
+                    self.library[si_max_ind, :], self.library[band, :]
+                )[1, 0]
 
             si[np.where(corr > threshold)] = -1
 
             # adapt threshold
-            threshold = threshold - self.bands_selection_values[1] * (2 ** count)
+            threshold = threshold - self.bands_selection_values[1] * (2**count)
             count += 1
 
         return np.sort(used_bands)
@@ -418,16 +480,29 @@ class MesmaCore:
         :return: the residuals image, calculated based on the selected models and their fractions
         """
         endmembers = self.library[:, models]
-        residuals = self.image_as_line - np.sum(fractions[np.newaxis, :, 0:-1] * endmembers, axis=2)
+        residuals = self.image_as_line - np.sum(
+            fractions[np.newaxis, :, 0:-1] * endmembers, axis=2
+        )
         unmodeled = np.where(np.sum(models, axis=1) == -self.n_classes)
         residuals[:, unmodeled] = 0
         return residuals
 
-    def execute(self, image: np.array, library: np.array, look_up_table: dict, em_per_class: dict,
-                constraints: list = (-0.05, 1.05, 0., 0.8, 0.025, -9999, -9999), fusion_value: float = 0.007,
-                no_data_pixels: tuple = (), shade_spectrum: np.array = None, residual_image: bool = False,
-                use_band_weighing: bool = False, use_band_selection: bool = False,
-                bands_selection_values: tuple = (0.99, 0.01), log: callable = print) -> tuple:
+    def execute(
+        self,
+        image: np.array,
+        library: np.array,
+        look_up_table: dict,
+        em_per_class: dict,
+        constraints: list = (-0.05, 1.05, 0.0, 0.8, 0.025, -9999, -9999),
+        fusion_value: float = 0.007,
+        no_data_pixels: tuple = (),
+        shade_spectrum: np.array = None,
+        residual_image: bool = False,
+        use_band_weighing: bool = False,
+        use_band_selection: bool = False,
+        bands_selection_values: tuple = (0.99, 0.01),
+        log: callable = print,
+    ) -> tuple:
         """
         Execute MESMA. Process input and output.
 
@@ -479,12 +554,16 @@ class MesmaCore:
 
         # reference to gui progress bar (if exists)
         if np.nanmax(image) > 1:
-            raise ValueError('The algorithm detected image values larger than 1: '
-                             'reflectance scale factor not set correctly.')
+            raise ValueError(
+                "The algorithm detected image values larger than 1: "
+                "reflectance scale factor not set correctly."
+            )
 
         if np.nanmax(library) > 1:
-            raise ValueError('The algorithm detected library values larger than 1:'
-                             'reflectance scale factor not set correctly.')
+            raise ValueError(
+                "The algorithm detected library values larger than 1:"
+                "reflectance scale factor not set correctly."
+            )
 
         # set up environment
         image_dimensions = image.shape[1:]
@@ -495,7 +574,9 @@ class MesmaCore:
             no_data_pixels = np.ravel_multi_index(no_data_pixels, image_dimensions)
         else:
             no_data_pixels = np.array([], dtype=int)
-        zero_pixels = np.ravel_multi_index(np.where(np.max(image, axis=0) == 0), image_dimensions)
+        zero_pixels = np.ravel_multi_index(
+            np.where(np.max(image, axis=0) == 0), image_dimensions
+        )
         no_data_pixels = np.unique(np.concatenate((no_data_pixels, zero_pixels)))
         # reverse of no_data_pixels
         data_pixels = np.ones(n_pixels, dtype=bool)
@@ -541,16 +622,24 @@ class MesmaCore:
                 residuals_expanded[:, data_pixels] = residuals
 
         if residual_image:
-            return (np.reshape(models_expanded.T, (self.n_classes,) + image_dimensions),
-                    np.reshape(fractions_expanded.T, (self.n_classes + 1,) + image_dimensions),
-                    np.reshape(rmse_expanded, image_dimensions),
-                    np.reshape(residuals, image.shape))
+            return (
+                np.reshape(models_expanded.T, (self.n_classes,) + image_dimensions),
+                np.reshape(
+                    fractions_expanded.T, (self.n_classes + 1,) + image_dimensions
+                ),
+                np.reshape(rmse_expanded, image_dimensions),
+                np.reshape(residuals, image.shape),
+            )
 
         else:
-            return (np.reshape(models_expanded.T, (self.n_classes,) + image_dimensions),
-                    np.reshape(fractions_expanded.T, (self.n_classes + 1,) + image_dimensions),
-                    np.reshape(rmse_expanded, image_dimensions),
-                    None)
+            return (
+                np.reshape(models_expanded.T, (self.n_classes,) + image_dimensions),
+                np.reshape(
+                    fractions_expanded.T, (self.n_classes + 1,) + image_dimensions
+                ),
+                np.reshape(rmse_expanded, image_dimensions),
+                None,
+            )
 
 
 class MesmaModels:
@@ -576,11 +665,15 @@ class MesmaModels:
 
         # variables on the levels
         self.level_yn = None  # yes-no list of levels that are part of the selection
-        self.class_per_level = dict()  # dict of yes-no lists of classes selected per level
+        self.class_per_level = (
+            dict()
+        )  # dict of yes-no lists of classes selected per level
 
         # variables on the class-models
         self.class_models = dict()  # dict of all class-models per level
-        self.class_models_yn = dict()  # dict of yes-no lists of all class-models selected per level
+        self.class_models_yn = (
+            dict()
+        )  # dict of yes-no lists of all class-models selected per level
 
     def setup(self, class_list: np.array):
         """
@@ -588,10 +681,12 @@ class MesmaModels:
 
         :param class_list: [array-of-strings] A class for each endmember in the library.
         """
-        class_list = np.asarray([str(x).lower() for x in class_list])  # set all in lowercase
+        class_list = np.asarray(
+            [str(x).lower() for x in class_list]
+        )  # set all in lowercase
         self.unique_classes = np.unique(class_list)
-        print(class_list, 'class_list')
-        print(self.unique_classes, 'unique classes')
+        print(class_list, "class_list")
+        print(self.unique_classes, "unique classes")
         self.n_classes = len(self.unique_classes)
         self.n_em_per_class = np.zeros(self.n_classes, dtype=int)
 
@@ -682,7 +777,7 @@ class MesmaModels:
             return 0
 
         total = 0
-        for (model, yn) in zip(self.class_models[level], self.class_models_yn[level]):
+        for model, yn in zip(self.class_models[level], self.class_models_yn[level]):
             if yn:
                 total += self.total_per_class_model(model)
         return total
@@ -702,8 +797,15 @@ class MesmaModels:
 
         :return: The maximum number of digits for the GUI, in order to be able to display the number of models.
         """
-        max_total = np.prod(np.array(self.n_em_per_class[np.arange(self.n_classes)], dtype=np.uint64)) * \
-            self.n_classes * self.n_classes
+        max_total = (
+            np.prod(
+                np.array(
+                    self.n_em_per_class[np.arange(self.n_classes)], dtype=np.uint64
+                )
+            )
+            * self.n_classes
+            * self.n_classes
+        )
         n_digits = len(str(max_total))
         n_spaces = int(n_digits / 3)  # add one digit per white space between thousands
         return n_digits + n_spaces
@@ -735,7 +837,9 @@ class MesmaModels:
                             args.append(self.em_per_class[cl])
 
                         # we use the itertools.product function to generate all EM combinations of a model (e.g. GV-NPV)
-                        look_up_table[level][class_model] = np.array(list(it.product(*args)))
+                        look_up_table[level][class_model] = np.array(
+                            list(it.product(*args))
+                        )
 
         return look_up_table
 
@@ -745,30 +849,32 @@ class MesmaModels:
 
         :return: A summary of the selected models, specifically to display in a GUI application [multi-line-str].
         """
-        summary = 'You selected: '
+        summary = "You selected: "
 
         levels = np.where(self.level_yn)[0]
 
         for level in levels:
-            summary += '{}-EM Models'.format(level)
+            summary += "{}-EM Models".format(level)
             if level != levels[-1]:
-                summary += ', '
+                summary += ", "
             else:
-                summary += '\n'
+                summary += "\n"
 
-        summary += 'Total number of models: {} \n\n'.format(self.total())
+        summary += "Total number of models: {} \n\n".format(self.total())
 
         for level in levels:
-            summary += '{}-EM Models: {} \n'.format(level, self.total_per_level(level))
+            summary += "{}-EM Models: {} \n".format(level, self.total_per_level(level))
 
-            for (model, yn) in zip(self.class_models[level], self.class_models_yn[level]):
+            for model, yn in zip(self.class_models[level], self.class_models_yn[level]):
                 if yn:
                     if level == 2:
                         model_string = self.unique_classes[model]
                     else:
-                        model_string = '-'.join(self.unique_classes[np.array(model)])
-                    summary += '  {}: {} \n'.format(model_string, self.total_per_class_model(model))
-            summary += '\n'
+                        model_string = "-".join(self.unique_classes[np.array(model)])
+                    summary += "  {}: {} \n".format(
+                        model_string, self.total_per_class_model(model)
+                    )
+            summary += "\n"
 
         return summary
 
@@ -779,16 +885,20 @@ class MesmaModels:
         :return: A summary of the selected models, specifically to save in the MESMA settings [multi-line-str].
         """
 
-        summary = 'x-EM Levels:\n'
-        summary += ', '.join(map(str, self.level_yn))
-        summary += '\n'
+        summary = "x-EM Levels:\n"
+        summary += ", ".join(map(str, self.level_yn))
+        summary += "\n"
 
-        summary += 'classes per x-EM Level:\n'
+        summary += "classes per x-EM Level:\n"
         for level in self.class_per_level.keys():
-            summary += '{}-EMs: {}\n'.format(level, ', '.join(map(str, self.class_per_level[level])))
+            summary += "{}-EMs: {}\n".format(
+                level, ", ".join(map(str, self.class_per_level[level]))
+            )
 
-        summary += 'models per x-EM Level:\n'
+        summary += "models per x-EM Level:\n"
         for level in self.class_models_yn.keys():
-            summary += '{}-EMs: {}\n'.format(level, ', '.join(map(str, self.class_models_yn[level])))
+            summary += "{}-EMs: {}\n".format(
+                level, ", ".join(map(str, self.class_models_yn[level]))
+            )
 
         return summary

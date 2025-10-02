@@ -25,18 +25,27 @@ def get_all_keys(group):
         all_keys += get_all_keys(group[key])
     return all_keys
 
+
 def get_actual_key(h5_file, expected_key):
     actual_keys = {key.lower(): key for key in get_all_keys(h5_file)}
     return actual_keys.get(expected_key.lower())
 
+
 def get_all_solar_angles(logs_group):
-    return np.array([
-        (logs_group[log]["Solar_Azimuth_Angle"][()], logs_group[log]["Solar_Zenith_Angle"][()])
-        for log in logs_group
-    ])
+    return np.array(
+        [
+            (
+                logs_group[log]["Solar_Azimuth_Angle"][()],
+                logs_group[log]["Solar_Zenith_Angle"][()],
+            )
+            for log in logs_group
+        ]
+    )
+
 
 def ensure_directory_exists(directory_path):
     Path(directory_path).mkdir(parents=True, exist_ok=True)
+
 
 def envi_header_for_ancillary(hy_obj, attributes):
     """
@@ -52,8 +61,11 @@ def envi_header_for_ancillary(hy_obj, attributes):
         "byte order": 0,
         "band names": attributes.get("band names", []),
         "map info": hy_obj.get_header().get("map info", []),
-        "coordinate system string": hy_obj.get_header().get("coordinate system string", "")
+        "coordinate system string": hy_obj.get_header().get(
+            "coordinate system string", ""
+        ),
     }
+
 
 # --- Main export task ---
 def neon_to_envi_task(hy_obj, output_dir, metadata=None):
@@ -69,7 +81,7 @@ def neon_to_envi_task(hy_obj, output_dir, metadata=None):
             date=metadata.get("date", "00000000"),
             time=metadata.get("time"),
             tile=metadata.get("tile"),
-            suffix=metadata.get("suffix", None)
+            suffix=metadata.get("suffix", None),
         )
     else:
         try:
@@ -77,8 +89,13 @@ def neon_to_envi_task(hy_obj, output_dir, metadata=None):
         except ValueError:
             print(f"⚠️ Could not parse {original_path}, using fallback naming.")
             neon_file = NEONReflectanceFile(
-                path=original_path, domain="D00", site="UNK",
-                date="00000000", time=None, tile=None, suffix="fallback"
+                path=original_path,
+                domain="D00",
+                site="UNK",
+                date="00000000",
+                time=None,
+                tile=None,
+                suffix="fallback",
             )
 
     # Create output directory
@@ -92,7 +109,7 @@ def neon_to_envi_task(hy_obj, output_dir, metadata=None):
         date=neon_file.date,
         time=neon_file.time,
         folder=specific_output_dir,
-        tile=neon_file.tile
+        tile=neon_file.tile,
     )
 
     if envi_file.path.exists():
@@ -102,7 +119,7 @@ def neon_to_envi_task(hy_obj, output_dir, metadata=None):
     # Process and write
     hy_obj.load_data()
     writer = WriteENVI(envi_file.file_path, hy_obj.get_header())
-    iterator = hy_obj.iterate(by='chunk')
+    iterator = hy_obj.iterate(by="chunk")
     while not iterator.complete:
         chunk = iterator.read_next()
         writer.write_chunk(chunk, iterator.current_line, iterator.current_column)
@@ -120,9 +137,10 @@ def find_reflectance_metadata_group(h5_file):
             return candidate
     raise ValueError("Could not find Reflectance/Metadata group.")
 
+
 def export_anc(hy_obj, output_dir):
     neon_file = NEONReflectanceFile.from_filename(Path(hy_obj.file_name))
-    with h5py.File(hy_obj.file_name, 'r') as h5_file:
+    with h5py.File(hy_obj.file_name, "r") as h5_file:
         try:
             base_path = find_reflectance_metadata_group(h5_file) + "/"
         except ValueError as e:
@@ -136,21 +154,31 @@ def export_anc(hy_obj, output_dir):
             "Logs/Solar_Azimuth_Angle",
             "Logs/Solar_Zenith_Angle",
             "Ancillary_Imagery/Slope",
-            "Ancillary_Imagery/Aspect"
+            "Ancillary_Imagery/Aspect",
         ]
 
         data = [
-            h5_file.get(base_path + key)[()]
-            if h5_file.get(base_path + key) is not None else np.array([], dtype=np.float32)
+            (
+                h5_file.get(base_path + key)[()]
+                if h5_file.get(base_path + key) is not None
+                else np.array([], dtype=np.float32)
+            )
             for key in ancillary_keys
         ]
 
         attributes = {
-            'samples': max((d.shape[1] for d in data if d.ndim == 2), default=0),
-            'lines': max((d.shape[0] for d in data if d.ndim == 2), default=0),
-            'data type': 4,
-            'band names': ['Path Length', 'Sensor Azimuth', 'Sensor Zenith',
-                           'Solar Azimuth', 'Solar Zenith', 'Slope', 'Aspect']
+            "samples": max((d.shape[1] for d in data if d.ndim == 2), default=0),
+            "lines": max((d.shape[0] for d in data if d.ndim == 2), default=0),
+            "data type": 4,
+            "band names": [
+                "Path Length",
+                "Sensor Azimuth",
+                "Sensor Zenith",
+                "Solar Azimuth",
+                "Solar Zenith",
+                "Slope",
+                "Aspect",
+            ],
         }
 
         header = envi_header_for_ancillary(hy_obj, attributes)
@@ -163,7 +191,7 @@ def export_anc(hy_obj, output_dir):
             date=neon_file.date,
             time=neon_file.time,
             folder=specific_output_dir,
-            tile=neon_file.tile
+            tile=neon_file.tile,
         )
 
         if ancillary_file.path.exists():
@@ -177,8 +205,14 @@ def export_anc(hy_obj, output_dir):
         writer.close()
         print(f"📦 Ancillary data saved: {ancillary_file.file_path}")
 
+
 # --- Main driver ---
-def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata_override: dict = None):
+def neon_to_envi(
+    images: list[str],
+    output_dir: str,
+    anc: bool = False,
+    metadata_override: dict = None,
+):
     if ray.is_initialized():
         ray.shutdown()
     ray.init(num_cpus=len(images))
@@ -186,41 +220,55 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata
     hytool = ray.remote(ht.HyTools)
     actors = [hytool.remote() for _ in images]
 
-    _ = ray.get([
-        actor.read_file.remote(image, 'neon')
-        for actor, image in zip(actors, images, strict=False)
-    ])
+    _ = ray.get(
+        [
+            actor.read_file.remote(image, "neon")
+            for actor, image in zip(actors, images, strict=False)
+        ]
+    )
 
-    _ = ray.get([
-        actor.do.remote(
-            partial(
-                neon_to_envi_task,
-                output_dir=str(output_dir),
-                metadata=metadata_override.get(Path(image).name) if metadata_override else None
+    _ = ray.get(
+        [
+            actor.do.remote(
+                partial(
+                    neon_to_envi_task,
+                    output_dir=str(output_dir),
+                    metadata=(
+                        metadata_override.get(Path(image).name)
+                        if metadata_override
+                        else None
+                    ),
+                )
             )
-        )
-        for actor, image in zip(actors, images, strict=False)
-    ])
+            for actor, image in zip(actors, images, strict=False)
+        ]
+    )
 
     if anc:
         print("\n📦 Exporting ancillary ENVI data...")
-        _ = ray.get([
-            actor.do.remote(
-                partial(export_anc, output_dir=str(output_dir))
-            )
-            for actor in actors
-        ])
+        _ = ray.get(
+            [
+                actor.do.remote(partial(export_anc, output_dir=str(output_dir)))
+                for actor in actors
+            ]
+        )
 
     print("✅ All processing complete.")
     ray.shutdown()
 
+
 # --- CLI runner (optional use) ---
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert NEON AOP H5 to ENVI format and optionally export ancillary data.")
-    parser.add_argument('--images', nargs='+', required=True, help="Input image path names")
-    parser.add_argument('--output_dir', required=True, help="Output directory")
-    parser.add_argument('-anc', action='store_true', help="Flag to output ancillary data")
+    parser = argparse.ArgumentParser(
+        description="Convert NEON AOP H5 to ENVI format and optionally export ancillary data."
+    )
+    parser.add_argument(
+        "--images", nargs="+", required=True, help="Input image path names"
+    )
+    parser.add_argument("--output_dir", required=True, help="Output directory")
+    parser.add_argument(
+        "-anc", action="store_true", help="Flag to output ancillary data"
+    )
     args = parser.parse_args()
 
     neon_to_envi(args.images, args.output_dir, args.anc)
-

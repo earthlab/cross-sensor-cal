@@ -1,4 +1,5 @@
 """Minimal synthetic workflow demonstrating cross-sensor calibration routines."""
+
 from __future__ import annotations
 
 import numpy as np
