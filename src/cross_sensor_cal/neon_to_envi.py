@@ -1,27 +1,27 @@
-import os
 import argparse
-import h5py
-import shutil
-from h5py import Dataset
-import ray
-import numpy as np
-from pathlib import Path
-import hytools as ht
-from hytools.io.envi import WriteENVI
-import re
 from functools import partial
+from pathlib import Path
+
+import h5py
+import hytools as ht
+import numpy as np
+import ray
+from h5py import Dataset
+from hytools.io.envi import WriteENVI
+
 from .file_types import (
-    NEONReflectanceFile,
-    NEONReflectanceENVIFile,
     NEONReflectanceAncillaryENVIFile,
+    NEONReflectanceENVIFile,
+    NEONReflectanceFile,
 )
+
 
 # --- Utility functions ---
 def get_all_keys(group):
     if isinstance(group, Dataset):
         return [group.name]
     all_keys = []
-    for key in group.keys():
+    for key in group:
         all_keys += get_all_keys(group[key])
     return all_keys
 
@@ -32,7 +32,7 @@ def get_actual_key(h5_file, expected_key):
 def get_all_solar_angles(logs_group):
     return np.array([
         (logs_group[log]["Solar_Azimuth_Angle"][()], logs_group[log]["Solar_Zenith_Angle"][()])
-        for log in logs_group.keys()
+        for log in logs_group
     ])
 
 def ensure_directory_exists(directory_path):
@@ -114,7 +114,7 @@ def neon_to_envi_task(hy_obj, output_dir, metadata=None):
 
 # --- Ancillary export ---
 def find_reflectance_metadata_group(h5_file):
-    for group in h5_file.keys():
+    for group in h5_file:
         candidate = f"{group}/Reflectance/Metadata"
         if candidate in h5_file:
             return candidate
@@ -188,7 +188,7 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata
 
     _ = ray.get([
         actor.read_file.remote(image, 'neon')
-        for actor, image in zip(actors, images)
+        for actor, image in zip(actors, images, strict=False)
     ])
 
     _ = ray.get([
@@ -199,7 +199,7 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata
                 metadata=metadata_override.get(Path(image).name) if metadata_override else None
             )
         )
-        for actor, image in zip(actors, images)
+        for actor, image in zip(actors, images, strict=False)
     ])
 
     if anc:

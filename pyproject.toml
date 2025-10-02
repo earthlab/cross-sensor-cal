@@ -43,7 +43,13 @@ dev = [
     "black",
     "mypy",
     "pytest",
+    "pytest-cov",
     "ruff",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "build",
+    "twine",
 ]
 
 [project.urls]
@@ -56,7 +62,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-q --disable-warnings"
 
 [tool.black]
 target-version = ["py310"]
@@ -65,7 +71,20 @@ line-length = 88
 [tool.ruff]
 target-version = "py310"
 line-length = 88
-select = ["E", "F", "I", "B", "UP"]
+fix = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501", "B007", "UP038"]
+exclude = [
+    "docs",
+    "Datasets",
+    "BRDF-Topo-HyTools",
+    "unmixing",
+    "ty_notebooks",
+    "data",
+    "bin",
+]
 
 [tool.mypy]
 python_version = "3.10"

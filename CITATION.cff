@@ -1,4 +1,41 @@
-# DO NOT EDIT OUTSIDE MARKERS
-# FILLME:START
-Placeholder. To be replaced by content prompts.
-# FILLME:END
+# This CITATION.cff file follows the Citation File Format 1.2.0 specification.
+# Update the TODO fields with real author details and DOI information before release.
+cff-version: 1.2.0
+title: "Cross-Sensor Calibration"
+message: "If you use this software, please cite it as below."
+abstract: >-
+  Cross-sensor calibration utilities for harmonizing multi-sensor Earth observation data,
+  including workflows for NEON hyperspectral flight lines.
+authors:
+  - family-names: "TODO"
+    given-names: "Author One"
+    affiliation: "TODO: Affiliation"
+  - family-names: "TODO"
+    given-names: "Author Two"
+    affiliation: "TODO: Affiliation"
+version: 0.1.0
+doi: "TODO"
+repository-code: "https://github.com/earthlab/cross-sensor-cal"
+license: "GPL-3.0-or-later"
+keywords:
+  - remote-sensing
+  - earth-observation
+  - calibration
+  - neon
+preferred-citation:
+  type: software
+  title: "Cross-Sensor Calibration"
+  version: 0.1.0
+  authors:
+    - family-names: "TODO"
+      given-names: "Author One"
+    - family-names: "TODO"
+      given-names: "Author Two"
+  date-released: 2024-01-01
+  repository-code: "https://github.com/earthlab/cross-sensor-cal"
+  doi: "TODO"
+identifiers:
+  - type: doi
+    value: "TODO"
+  - type: url
+    value: "https://earthlab.github.io/cross-sensor-cal/"

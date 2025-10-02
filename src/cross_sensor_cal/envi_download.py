@@ -1,7 +1,7 @@
 import os.path
+import subprocess
 
 import requests
-import subprocess
 
 
 def list_neon_products():
@@ -40,9 +40,9 @@ def download_neon_file(site_code, product_code, year_month, flight_line, out_dir
                 try:
                     result = subprocess.run(
                         ['wget', '--no-check-certificate', file_info["url"], '-O', out_path],
-                        stdout=subprocess.PIPE,  # Capture standard output
-                        stderr=subprocess.PIPE,  # Capture standard error
-                        text=True  # Decode to text
+                        capture_output=True,
+                        text=True,
+                        check=False,
                     )
 
                     # Check for errors

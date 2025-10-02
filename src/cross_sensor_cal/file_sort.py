@@ -1,32 +1,33 @@
 import os
-import pandas as pd
 from pathlib import Path
-from typing import List, Tuple, Dict, Type
+
+import pandas as pd
+
 from .file_types import (
     DataFile,
-    NEONReflectanceFile,
-    NEONReflectanceENVIFile,
-    NEONReflectanceENVHDRFile,
+    EndmembersCSVFile,
+    MaskedFileMixin,
+    MaskedSpectralCSVFile,
     NEONReflectanceAncillaryENVIFile,
     NEONReflectanceAncillaryENVIFileHeader,
-    NEONReflectanceConfigFile,
     NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile,
     NEONReflectanceBRDFMaskENVIFile,
     NEONReflectanceBRDFMaskENVIHDRFile,
     NEONReflectanceCoefficientsFile,
+    NEONReflectanceConfigFile,
+    NEONReflectanceENVHDRFile,
+    NEONReflectanceENVIFile,
+    NEONReflectanceFile,
     NEONReflectanceResampledENVIFile,
     NEONReflectanceResampledHDRFile,
     NEONReflectanceResampledMaskENVIFile,
     NEONReflectanceResampledMaskHDRFile,
+    SensorType,
     SpectralDataCSVFile,
-    MaskedSpectralCSVFile,
-    EndmembersCSVFile,
     UnmixingModelBestTIF,
     UnmixingModelFractionsTIF,
     UnmixingModelRMSETIF,
-    MaskedFileMixin,
-    SensorType
 )
 
 
@@ -105,7 +106,7 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
     """
     
     # Define all file type classes to check
-    file_type_classes: List[Type[DataFile]] = [
+    file_type_classes: list[type[DataFile]] = [
         NEONReflectanceFile,
         NEONReflectanceENVIFile,
         NEONReflectanceENVHDRFile,
@@ -184,7 +185,6 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
                 
                 # Construct source and destination paths
                 source_path = file_obj.path
-                relative_path = source_path.relative_to(base_path)
                 
                 # Create destination path maintaining filename
                 dest_path = Path(destination_folder) / "sorted_files" / "envi" / category_dir / source_path.name

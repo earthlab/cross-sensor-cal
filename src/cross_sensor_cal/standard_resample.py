@@ -1,20 +1,17 @@
-import os
 import argparse
+import json
+import os
 from pathlib import Path
 
-from hytools.transform.resampling import calc_resample_coeffs
 import numpy as np
 import spectral
-import json 
-import matplotlib.pyplot as plt
-import sys
+from hytools.transform.resampling import calc_resample_coeffs
 from scipy.interpolate import interp1d
-import glob
 
 from .file_types import (
+    NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile,
     NEONReflectanceResampledHDRFile,
-    NEONReflectanceBRDFCorrectedENVIFile,
 )
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -39,7 +36,7 @@ def apply_resampler(hy_obj, data):
     if hy_obj.resampler['type'] == 'gaussian':
 
         # Load resampling coeffs to memory if needed
-        if 'resample_coeffs' not in hy_obj.ancillary.keys():
+        if 'resample_coeffs' not in hy_obj.ancillary:
             in_wave = hy_obj.wavelengths[~hy_obj.bad_bands]
             in_fwhm =hy_obj.fwhm[~hy_obj.bad_bands]
             resample_coeffs = calc_resample_coeffs(in_wave,in_fwhm,
@@ -88,7 +85,7 @@ class resampler_hy_obj:
         self.ancillary = {}
         self.bad_bands = np.full(num_of_bands, False)
 
-        with open(json_file, 'r') as file:
+        with open(json_file) as file:
             band_parameters = json.load(file)
 
         if sensor_type not in band_parameters:

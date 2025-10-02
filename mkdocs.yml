@@ -43,6 +43,7 @@ nav:
       - Configuration: configuration.md
       - Naming Conventions: naming-conventions.md
       - Schemas: schemas.md
+      - User Guide: user-guide.md
   - Pipeline:
       - Stage 01 · Raster Processing: stage-01-raster-processing.md
       - Stage 02 · Sorting: stage-02-sorting.md
@@ -58,6 +59,10 @@ nav:
       - Extending the Pipeline: extending.md
       - Documentation Style Guide: documentation_style_guide.md
       - Dev Notes: dev-notes.md
+      - Developer Guide: dev-guide.md
+      - API Reference: api.md
+      - Examples:
+          - Synthetic calibration workflow: examples/basic-calibration-workflow.md
       - Glossary: glossary.md
       - References: references.md
       - Onboarding:

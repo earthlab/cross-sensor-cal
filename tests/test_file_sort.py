@@ -1,36 +1,41 @@
-import unittest
 import os
-import tempfile
-import shutil
-import pandas as pd
 import re
-from pathlib import Path
-from unittest.mock import Mock, patch
+import shutil
 
 # Add parent directory to path to import modules
 import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pandas as pd
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from cross_sensor_cal.file_sort import categorize_file, generate_file_move_list
-from cross_sensor_cal.file_types import (
-    NEONReflectanceFile,
-    NEONReflectanceENVIFile,
-    NEONReflectanceENVHDRFile,
+from cross_sensor_cal.file_sort import (  # noqa: E402
+    categorize_file,
+    generate_file_move_list,
+)
+from cross_sensor_cal.file_types import (  # noqa: E402
     NEONReflectanceAncillaryENVIFile,
-    NEONReflectanceConfigFile,
     NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile,
     NEONReflectanceBRDFMaskENVIFile,
     NEONReflectanceBRDFMaskENVIHDRFile,
     NEONReflectanceCoefficientsFile,
+    NEONReflectanceConfigFile,
+    NEONReflectanceENVHDRFile,
+    NEONReflectanceENVIFile,
+    NEONReflectanceFile,
     NEONReflectanceResampledENVIFile,
     NEONReflectanceResampledHDRFile,
     NEONReflectanceResampledMaskENVIFile,
     NEONReflectanceResampledMaskHDRFile,
-    SpectralDataCSVFile,
     SensorType,
+    SpectralDataCSVFile,
 )
 
 
@@ -141,9 +146,7 @@ class TestCategorizeFile(unittest.TestCase):
                                      NEONReflectanceResampledMaskENVIFile, NEONReflectanceResampledMaskHDRFile):
                     return False
                 elif class_or_tuple == (NEONReflectanceENVIFile, NEONReflectanceENVHDRFile,
-                                       NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFCorrectedENVIHDRFile):
-                    return True
-                elif hasattr(class_or_tuple, '__name__') and class_or_tuple.__name__ == 'MaskedFileMixin':
+                                       NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFCorrectedENVIHDRFile) or hasattr(class_or_tuple, '__name__') and class_or_tuple.__name__ == 'MaskedFileMixin':
                     return True
                 elif class_or_tuple == (NEONReflectanceBRDFMaskENVIFile, NEONReflectanceBRDFMaskENVIHDRFile):
                     return False
@@ -358,9 +361,7 @@ class TestGenerateFileMoveList(unittest.TestCase):
             source = row["Source Path"]
             dest = row["Destination Path"]
             
-            if "_reflectance_envi_masked" in source:
-                self.assertIn("/Reflectance_Masked/", dest)
-            elif "_brdf_corrected_envi_masked" in source:
+            if "_reflectance_envi_masked" in source or "_brdf_corrected_envi_masked" in source:
                 self.assertIn("/Reflectance_Masked/", dest)
             elif "_resampled_MicaSense_envi_masked" in source:
                 self.assertIn("/MicaSense_Masked/", dest)

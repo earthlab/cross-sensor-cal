@@ -1,0 +1,17 @@
+name: cross-sensor-cal
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.10
+  - pip
+  - gdal
+  - hytools
+  - numpy
+  - pandas
+  - rasterio
+  - scipy
+  - spectral
+  - pip:
+      - cross-sensor-cal @ file:.
+      - -r requirements-dev.txt

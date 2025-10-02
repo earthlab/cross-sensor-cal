@@ -25,7 +25,9 @@ processing workflows.
 1. Read the [project overview](overview.md) for the big picture.
 2. Follow the [quickstart](quickstart.md) to process a minimal dataset end to
    end.
-3. Review the [environment setup](env-setup.md) instructions before tackling a
+3. Experiment with the [synthetic calibration workflow](examples/basic-calibration-workflow.md)
+   to see the API in action without downloading large data files.
+4. Review the [environment setup](env-setup.md) instructions before tackling a
    full production run.
 
 ## Pipeline at a glance

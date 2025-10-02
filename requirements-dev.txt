@@ -1,4 +1,10 @@
 black
 mypy
 pytest
+pytest-cov
 ruff
+mkdocs
+mkdocs-material
+mkdocstrings[python]
+build
+twine
