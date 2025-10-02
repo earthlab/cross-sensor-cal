@@ -44,6 +44,13 @@ uv pip install -e .
 
 ## Documentation
 
+Browse the full documentation site at
+[earthlab.github.io/cross-sensor-cal](https://earthlab.github.io/cross-sensor-cal).
+The site is built with MkDocs Material and automatically deployed to GitHub
+Pages.
+
+Key entry points:
+
 - [Overview](docs/overview.md)
 - [Quickstart](docs/quickstart.md)
 - [Stage 01 Raster Processing](docs/stage-01-raster-processing.md)

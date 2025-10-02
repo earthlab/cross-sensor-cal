@@ -1,36 +1,60 @@
-# <!-- FILLME:START -->
-site_name: Cross Sensor Cal
+site_name: Cross Sensor Calibration
+site_description: >-
+  Documentation for the Cross-Sensor Calibration pipeline that processes NEON
+  AOP hyperspectral flightlines into analysis-ready products.
+site_url: https://earthlab.github.io/cross-sensor-cal
+repo_name: earthlab/cross-sensor-cal
 repo_url: https://github.com/earthlab/cross-sensor-cal
+
 theme:
   name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - toc.integrate
+    - content.code.copy
+
 plugins:
   - search
   - mkdocstrings
+
 markdown_extensions:
   - admonition
-  - toc:
-      permalink: true
   - footnotes
   - tables
-nav:
-  - Overview: overview.md
-  - Quickstart: quickstart.md
-  - Environment Setup: env-setup.md
-  - CyVerse iRODS: cyverse-irods.md
-  - Configuration: configuration.md
-  - Naming Conventions: naming-conventions.md
-  - Schemas: schemas.md
-  - Stage 01 Raster Processing: stage-01-raster-processing.md
-  - Stage 02 Sorting: stage-02-sorting.md
-  - Stage 03 Pixel Extraction: stage-03-pixel-extraction.md
-  - Stage 04 Spectral Library: stage-04-spectral-library.md
-  - Stage 05 MESMA: stage-05-mesma.md
-  - Validation: validation.md
-  - Benchmarks: benchmarks.md
-  - Troubleshooting: troubleshooting.md
-  - FAQ: faq.md
-  - Extending: extending.md
-  - Glossary: glossary.md
-  - References: references.md
-# <!-- FILLME:END -->
+  - toc:
+      permalink: true
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences
 
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Overview: overview.md
+      - Quickstart: quickstart.md
+      - Environment Setup: env-setup.md
+      - CyVerse iRODS: cyverse-irods.md
+      - Configuration: configuration.md
+      - Naming Conventions: naming-conventions.md
+      - Schemas: schemas.md
+  - Pipeline:
+      - Stage 01 · Raster Processing: stage-01-raster-processing.md
+      - Stage 02 · Sorting: stage-02-sorting.md
+      - Stage 03 · Pixel Extraction: stage-03-pixel-extraction.md
+      - Stage 04 · Spectral Library: stage-04-spectral-library.md
+      - Stage 05 · MESMA: stage-05-mesma.md
+  - Validation & Support:
+      - Validation: validation.md
+      - Benchmarks: benchmarks.md
+      - Troubleshooting: troubleshooting.md
+      - FAQ: faq.md
+  - Guides & References:
+      - Extending the Pipeline: extending.md
+      - Documentation Style Guide: documentation_style_guide.md
+      - Dev Notes: dev-notes.md
+      - Glossary: glossary.md
+      - References: references.md
+      - Onboarding:
+          - Sorting and Retrieval Overview: onboarding/sorting_and_retrieval_overview.md
