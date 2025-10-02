@@ -1,7 +1,6 @@
 from pathlib import Path
 import numpy as np
 import json
-import re
 from spectral import open_image
 from spectral.io import envi
 from scipy.stats import norm
@@ -23,30 +22,6 @@ def gaussian_rsr(wavelengths, center, fwhm):
     return rsr / np.sum(rsr)
 
 
-def _parse_wavelengths(wavelengths_raw):
-    """Return a list of float wavelengths parsed from header metadata."""
-
-    if wavelengths_raw is None:
-        return None
-
-    parsed = []
-
-    if isinstance(wavelengths_raw, str):
-        tokens = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", wavelengths_raw)
-        parsed.extend(float(token) for token in tokens)
-    elif isinstance(wavelengths_raw, (list, tuple)):
-        for value in wavelengths_raw:
-            if isinstance(value, (int, float)):
-                parsed.append(float(value))
-            elif isinstance(value, str):
-                tokens = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", value)
-                parsed.extend(float(token) for token in tokens)
-    else:
-        return None
-
-    return parsed or None
-
-
 def resample(input_dir: Path):
     """Perform convolutional resampling for BRDF+TOPO corrected hyperspectral data"""
     print(f"🚀 Starting convolutional resample for {input_dir}")
@@ -63,16 +38,17 @@ def resample(input_dir: Path):
             continue
 
         header = envi.read_envi_header(hdr_file.file_path)
-        wavelengths = _parse_wavelengths(header.get('wavelength'))
+        wavelengths = header.get('wavelength')
 
         if wavelengths is None:
             with open(os.path.join(PROJ_DIR, 'data', 'hyperspectral_bands.json'), 'r') as f:
-                fallback_wavelengths = json.load(f).get('bands')
-                wavelengths = _parse_wavelengths(fallback_wavelengths)
+                wavelengths = json.load(f).get('bands')
 
         if not wavelengths:
             print("❌ ERROR: No wavelengths found.")
             continue
+
+        wavelengths = [float(w) for w in wavelengths]
 
         rows, cols, bands = hyperspectral_data.shape
         if len(wavelengths) != bands:
