@@ -22,6 +22,43 @@ def gaussian_rsr(wavelengths, center, fwhm):
     return rsr / np.sum(rsr)
 
 
+def _parse_wavelengths(raw_wavelengths):
+    """Normalise raw wavelength values from an ENVI header into floats."""
+
+    if raw_wavelengths is None:
+        return []
+
+    if isinstance(raw_wavelengths, (int, float)):
+        return [float(raw_wavelengths)]
+
+    if isinstance(raw_wavelengths, str):
+        raw_wavelengths = [raw_wavelengths]
+
+    cleaned = []
+
+    for value in raw_wavelengths:
+        if isinstance(value, (int, float)):
+            cleaned.append(float(value))
+            continue
+
+        if not isinstance(value, str):
+            continue
+
+        # Remove ENVI braces and split on common delimiters
+        token = value.strip().strip('{}')
+        if not token:
+            continue
+
+        token = token.replace(',', ' ')
+        for part in token.split():
+            try:
+                cleaned.append(float(part))
+            except ValueError:
+                continue
+
+    return cleaned
+
+
 def resample(input_dir: Path):
     """Perform convolutional resampling for BRDF+TOPO corrected hyperspectral data"""
     print(f"🚀 Starting convolutional resample for {input_dir}")
@@ -38,17 +75,15 @@ def resample(input_dir: Path):
             continue
 
         header = envi.read_envi_header(hdr_file.file_path)
-        wavelengths = header.get('wavelength')
+        wavelengths = _parse_wavelengths(header.get('wavelength'))
 
-        if wavelengths is None:
+        if not wavelengths:
             with open(os.path.join(PROJ_DIR, 'data', 'hyperspectral_bands.json'), 'r') as f:
-                wavelengths = json.load(f).get('bands')
+                wavelengths = _parse_wavelengths(json.load(f).get('bands'))
 
         if not wavelengths:
             print("❌ ERROR: No wavelengths found.")
             continue
-
-        wavelengths = [float(w) for w in wavelengths]
 
         rows, cols, bands = hyperspectral_data.shape
         if len(wavelengths) != bands:
