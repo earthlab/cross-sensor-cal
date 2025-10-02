@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from pathlib import Path
 from typing import List, Tuple, Dict, Type
-from src.file_types import (
+from .file_types import (
     DataFile,
     NEONReflectanceFile,
     NEONReflectanceENVIFile,

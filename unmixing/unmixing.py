@@ -25,10 +25,18 @@ from shapely.geometry import mapping
 
 import os
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from src.file_types import MaskedSpectralCSVFile, EndmembersCSVFile, \
-    UnmixingModelBestTIF, UnmixingModelFractionsTIF, UnmixingModelRMSETIF
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = PROJECT_ROOT / "src"
+sys.path.insert(0, str(SRC_DIR))
+
+from cross_sensor_cal.file_types import (
+    MaskedSpectralCSVFile,
+    EndmembersCSVFile,
+    UnmixingModelBestTIF,
+    UnmixingModelFractionsTIF,
+    UnmixingModelRMSETIF,
+)
 
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))

@@ -3,7 +3,8 @@
 ## Overview
 This directory packages helper resources for applying BRDF and topographic
 corrections with the HyTools library. You can use it to reproduce the
-processing steps implemented in the `src/topo_and_brdf_correction.py` module.
+processing steps implemented in the
+`cross_sensor_cal/topo_and_brdf_correction.py` module.
 
 ## Prerequisites
 - Python 3.10+
@@ -15,7 +16,7 @@ processing steps implemented in the `src/topo_and_brdf_correction.py` module.
 2. Generate configuration files using the main pipeline:
 
 ```python
-from src.topo_and_brdf_correction import generate_config_json
+from cross_sensor_cal.topo_and_brdf_correction import generate_config_json
 
 generate_config_json("data/NIWO_2023_08")
 ```
@@ -28,7 +29,7 @@ topographic adjustments.
   reproducibility.
 
 ## Next steps
-After running the corrections, return to `src/topo_and_brdf_correction.py` to
+After running the corrections, return to `cross_sensor_cal/topo_and_brdf_correction.py` to
 continue the pipeline.
 
 Last updated: 2025-08-14

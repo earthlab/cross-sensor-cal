@@ -34,15 +34,15 @@
 ## How to run
 ### CLI
 ```bash
-python src/neon_to_envi.py --images scene.h5 --output_dir out -anc
-python src/topo_and_brdf_correction.py config.json
+python -m cross_sensor_cal.neon_to_envi --images scene.h5 --output_dir out -anc
+python -m cross_sensor_cal.topo_and_brdf_correction config.json
 ```
 
 ### Python
 ```python
-from src.neon_to_envi import neon_to_envi
-from src.mask_raster import mask_raster_with_polygons
-from src.topo_and_brdf_correction import topo_and_brdf_correction
+from cross_sensor_cal.mask_raster import mask_raster_with_polygons
+from cross_sensor_cal.neon_to_envi import neon_to_envi
+from cross_sensor_cal.topo_and_brdf_correction import topo_and_brdf_correction
 
 neon_to_envi(["scene.h5"], "out", anc=True)
 mask_raster_with_polygons(envi_file, "polygons.geojson")

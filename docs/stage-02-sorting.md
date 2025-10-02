@@ -38,7 +38,7 @@ rerunning the command recreates the same layout without duplicating files.
    reruns skip unchanged files and resume incomplete transfers.
 
 ## Reference
- - [`src/file_sort.py`](https://github.com/earthlab/cross-sensor-cal/blob/main/src/file_sort.py) implements sorting and iRODS path rules
+- [`src/cross_sensor_cal/file_sort.py`](https://github.com/earthlab/cross-sensor-cal/blob/main/src/cross_sensor_cal/file_sort.py) implements sorting and iRODS path rules
  - [`bin/jefe.py`](https://github.com/earthlab/cross-sensor-cal/blob/main/bin/jefe.py) provides the `sort_and_sync_files` entry point
  - [CyVerse iRODS](cyverse-irods.md) covers authentication and environment setup
 
