@@ -1,10 +1,9 @@
 # Source Code
 
 ## Overview
-The `src` directory hosts the installable Python package `cross_sensor_cal`,
-which implements the cross-sensor calibration workflow. Each module handles a
-specific stage, from downloading NEON data to resampling spectra for other
-sensors.
+The `src` directory contains the Python modules that implement the cross-sensor
+calibration workflow. Each module handles a specific stage, from downloading
+NEON data to resampling spectra for other sensors.
 
 ## Prerequisites
 - Python 3.10+
@@ -14,7 +13,7 @@ sensors.
 1. Download a NEON flightline:
 
 ```python
-from cross_sensor_cal.envi_download import download_neon_flight_lines
+from src.envi_download import download_neon_flight_lines
 
 download_neon_flight_lines(
     out_dir="data/NIWO_2023_08",
@@ -28,9 +27,9 @@ download_neon_flight_lines(
 2. Convert, correct, and resample using subsequent modules:
 
 ```python
-from cross_sensor_cal.neon_to_envi import neon_to_envi
-from cross_sensor_cal.topo_and_brdf_correction import topo_and_brdf_correction
-from cross_sensor_cal.convolution_resample import resample
+from src.neon_to_envi import neon_to_envi
+from src.topo_and_brdf_correction import topo_and_brdf_correction
+from src.convolution_resample import resample
 ```
 
 ## Reference
@@ -38,7 +37,7 @@ from cross_sensor_cal.convolution_resample import resample
 - `neon_to_envi.py` – HDF5 to ENVI conversion
 - `topo_and_brdf_correction.py` – BRDF and topographic correction
 - `convolution_resample.py` – spectral resampling
-- `polygon_extraction.py` – pixel extraction and tabular export
+- `extraction.py` – pixel extraction and tabular export
 
 ## Next steps
 Explore the module docstrings for detailed parameter descriptions and extend

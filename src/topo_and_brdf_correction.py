@@ -13,7 +13,7 @@ from hytools.brdf import calc_brdf_coeffs
 from hytools.glint import set_glint_parameters
 from hytools.masks import mask_create
 
-from .file_types import (
+from src.file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceConfigFile,
     NEONReflectanceCoefficientsFile,

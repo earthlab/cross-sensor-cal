@@ -14,7 +14,7 @@ CSV exports here using the directory structure shown in the project README.
 2. Download NEON flightlines into `raw_h5/`:
 
 ```python
-from cross_sensor_cal.envi_download import download_neon_flight_lines
+from src.envi_download import download_neon_flight_lines
 
 download_neon_flight_lines(
     out_dir="data/NIWO_2023_08/raw_h5",

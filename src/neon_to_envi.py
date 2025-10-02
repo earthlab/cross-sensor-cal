@@ -10,11 +10,7 @@ import hytools as ht
 from hytools.io.envi import WriteENVI
 import re
 from functools import partial
-from .file_types import (
-    NEONReflectanceFile,
-    NEONReflectanceENVIFile,
-    NEONReflectanceAncillaryENVIFile,
-)
+from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
 
 # --- Utility functions ---
 def get_all_keys(group):
