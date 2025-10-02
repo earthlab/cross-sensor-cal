@@ -23,4 +23,3 @@ defines how you should write and maintain docs across the repository.
 Expand this folder with API references, architecture diagrams, or tutorials as
 the project evolves.
 
-Last updated: 2025-08-14
