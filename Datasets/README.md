@@ -21,11 +21,11 @@ ogrinfo Datasets/niwot_aop_macrosystems_data_2023_12_8_23.gpkg -summary
    `process_base_folder`:
 
 ```python
-from src.extraction import process_base_folder
+from cross_sensor_cal.polygon_extraction import control_function_for_extraction
 
-process_base_folder(
-    base_folder="data/NIWO_2023_08",
-    polygon_layer="Datasets/niwot_aop_macrosystems_data_2023_12_8_23.gpkg",
+control_function_for_extraction(
+    directory="data/NIWO_2023_08",
+    polygon_path="Datasets/niwot_aop_macrosystems_data_2023_12_8_23.gpkg",
 )
 ```
 

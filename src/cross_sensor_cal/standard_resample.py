@@ -11,8 +11,11 @@ import sys
 from scipy.interpolate import interp1d
 import glob
 
-from src.file_types import NEONReflectanceBRDFCorrectedENVIHDRFile, NEONReflectanceResampledHDRFile, \
-    NEONReflectanceBRDFCorrectedENVIFile
+from .file_types import (
+    NEONReflectanceBRDFCorrectedENVIHDRFile,
+    NEONReflectanceResampledHDRFile,
+    NEONReflectanceBRDFCorrectedENVIFile,
+)
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 

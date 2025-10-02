@@ -76,16 +76,16 @@ The same workflow can be scripted in Python for additional customization.
 ```python
 from pathlib import Path
 
-from src.envi_download import download_neon_flight_lines
-from src.neon_to_envi import flight_lines_to_envi
-from src.topo_and_brdf_correction import (
-    generate_config_json,
-    topo_and_brdf_correction,
-)
-from src.convolution_resample import resample
-from src.file_types import (
+from cross_sensor_cal.convolution_resample import resample
+from cross_sensor_cal.envi_download import download_neon_flight_lines
+from cross_sensor_cal.file_types import (
     NEONReflectanceConfigFile,
     NEONReflectanceBRDFCorrectedENVIFile,
+)
+from cross_sensor_cal.neon_to_envi import flight_lines_to_envi
+from cross_sensor_cal.topo_and_brdf_correction import (
+    generate_config_json,
+    topo_and_brdf_correction,
 )
 
 base = Path("data/NIWO_2023-08")

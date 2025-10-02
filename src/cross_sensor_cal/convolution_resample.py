@@ -6,7 +6,7 @@ from spectral.io import envi
 from scipy.stats import norm
 import os
 
-from src.file_types import (
+from .file_types import (
     NEONReflectanceResampledENVIFile,
     NEONReflectanceResampledHDRFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile
