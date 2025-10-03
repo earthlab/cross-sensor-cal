@@ -43,8 +43,9 @@ class DataFile:
         return self.path.parent
 
     @property
-    def file_path(self) -> str:
-        return str(self.path)
+    def file_path(self) -> Path:
+        """Return the concrete :class:`Path` for this data file."""
+        return self.path
 
     @classmethod
     def match(cls, filename: str) -> Optional[re.Match]:
