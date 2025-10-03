@@ -7,7 +7,7 @@
 - [ ] Confirm the canonical package name (`cross-sensor-cal` vs `cross_sensor_cal`) and ensure the code lives under a single importable package directory (e.g., `src/cross_sensor_cal`).
 - [ ] Replace the minimal `setup.py` with a `pyproject.toml` using PEP 621 metadata (name, version, description, authors, URLs, keywords, classifiers) and optional `setup.cfg` for configuration. Align metadata with README and docs.
 - [ ] Add `__init__.py` exports and package-level documentation so users can discover public APIs easily.
-- [ ] Decide on versioning scheme (CalVer or SemVer) and document it in CONTRIBUTING along with release tagging conventions.
+- [x] Decide on versioning scheme (CalVer or SemVer) and document it in CONTRIBUTING along with release tagging conventions.
 - [ ] Audit repository for large data or notebooks that should be excluded from source distributions. Use `.gitignore`/`MANIFEST.in` to prevent shipping bulky artifacts.
 
 ## 2. Dependencies & Environment
@@ -24,21 +24,21 @@
 - [ ] Ensure `pytest` configuration (`pyproject.toml`/`pytest.ini`) ignores heavyweight data paths and sets up necessary environment variables for tests.
 
 ## 4. Documentation & Community Files
-- [ ] Finish filling placeholders in `README.md`, `CITATION.cff`, and MkDocs pages. Include feature overview, supported sensors, and end-to-end workflow diagrams.
+- [x] Finish filling placeholders in `README.md`, `CITATION.cff`, and MkDocs pages. Include feature overview, supported sensors, and end-to-end workflow diagrams.
 - [ ] Verify that documentation builds cleanly with `mkdocs build` and publish instructions (`mkdocs gh-deploy` or Read the Docs) as part of release workflow.
 - [ ] Add usage examples demonstrating both library API calls and CLI entry points, ideally with runnable Jupyter notebooks linked from docs.
-- [ ] Update `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (create if missing), and issue/PR templates to guide external contributors once the package is public.
-- [ ] Provide citation and acknowledgement guidance consistent across README, docs, and metadata.
+- [ ] Update `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (create if missing), and issue/PR templates to guide external contributors once the package is public. *(Contributing guide and Code of Conduct refreshed; templates still needed.)*
+- [x] Provide citation and acknowledgement guidance consistent across README, docs, and metadata.
 
 ## 5. Distribution Artifacts & QA
 - [ ] Run `python -m build` to generate sdist/wheel and inspect contents (ensure no unnecessary files, confirm console scripts are installed).
 - [ ] Execute `twine check dist/*` to validate metadata and `pip install dist/*.whl` in a clean virtual environment for smoke tests.
-- [ ] Document hardware/software prerequisites (GDAL, PROJ) and include troubleshooting tips for installation on Linux/macOS/Windows.
+- [x] Document hardware/software prerequisites (GDAL, PROJ) and include troubleshooting tips for installation on Linux/macOS/Windows.
 - [ ] Automate changelog generation (`CHANGELOG.md`) per release with notable features and breaking changes.
 - [ ] Establish release checklist (tagging, GitHub release notes, PyPI upload) and capture in this document or `RELEASING.md`.
 
 ## 6. Licensing & Governance
-- [ ] Confirm license (GPLv3) is acceptable for target distribution venues; include `LICENSE` file in repository and package manifest.
+- [x] Confirm license (GPLv3) is acceptable for target distribution venues; include `LICENSE` file in repository and package manifest.
 - [ ] Ensure all third-party code, data, and documentation comply with the chosen license and attribution requirements.
 - [ ] Identify maintainers and add contact information/support policy in README and docs.
 
