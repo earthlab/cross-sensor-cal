@@ -21,17 +21,59 @@ except Exception:  # pragma: no cover
     tqdm = None
 
 
-def _warn_skip_exists(step: str, targets, verbose: bool) -> None:
-    """Emit a consistent skip message when expected outputs already exist."""
+def _pretty_line(line: str) -> str:
+    """
+    Return a short, readable label for a flight line (prefer the tile like L019-1).
+    Falls back to the original string if no tile pattern found.
+    """
+    import re
+
+    m = re.search(r"(L\d{3}-\d)", line)
+    return m.group(1) if m else line
+
+
+def _emit(msg: str, bars: dict[str, tqdm] | None, *, verbose: bool) -> None:
+    """
+    Print a human-readable message without mangling tqdm bars.
+    """
+    if verbose:
+        print(msg)
+        return
+    if bars and tqdm is not None:
+        try:  # pragma: no cover - tqdm.write may fail if tqdm missing features
+            tqdm.write(msg)
+            return
+        except Exception:  # pragma: no cover - fall back to plain print
+            pass
+    print(msg)
+
+
+def _warn_skip_exists(
+    step: str,
+    targets,
+    verbose: bool,
+    bars: dict[str, tqdm] | None = None,
+    scope: str | None = None,
+) -> None:
+    """
+    Emit a friendly skip line when expected outputs already exist.
+
+    scope: optional short context like a tile id (e.g., L019-1)
+    """
+
     try:
         count = len(list(targets))
     except Exception:  # pragma: no cover - targets may be generator-like
         count = "some"
-    message = f"SKIP_EXISTS [{step}] — found existing output(s) ({count})."
-    if verbose:
-        print(message)
-    else:
-        logging.warning(message)
+    human_step = {
+        "download": "download already present",
+        "H5→ENVI (main+ancillary)": "ENVI + ancillary already exported",
+        "generate_config_json": "config already present",
+        "topo_and_brdf_correction": "BRDF+topo correction already present",
+        "resample": "resampled outputs already present",
+    }.get(step, step)
+    scope_txt = f" [{scope}]" if scope else ""
+    _emit(f"⏭️  Skipped{scope_txt}: {human_step} ({count})", bars, verbose=verbose)
 
 
 def _stale_hint(step: str) -> str:
@@ -194,15 +236,25 @@ def go_forth_and_multiply(
             totals[fl] += 1  # conversion slot
 
     if not verbose and tqdm is not None and flight_lines:
+        bar_fmt = "{desc:<14} {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} steps"
         for fl in flight_lines:
-            bars[fl] = tqdm(total=_safe_total(totals[fl]), unit="task", desc=fl, leave=True)
+            pretty = _pretty_line(fl)
+            bars[pretty] = tqdm(
+                total=_safe_total(totals[fl]),
+                unit="steps",
+                desc=pretty,
+                bar_format=bar_fmt,
+                dynamic_ncols=True,
+                leave=True,
+            )
     elif not verbose and tqdm is None:
         print("⚠️  tqdm not installed; progress bars disabled.")
 
     def _add_total(line: str, amount: int) -> None:
-        if bars and line in bars and amount:
-            bars[line].total += amount
-            bars[line].refresh()
+        key = _pretty_line(line)
+        if bars and key in bars and amount:
+            bars[key].total += amount
+            bars[key].refresh()
 
     def _add_total_for_path(path_obj: Path, amount: int = 1) -> None:
         if not bars:
@@ -217,7 +269,9 @@ def go_forth_and_multiply(
             return
         for line in flight_lines:
             if _belongs_to(line, path_obj):
-                bars[line].update(1)
+                key = _pretty_line(line)
+                if key in bars:
+                    bars[key].update(1)
                 break
 
     for fl in flight_lines:
@@ -227,7 +281,9 @@ def go_forth_and_multiply(
         print("📦 Step 2/5 Converting H5 files to ENVI format...")
     for fl in flight_lines:
         if _line_outputs_present(base_path, fl):
-            _warn_skip_exists("H5→ENVI (main+ancillary)", [fl], verbose)
+            _warn_skip_exists(
+                "H5→ENVI (main+ancillary)", [fl], verbose, bars, scope=_pretty_line(fl)
+            )
             _add_total_for_path(base_path / fl / "_envi")
             _tick_for_path(base_path / fl / "_envi")
             continue
@@ -261,7 +317,7 @@ def go_forth_and_multiply(
         print("📝 Step 3/5 Generating configuration JSON...")
     existing_cfgs = list(base_path.rglob("*reflectance_envi_config_envi.json"))
     if not force_config and existing_cfgs:
-        _warn_skip_exists("generate_config_json", existing_cfgs, verbose)
+        _warn_skip_exists("generate_config_json", existing_cfgs, verbose, bars)
         for cfg in existing_cfgs:
             _add_total_for_path(Path(cfg))
             _tick_for_path(Path(cfg))
@@ -290,7 +346,13 @@ def go_forth_and_multiply(
             )
             _add_total_for_path(Path(cfg.file_path))
             if existing_corrected:
-                _warn_skip_exists("topo_and_brdf_correction", existing_corrected, verbose)
+                _warn_skip_exists(
+                    "topo_and_brdf_correction",
+                    existing_corrected,
+                    verbose,
+                    bars,
+                    scope=_pretty_line(cfg.tile or cfg.file_path.name),
+                )
                 _tick_for_path(Path(cfg.file_path))
                 continue
             try:
@@ -328,7 +390,13 @@ def go_forth_and_multiply(
                     )
                 ]
                 if existing_resampled:
-                    _warn_skip_exists("resample", existing_resampled, verbose)
+                    _warn_skip_exists(
+                        "resample",
+                        existing_resampled,
+                        verbose,
+                        bars,
+                        scope=corrected_file.path.name,
+                    )
                     _tick_for_path(corrected_file.path)
                     continue
                 try:
@@ -359,7 +427,12 @@ def go_forth_and_multiply(
                 if any(name in path.name for name in names_to_match)
             ]
             if not candidates:
-                _warn_skip_exists("brightness_offset (no eligible targets)", candidates, verbose)
+                _warn_skip_exists(
+                    "brightness_offset (no eligible targets)",
+                    candidates,
+                    verbose,
+                    bars,
+                )
             changed = apply_offset_to_envi(
                 input_dir=base_path,
                 offset=float(brightness_offset),
