@@ -574,7 +574,9 @@ class Iterator:
                                             corrections =self.corrections)
 
         elif self.by == "chunk":
-            print('G')
+            if self.current_column == -1 and self.current_line == -1:
+                print("Processing chunks: ", end='', flush=True)
+
             if self.current_column == -1:
                 self.current_column +=1
                 self.current_line +=1
@@ -599,7 +601,9 @@ class Iterator:
             subset = self.hy_obj.get_chunk(x_start,x_end, y_start,y_end,
                                             corrections =self.corrections,
                                             resample = self.resample)
-            print('R')
+            print('GR', end='', flush=True)
+            if self.complete:
+                print()
         return subset
 
     def reset(self):
