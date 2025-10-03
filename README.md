@@ -1,10 +1,8 @@
-<!-- FILLME:START -->
 # Cross-Sensor Calibration
 
 Cross-Sensor Calibration provides a Python pipeline for processing NEON Airborne Observation Platform hyperspectral flight lines and resampling them to emulate alternate sensors in a reproducible, scriptable workflow.
 
 ![Pipeline diagram](docs/img/pipeline.png)
-<!-- TODO: replace with final diagram -->
 
 ## 5-minute Quickstart
 
@@ -26,10 +24,12 @@ Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line ident
 
 ## Install
 
+Cross-Sensor Calibration depends on GDAL, PROJ, Ray, and HyTools. We recommend the Conda workflow below because it installs the required native libraries automatically. If you prefer a pure `pip` workflow, install system packages for GDAL/PROJ first (e.g., `brew install gdal` on macOS or `apt-get install gdal-bin libgdal-dev proj-bin` on Debian/Ubuntu).
+
 ### Conda
 
 ```bash
-conda create -n cscal python=3.10 gdal ray hytools
+conda create -n cscal python=3.10 gdal proj hytools
 conda activate cscal
 pip install -e .
 ```
@@ -41,6 +41,8 @@ uv venv
 source .venv/bin/activate
 uv pip install -e .
 ```
+
+If GDAL wheels are unavailable for your platform, install it from Conda-forge and then point `pip` at the Conda environment by exporting `CPLUS_INCLUDE_PATH` and `C_INCLUDE_PATH`.
 
 ## Documentation
 
@@ -65,9 +67,17 @@ Key entry points:
 |--------|---------------|------|--------|-----|
 | 3.10+  | Linux, macOS  | 3.4+ | 1.0+   | 2.0+ |
 
+## How to cite
+
+If you use Cross-Sensor Calibration in your research, please cite the project:
+
+```
+Earth Lab Data Innovation Team. (2025). Cross-Sensor Calibration (Version 0.1.0) [Software]. University of Colorado Boulder. https://github.com/earthlab/cross-sensor-cal
+```
+
+Machine-readable citation metadata is provided in [CITATION.cff](CITATION.cff).
+
 ## License and Citation
 
 Distributed under the GPLv3 License. Please cite the project using [CITATION.cff](CITATION.cff).
-
-<!-- FILLME:END -->
 

@@ -6,6 +6,9 @@
 - Roy, D.P., Kovalskyy, V., Zhang, H., Vermote, E.F., & Yan, L. (2016). Landsat-8 and Landsat-7 cross-calibration. *Remote Sensing of Environment*.
 - Claverie, M., Ju, J., Masek, J.G., et al. (2018). The Harmonized Landsat and Sentinel-2 surface reflectance data set. *Remote Sensing of Environment*.
 
+### Citing this project
+- Earth Lab Data Innovation Team. (2025). *Cross-Sensor Calibration* (Version 0.1.0) [Software]. University of Colorado Boulder. https://github.com/earthlab/cross-sensor-cal
+
 ### Spectral libraries
 - Baldridge, A.M., Hook, S.J., Grove, C.I., & Rivera, G. (2009). The ASTER spectral library version 2.0. *Remote Sensing of Environment*.
 - Kokaly, R.F., Clark, R.N., et al. (2017). USGS Spectral Library Version 7. *U.S. Geological Survey Data Series*.
