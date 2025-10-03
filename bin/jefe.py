@@ -3,6 +3,12 @@ import os
 import subprocess
 from pathlib import Path
 
+# Optional progress bars (fallback to no-bars if tqdm not present)
+try:
+    from tqdm import tqdm
+except Exception:  # pragma: no cover
+    tqdm = None
+
 from src.envi_download import download_neon_flight_lines
 from src.file_types import NEONReflectanceConfigFile, \
     NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceENVIFile, NEONReflectanceResampledENVIFile
@@ -91,24 +97,56 @@ def go_forth_and_multiply(
     skip_download_if_present: bool = True,
     force_config: bool = False,
     brightness_offset: float = 0.0,
+    verbose: bool = False,
     **kwargs,
 ):
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
 
+    flight_lines = kwargs.get("flight_lines") or []
+    bars = {}
+    if not verbose and flight_lines and tqdm is not None:
+        for flight_line in flight_lines:
+            bars[flight_line] = tqdm(total=0, unit="task", desc=flight_line, leave=True)
+    elif not verbose and tqdm is None:
+        print("⚠️  tqdm not installed; progress bars disabled.")
+
+    def _belongs_to(line: str, path_obj: Path) -> bool:
+        name = path_obj.name
+        return (line in name) or (line in str(path_obj.parent))
+
+    def _add_total(line: str, amount: int) -> None:
+        if bars and line in bars and amount:
+            current_total = bars[line].total or 0
+            bars[line].total = current_total + amount
+            bars[line].refresh()
+
+    def _tick_for_path(path_obj: Path) -> None:
+        if not bars:
+            return
+        for line in flight_lines:
+            if _belongs_to(line, path_obj):
+                bars[line].update(1)
+                break
+
     # Step 1: Download NEON flight lines
-    print("\n📥 Downloading NEON flight lines...")
+    if verbose:
+        print("\n📥 Downloading NEON flight lines...")
     if skip_download_if_present and list(base_path.rglob("*.h5")):
-        print("HDF5 files already present. Skipping download.")
+        if verbose:
+            print("HDF5 files already present. Skipping download.")
     else:
         download_neon_flight_lines(out_dir=base_path, **kwargs)
-    print("✅ Download complete.\n")
+    if verbose:
+        print("✅ Download complete.\n")
 
     # Step 2: Convert H5 to ENVI format using neon_to_envi
-    print("📦 Converting H5 files to ENVI format...")
+    if verbose:
+        print("📦 Converting H5 files to ENVI format...")
     h5_files = list(base_path.rglob("*.h5"))
     if not h5_files:
-        print("❌ No .h5 files found for conversion.")
+        if verbose:
+            print("❌ No .h5 files found for conversion.")
     else:
         pending = [
             h5
@@ -116,70 +154,132 @@ def go_forth_and_multiply(
             if not any(h5.with_suffix(ext).exists() for ext in (".hdr", ".img", ".dat"))
         ]
         if not pending:
-            print("All H5 files already converted. Skipping.")
+            if verbose:
+                print("All H5 files already converted. Skipping.")
         else:
+            if bars:
+                for flight_line in flight_lines:
+                    tasks = sum(1 for h5 in pending if _belongs_to(flight_line, h5))
+                    _add_total(flight_line, tasks)
             for index, h5_file in enumerate(pending, start=1):
-                print(f"🔄 [{index}/{len(pending)}] Converting: {h5_file.name}")
+                if verbose:
+                    print(f"🔄 [{index}/{len(pending)}] Converting: {h5_file.name}")
                 neon_to_envi(images=[str(h5_file)], output_dir=str(base_path), anc=True)
-                print(f"✅ Finished: {h5_file.name}\n")
-    print("✅ ENVI conversion complete.\n")
+                if verbose:
+                    print(f"✅ Finished: {h5_file.name}\n")
+                _tick_for_path(h5_file)
+    if verbose:
+        print("✅ ENVI conversion complete.\n")
 
     # Step 3: Generate configuration JSON
-    print("📝 Generating configuration JSON...")
+    if verbose:
+        print("📝 Generating configuration JSON...")
     config_jsons = list(base_path.rglob("*_reflectance_envi_config_envi.json"))
     if force_config or not config_jsons:
         generate_config_json(base_path, num_cpus=max_workers)
-        print("✅ Config JSON generation complete.\n")
+        if verbose:
+            print("✅ Config JSON generation complete.\n")
     else:
-        print("Existing config JSON found. Skipping (use --force-config to regenerate).\n")
+        if verbose:
+            print("Existing config JSON found. Skipping (use --force-config to regenerate).\n")
+
+    config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
+    if bars and config_files:
+        for flight_line in flight_lines:
+            tasks = sum(1 for cfg in config_files if _belongs_to(flight_line, cfg.file_path))
+            _add_total(flight_line, tasks)
+        for cfg in config_files:
+            _tick_for_path(cfg.file_path)
 
     # Step 4: Apply topographic and BRDF corrections
-    print("⛰️ Applying topographic and BRDF corrections...")
-    config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
+    if verbose:
+        print("⛰️ Applying topographic and BRDF corrections...")
 
     if config_files:
+        if bars:
+            for flight_line in flight_lines:
+                tasks = sum(1 for cfg in config_files if _belongs_to(flight_line, cfg.file_path))
+                _add_total(flight_line, tasks)
         for config_file in config_files:
-            print(f"⚙️ Applying corrections to: {config_file.file_path}")
+            if verbose:
+                print(f"⚙️ Applying corrections to: {config_file.file_path}")
             topo_and_brdf_correction(str(config_file.file_path))
-        print("✅ All corrections applied.\n")
+            _tick_for_path(config_file.file_path)
+        if verbose:
+            print("✅ All corrections applied.\n")
     else:
-        print("❌ No configuration JSON files found. Skipping corrections.\n")
+        if verbose:
+            print("❌ No configuration JSON files found. Skipping corrections.\n")
 
     # Step 5: Resample and translate data to other sensor formats
     if resample_method == 'convolution':
-        print("🔁 Resampling and translating data...")
+        if verbose:
+            print("🔁 Resampling and translating data...")
         corrected_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
         if not corrected_files:
             print("❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps.\n")
         else:
-            print(f"📂 Found {len(corrected_files)} BRDF-corrected files to process.")
+            if verbose:
+                print(f"📂 Found {len(corrected_files)} BRDF-corrected files to process.")
+            if bars:
+                for flight_line in flight_lines:
+                    tasks = sum(
+                        1 for corrected in corrected_files if _belongs_to(flight_line, corrected.path)
+                    )
+                    _add_total(flight_line, tasks)
             for index, corrected_file in enumerate(corrected_files, start=1):
-                print(f"🔄 [{index}/{len(corrected_files)}] Resampling: {corrected_file.name}")
+                if verbose:
+                    print(f"🔄 [{index}/{len(corrected_files)}] Resampling: {corrected_file.name}")
                 convolution_resample(corrected_file.directory)
-                print(f"✅ Resampled: {corrected_file.name}\n")
-        print("✅ Resampling and translation complete.\n")
+                if verbose:
+                    print(f"✅ Resampled: {corrected_file.name}\n")
+                _tick_for_path(corrected_file.path)
+        if verbose:
+            print("✅ Resampling and translation complete.\n")
     elif resample_method == 'resample':
         resample_translation_to_other_sensors(base_path)
 
     # TODO: Move this to after the convolution diagnostic option to keep the unadjusted ones
     if brightness_offset and float(brightness_offset) != 0.0:
-        print(f"🧮 Applying brightness offset: {brightness_offset:+g}")
+        if verbose:
+            print(f"🧮 Applying brightness offset: {brightness_offset:+g}")
         try:
+            names_to_match = [
+                "brdfandtopo_corrected_envi",
+                "resampled_envi",
+            ]
+            candidates = [
+                path
+                for path in base_path.rglob("*.img")
+                if any(name in path.name for name in names_to_match)
+            ]
+            if bars:
+                for flight_line in flight_lines:
+                    tasks = sum(1 for path in candidates if _belongs_to(flight_line, path))
+                    _add_total(flight_line, tasks)
             changed = apply_offset_to_envi(
                 input_dir=base_path,
                 offset=float(brightness_offset),
                 clip_to_01=True,
-                only_if_name_contains=[
-                    "brdfandtopo_corrected_envi",
-                    "resampled_envi",
-                ],
+                only_if_name_contains=names_to_match,
             )
-            print(f"✅ Offset applied to {changed} ENVI file(s).")
+            if verbose:
+                print(f"✅ Offset applied to {changed} ENVI file(s).")
+            if bars:
+                count_remaining = changed
+                for path in candidates:
+                    if count_remaining <= 0:
+                        break
+                    _tick_for_path(path)
+                    count_remaining -= 1
         except Exception as exc:
             print(f"⚠️ Offset application failed: {exc}")
 
-    print("🎉 Pipeline complete!")
+    if bars:
+        for progress in bars.values():
+            progress.close()
 
+    print("🎉 Pipeline complete!")
 
 def resample_translation_to_other_sensors(base_folder: Path):
     # List all subdirectories in the base folder
@@ -253,6 +353,7 @@ def jefe(
     skip_download_if_present: bool = True,
     force_config: bool = False,
     brightness_offset: float = 0.0,
+    verbose: bool = False,
 ):
     """
     A control function that orchestrates the processing of spectral data.
@@ -283,6 +384,7 @@ def jefe(
         skip_download_if_present=skip_download_if_present,
         force_config=force_config,
         brightness_offset=brightness_offset,
+        verbose=verbose,
     )
 
     process_base_folder(
@@ -331,6 +433,11 @@ def parse_args():
                         help="Optional custom path to add after i:/iplant/ for remote iRODS paths")
     parser.add_argument("--no-sync", action="store_true",
                         help="Generate file list but do not sync files to iRODS")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Emit detailed per-step logs instead of compact progress bars.",
+    )
 
     args = parser.parse_args()
     if args.reflectance_offset and float(args.reflectance_offset) != 0.0:
@@ -357,6 +464,7 @@ def main():
         remote_prefix=args.remote_prefix,
         sync_files=not args.no_sync,
         brightness_offset=args.brightness_offset,
+        verbose=args.verbose,
     )
 
 
