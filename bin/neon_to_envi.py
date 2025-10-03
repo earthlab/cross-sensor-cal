@@ -1,6 +1,12 @@
+import os
 import sys
 import argparse
 from pathlib import Path
+
+# Silence Ray's shared-memory warning about falling back to /tmp. This reduces
+# noisy log output while keeping the default behavior intact.
+os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
+
 import ray
 import hytools as ht
 
