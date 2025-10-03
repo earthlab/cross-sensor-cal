@@ -6,9 +6,9 @@ from src.file_types import (
     DataFile,
     NEONReflectanceFile,
     NEONReflectanceENVIFile,
-    NEONReflectanceENVHDRFile,
+    NEONReflectanceENVIHDRFile,
     NEONReflectanceAncillaryENVIFile,
-    NEONReflectanceAncillaryENVIFileHeader,
+    NEONReflectanceAncillaryENVIHDRFile,
     NEONReflectanceConfigFile,
     NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile,
@@ -61,7 +61,7 @@ def categorize_file(file_obj: DataFile) -> str:
     
     # Check if it's a reflectance file (ENVI or BRDF corrected)
     elif isinstance(file_obj, (NEONReflectanceENVIFile,
-                              NEONReflectanceENVHDRFile,
+                              NEONReflectanceENVIHDRFile,
                               NEONReflectanceBRDFCorrectedENVIFile,
                               NEONReflectanceBRDFCorrectedENVIHDRFile)):
         # Check if it's masked
@@ -108,9 +108,9 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
     file_type_classes: List[Type[DataFile]] = [
         NEONReflectanceFile,
         NEONReflectanceENVIFile,
-        NEONReflectanceENVHDRFile,
+        NEONReflectanceENVIHDRFile,
         NEONReflectanceAncillaryENVIFile,
-        NEONReflectanceAncillaryENVIFileHeader,
+        NEONReflectanceAncillaryENVIHDRFile,
         NEONReflectanceConfigFile,
         NEONReflectanceBRDFCorrectedENVIFile,
         NEONReflectanceBRDFCorrectedENVIHDRFile,
