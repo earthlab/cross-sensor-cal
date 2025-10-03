@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import os
+import re
 import subprocess
+import sys
+from io import StringIO
 from pathlib import Path
 
 # --- Silence Ray’s stderr warnings BEFORE any potential imports of ray ---
@@ -13,6 +17,9 @@ os.environ.setdefault("RAY_LOG_TO_STDERR", "0")
 os.environ.setdefault("RAY_BACKEND_LOG_LEVEL", "ERROR")
 os.environ.setdefault("RAY_usage_stats_enabled", "0")
 os.environ.setdefault("RAY_DEDUP_LOGS", "1")
+os.environ.setdefault("RAY_disable_usage_stats", "1")
+os.environ.setdefault("RAY_DISABLE_DASHBOARD", "1")
+os.environ.setdefault("RAY_LOG_TO_FILE", "1")
 
 # Optional progress bars (fallback to no-bars if tqdm not present)
 try:
@@ -26,7 +33,6 @@ def _pretty_line(line: str) -> str:
     Return a short, readable label for a flight line (prefer the tile like L019-1).
     Falls back to the original string if no tile pattern found.
     """
-    import re
 
     m = re.search(r"(L\d{3}-\d)", line)
     return m.group(1) if m else line
@@ -120,6 +126,86 @@ def _tick_download_slot(base: Path, flight_line: str, tick_cb) -> None:
     found = next((p for p in base.rglob("*.h5") if _belongs_to(flight_line, p)), None)
     if found is not None:
         tick_cb(found)
+
+
+# ============================================================
+# Output noise filtering for normal mode (verbose=False)
+#   - suppresses Ray service warnings and HyTools chunk spam
+#   - preserves important success lines (e.g., "Saved:")
+#   - uses redirect_stdout/redirect_stderr so third-party prints are tamed
+# ============================================================
+
+_NOISE_PATTERNS = [
+    r"^20\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+\s+WARNING services\.py:\d+\s+-- WARNING: The object store is using /tmp",
+    r"^20\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+\s+INFO worker\.py:\d+\s+-- Started a local Ray instance\.",
+    r"^\[20\d{2}-\d{2}-\d{2} .* logging\.cc:\d+: Set ray log level",
+    r"^\(raylet\) \[20\d{2}-\d{2}-\d{2} .* logging\.cc:\d+: Set ray log level",
+    r"^\(HyTools pid=\d+\)\s*GR+$",
+    r"^\(HyTools pid=\d+\)\s*GR(GR)+$",
+    r"^\(HyTools pid=\d+\)\s*$",
+]
+_NOISE_REGEX = [re.compile(p) for p in _NOISE_PATTERNS]
+
+
+class _FilterStream:
+    """A text stream that drops lines matching noise patterns; tee others to a sink."""
+
+    def __init__(self, sink, keep_saved: bool = True) -> None:
+        self._buffer = StringIO()
+        self._sink = sink
+        self._keep_saved = keep_saved
+
+    def write(self, s: str) -> None:
+        self._buffer.write(s)
+        data = self._buffer.getvalue()
+        while "\n" in data:
+            line, rest = data.split("\n", 1)
+            self._buffer = StringIO()
+            self._buffer.write(rest)
+            self._process_line(line + "\n")
+            data = self._buffer.getvalue()
+
+    def flush(self) -> None:
+        data = self._buffer.getvalue()
+        if data:
+            self._process_line(data)
+            self._buffer = StringIO()
+        try:
+            self._sink.flush()
+        except Exception:  # pragma: no cover - sink may not support flush
+            pass
+
+    def _process_line(self, line: str) -> None:
+        if not self._is_noise(line):
+            try:
+                self._sink.write(line)
+            except Exception:  # pragma: no cover - sink may be read-only
+                pass
+
+    def _is_noise(self, line: str) -> bool:
+        if self._keep_saved and ("Saved:" in line or "All processing complete" in line):
+            return False
+        return any(rx.search(line) for rx in _NOISE_REGEX)
+
+
+@contextlib.contextmanager
+def _silence_noise(enabled: bool):
+    """Context manager to silence noisy third-party output when enabled=True."""
+
+    if not enabled:
+        yield
+        return
+
+    original_out, original_err = sys.stdout, sys.stderr
+    filtered_out = _FilterStream(original_out)
+    filtered_err = _FilterStream(original_err)
+    with contextlib.redirect_stdout(filtered_out), contextlib.redirect_stderr(filtered_err):
+        yield
+    for stream in (filtered_out, filtered_err):
+        try:
+            stream.flush()
+        except Exception:  # pragma: no cover - flush best effort
+            pass
 
 from src.envi_download import download_neon_flight_lines
 from src.file_types import NEONReflectanceConfigFile, \
@@ -221,7 +307,9 @@ def go_forth_and_multiply(
         _warn_skip_exists("download", existing_h5, verbose)
     else:
         try:
-            download_neon_flight_lines(out_dir=base_path, **kwargs)
+            _emit("⬇️  Fetching flight line HDF5...", bars=None, verbose=verbose)
+            with _silence_noise(enabled=not verbose):
+                download_neon_flight_lines(out_dir=base_path, **kwargs)
         except Exception as exc:
             raise RuntimeError(str(exc) + _stale_hint("download")) from exc
     if verbose:
@@ -295,12 +383,19 @@ def go_forth_and_multiply(
             _tick_for_path(base_path / fl / "missing.h5")
             continue
         try:
-            neon_to_envi(images=[str(p) for p in h5s_for_line], output_dir=str(base_path), anc=True)
+            _emit(
+                f"📦 Exporting ENVI (main + ancillary) [{_pretty_line(fl)}]...",
+                bars,
+                verbose=verbose,
+            )
+            with _silence_noise(enabled=not verbose):
+                neon_to_envi(images=[str(p) for p in h5s_for_line], output_dir=str(base_path), anc=True)
             _tick_for_path(h5s_for_line[0])
         except TypeError:
             for h5 in h5s_for_line:
                 try:
-                    neon_to_envi(images=[str(h5)], output_dir=str(base_path), anc=True)
+                    with _silence_noise(enabled=not verbose):
+                        neon_to_envi(images=[str(h5)], output_dir=str(base_path), anc=True)
                 except Exception as exc:
                     raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
             _tick_for_path(h5s_for_line[0])
