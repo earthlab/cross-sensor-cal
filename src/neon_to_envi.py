@@ -3,6 +3,10 @@ import argparse
 import h5py
 import shutil
 from h5py import Dataset
+
+# Suppress Ray's /dev/shm fallback warning to keep conversion logs clean.
+os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
+
 import ray
 import numpy as np
 from pathlib import Path
