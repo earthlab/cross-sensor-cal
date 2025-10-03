@@ -1,6 +1,7 @@
 import json
 import warnings
 from pathlib import Path
+from typing import Iterable, Optional
 import glob
 import os
 
@@ -119,6 +120,82 @@ def topo_and_brdf_correction(config_file: str):
         ray.get([actor.do.remote(apply_corrections, config_dict) for actor in actors])
 
     ray.shutdown()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Additive brightness/reflectance offset on ENVI rasters
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _iter_envi_pairs(input_dir: Path) -> Iterable[tuple[Path, Path]]:
+    """
+    Yield (img_path, hdr_path) pairs for ENVI rasters under ``input_dir``.
+    Looks for ``*.hdr`` with a sibling ``*.img``.
+    """
+
+    for hdr in Path(input_dir).rglob("*.hdr"):
+        img = hdr.with_suffix(".img")
+        if img.exists():
+            yield img, hdr
+
+
+def apply_offset_to_envi(
+    input_dir: str | Path,
+    offset: float,
+    clip_to_01: bool = True,
+    only_if_name_contains: Optional[list[str]] = None,
+) -> int:
+    """Add a constant offset to all pixel values in ENVI rasters under ``input_dir``.
+
+    This applies an additive brightness/reflectance shift. Results can optionally be
+    clipped to the ``[0, 1]`` range.
+
+    Parameters
+    ----------
+    input_dir : str | Path
+        Root folder to search for ENVI files (``*.hdr`` with sibling ``*.img``).
+    offset : float
+        Value to **add** to every pixel (e.g., ``-0.005`` to shift down).
+    clip_to_01 : bool, default ``True``
+        If ``True``, clip results to ``[0, 1]`` after adding the offset.
+    only_if_name_contains : list[str] | None
+        If provided, only modify files whose basename contains *any* of these
+        substrings (case-insensitive).
+
+    Returns
+    -------
+    int
+        Number of ENVI images modified.
+    """
+
+    import rasterio
+
+    input_dir = Path(input_dir)
+    changed = 0
+    subs = [s.lower() for s in (only_if_name_contains or [])]
+
+    for img_path, _ in _iter_envi_pairs(input_dir):
+        name_l = img_path.name.lower()
+        if subs and not any(s in name_l for s in subs):
+            continue
+
+        with rasterio.open(img_path, "r+") as ds:
+            for band in range(1, ds.count + 1):
+                for _, window in ds.block_windows(band):
+                    arr = ds.read(band, window=window)
+                    arr = arr.astype(np.float32, copy=False)
+                    arr += offset
+                    if clip_to_01:
+                        np.clip(arr, 0.0, 1.0, out=arr)
+                    ds.write(arr, band, window=window)
+
+        changed += 1
+
+    return changed
+
+
+# Backwards/forwards-friendly alias
+apply_brightness_offset_to_envi = apply_offset_to_envi
 
 
 # ──────────────────────────────────────────────────────────────────────────────

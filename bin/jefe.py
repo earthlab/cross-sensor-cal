@@ -7,7 +7,11 @@ from src.envi_download import download_neon_flight_lines
 from src.file_types import NEONReflectanceConfigFile, \
     NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceENVIFile, NEONReflectanceResampledENVIFile
 from src.neon_to_envi import neon_to_envi
-from src.topo_and_brdf_correction import generate_config_json, topo_and_brdf_correction, apply_offset_to_envi
+from src.topo_and_brdf_correction import (
+    generate_config_json,
+    topo_and_brdf_correction,
+    apply_offset_to_envi,
+)
 from src.convolution_resample import resample as convolution_resample
 from src.standard_resample import translate_to_other_sensors
 from src.mask_raster import mask_raster_with_polygons
@@ -80,13 +84,24 @@ def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: b
     print(f"\n✅ File sync complete. Total files synced: {total_synced}/{len(df_move_list)}")
 
 
-def go_forth_and_multiply(base_folder="output", resample_method: str = 'convolution', **kwargs):
+def go_forth_and_multiply(
+    base_folder="output",
+    resample_method: str = 'convolution',
+    max_workers: int = 1,
+    skip_download_if_present: bool = True,
+    force_config: bool = False,
+    brightness_offset: float = 0.0,
+    **kwargs,
+):
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Download NEON flight lines
     print("\n📥 Downloading NEON flight lines...")
-    download_neon_flight_lines(out_dir=base_path, **kwargs)
+    if skip_download_if_present and list(base_path.rglob("*.h5")):
+        print("HDF5 files already present. Skipping download.")
+    else:
+        download_neon_flight_lines(out_dir=base_path, **kwargs)
     print("✅ Download complete.\n")
 
     # Step 2: Convert H5 to ENVI format using neon_to_envi
@@ -95,16 +110,28 @@ def go_forth_and_multiply(base_folder="output", resample_method: str = 'convolut
     if not h5_files:
         print("❌ No .h5 files found for conversion.")
     else:
-        for index, h5_file in enumerate(h5_files, start=1):
-            print(f"🔄 [{index}/{len(h5_files)}] Converting: {h5_file.name}")
-            neon_to_envi(images=[str(h5_file)], output_dir=str(base_path), anc=True)
-            print(f"✅ Finished: {h5_file.name}\n")
+        pending = [
+            h5
+            for h5 in h5_files
+            if not any(h5.with_suffix(ext).exists() for ext in (".hdr", ".img", ".dat"))
+        ]
+        if not pending:
+            print("All H5 files already converted. Skipping.")
+        else:
+            for index, h5_file in enumerate(pending, start=1):
+                print(f"🔄 [{index}/{len(pending)}] Converting: {h5_file.name}")
+                neon_to_envi(images=[str(h5_file)], output_dir=str(base_path), anc=True)
+                print(f"✅ Finished: {h5_file.name}\n")
     print("✅ ENVI conversion complete.\n")
 
     # Step 3: Generate configuration JSON
     print("📝 Generating configuration JSON...")
-    generate_config_json(base_path)
-    print("✅ Config JSON generation complete.\n")
+    config_jsons = list(base_path.rglob("*_reflectance_envi_config_envi.json"))
+    if force_config or not config_jsons:
+        generate_config_json(base_path, num_cpus=max_workers)
+        print("✅ Config JSON generation complete.\n")
+    else:
+        print("Existing config JSON found. Skipping (use --force-config to regenerate).\n")
 
     # Step 4: Apply topographic and BRDF corrections
     print("⛰️ Applying topographic and BRDF corrections...")
@@ -135,7 +162,21 @@ def go_forth_and_multiply(base_folder="output", resample_method: str = 'convolut
         resample_translation_to_other_sensors(base_path)
 
     # TODO: Move this to after the convolution diagnostic option to keep the unadjusted ones
-    apply_offset_to_envi(input_dir=base_path, offset=-0)
+    if brightness_offset and float(brightness_offset) != 0.0:
+        print(f"🧮 Applying brightness offset: {brightness_offset:+g}")
+        try:
+            changed = apply_offset_to_envi(
+                input_dir=base_path,
+                offset=float(brightness_offset),
+                clip_to_01=True,
+                only_if_name_contains=[
+                    "brdfandtopo_corrected_envi",
+                    "resampled_envi",
+                ],
+            )
+            print(f"✅ Offset applied to {changed} ENVI file(s).")
+        except Exception as exc:
+            print(f"⚠️ Offset application failed: {exc}")
 
     print("🎉 Pipeline complete!")
 
@@ -199,7 +240,20 @@ def process_all_subdirectories(parent_directory: Path, polygon_path):
         print(f"[ERROR] Error processing directory '{parent_directory.name}': {e}")
 
 
-def jefe(base_folder, site_code, year_month, flight_lines, polygon_layer_path: str, remote_prefix: str = "", sync_files: bool = True):
+def jefe(
+    base_folder,
+    site_code,
+    year_month,
+    flight_lines,
+    polygon_layer_path: str,
+    remote_prefix: str = "",
+    sync_files: bool = True,
+    resample_method: str = "convolution",
+    max_workers: int = 1,
+    skip_download_if_present: bool = True,
+    force_config: bool = False,
+    brightness_offset: float = 0.0,
+):
     """
     A control function that orchestrates the processing of spectral data.
     It first calls go_forth_and_multiply to generate necessary data and structures,
@@ -223,7 +277,12 @@ def jefe(base_folder, site_code, year_month, flight_lines, polygon_layer_path: s
         site_code=site_code,
         product_code=product_code,
         year_month=year_month,
-        flight_lines=flight_lines
+        flight_lines=flight_lines,
+        resample_method=resample_method,
+        max_workers=max_workers,
+        skip_download_if_present=skip_download_if_present,
+        force_config=force_config,
+        brightness_offset=brightness_offset,
     )
 
     process_base_folder(
@@ -264,14 +323,20 @@ def parse_args():
     parser.add_argument("--polygon_layer_path", type=Path,
                         help="Path to polygon shapefile or GeoJSON. Will extract polygons and mask output files"
                              " if specified", required=False)
-    parser.add_argument("--reflectance-offset", type=int, default=-0,
-                        help="Amount to ADD to the reflectance values after the BRDF correction. If you would like to ")
+    parser.add_argument("--brightness-offset", type=float, default=0.0,
+                        help="Additive brightness offset applied after corrections/resampling (e.g., -0.0005).")
+    parser.add_argument("--reflectance-offset", type=float, default=0.0,
+                        help="DEPRECATED: use --brightness-offset instead.")
     parser.add_argument("--remote-prefix", type=str, default="",
                         help="Optional custom path to add after i:/iplant/ for remote iRODS paths")
     parser.add_argument("--no-sync", action="store_true",
                         help="Generate file list but do not sync files to iRODS")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.reflectance_offset and float(args.reflectance_offset) != 0.0:
+        args.brightness_offset = float(args.reflectance_offset)
+        print("⚠️  --reflectance-offset is deprecated; using --brightness-offset instead.")
+    return args
 
 
 def main():
@@ -291,6 +356,7 @@ def main():
         polygon_layer_path=polygon_layer_path,
         remote_prefix=args.remote_prefix,
         sync_files=not args.no_sync,
+        brightness_offset=args.brightness_offset,
     )
 
 
