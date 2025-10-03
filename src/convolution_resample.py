@@ -66,6 +66,9 @@ def resample(input_dir: Path):
 
 
     for hdr_file in brdf_corrected_hdr_files:
+        if "mask" in (hdr_file.suffix or "").lower():
+            print(f"ℹ️ Skipping mask file without spectral bands: {hdr_file.file_path}")
+            continue
         try:
             print(f"📂 Opening: {hdr_file.file_path}")
             img = open_image(hdr_file.file_path)
