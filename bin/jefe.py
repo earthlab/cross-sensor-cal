@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import subprocess
 from pathlib import Path
@@ -8,6 +9,28 @@ try:
     from tqdm import tqdm
 except Exception:  # pragma: no cover
     tqdm = None
+
+
+def _warn_skip_exists(step: str, targets, verbose: bool) -> None:
+    """Emit a consistent skip message when expected outputs already exist."""
+    try:
+        count = len(targets)
+    except TypeError:  # pragma: no cover - targets may be generator-like
+        count = "some"
+    message = f"SKIP_EXISTS [{step}] — found existing output(s) ({count})."
+    if verbose:
+        print(message)
+    else:
+        logging.warning(message)
+
+
+def _stale_hint(step: str) -> str:
+    """Guidance appended to exceptions to hint at corrupt/stale artifacts."""
+    return (
+        f"\n💡 Hint: This failure occurred in '{step}'. If this step was previously skipped "
+        f"because matching output files already existed, a stale/corrupt file may be present. "
+        f"Try deleting the corresponding output(s) for this step and re-running so they can be re-created fresh."
+    )
 
 from src.envi_download import download_neon_flight_lines
 from src.file_types import NEONReflectanceConfigFile, \
@@ -132,13 +155,16 @@ def go_forth_and_multiply(
     # Step 1: Download NEON flight lines
     if verbose:
         print("\n📥 Downloading NEON flight lines...")
-    if skip_download_if_present and list(base_path.rglob("*.h5")):
-        if verbose:
-            print("HDF5 files already present. Skipping download.")
+    existing_h5 = list(base_path.rglob("*.h5"))
+    if skip_download_if_present and existing_h5:
+        _warn_skip_exists("download", existing_h5, verbose)
     else:
-        download_neon_flight_lines(out_dir=base_path, **kwargs)
+        try:
+            download_neon_flight_lines(out_dir=base_path, **kwargs)
+        except Exception as exc:
+            raise RuntimeError(str(exc) + _stale_hint("download")) from exc
     if verbose:
-        print("✅ Download complete.\n")
+        print("✅ Download step complete.\n")
 
     # Step 2: Convert H5 to ENVI format using neon_to_envi
     if verbose:
@@ -154,8 +180,12 @@ def go_forth_and_multiply(
             if not any(h5.with_suffix(ext).exists() for ext in (".hdr", ".img", ".dat"))
         ]
         if not pending:
-            if verbose:
-                print("All H5 files already converted. Skipping.")
+            already = [
+                h5
+                for h5 in h5_files
+                if any(h5.with_suffix(ext).exists() for ext in (".hdr", ".img", ".dat"))
+            ]
+            _warn_skip_exists("H5→ENVI", already, verbose)
         else:
             if bars:
                 for flight_line in flight_lines:
@@ -164,7 +194,10 @@ def go_forth_and_multiply(
             for index, h5_file in enumerate(pending, start=1):
                 if verbose:
                     print(f"🔄 [{index}/{len(pending)}] Converting: {h5_file.name}")
-                neon_to_envi(images=[str(h5_file)], output_dir=str(base_path), anc=True)
+                try:
+                    neon_to_envi(images=[str(h5_file)], output_dir=str(base_path), anc=True)
+                except Exception as exc:
+                    raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
                 if verbose:
                     print(f"✅ Finished: {h5_file.name}\n")
                 _tick_for_path(h5_file)
@@ -174,39 +207,69 @@ def go_forth_and_multiply(
     # Step 3: Generate configuration JSON
     if verbose:
         print("📝 Generating configuration JSON...")
-    config_jsons = list(base_path.rglob("*_reflectance_envi_config_envi.json"))
-    if force_config or not config_jsons:
-        generate_config_json(base_path, num_cpus=max_workers)
+    existing_cfgs = list(base_path.rglob("*_reflectance_envi_config_envi.json"))
+    if force_config or not existing_cfgs:
+        try:
+            generate_config_json(base_path, num_cpus=max_workers)
+        except Exception as exc:
+            raise RuntimeError(str(exc) + _stale_hint("generate_config_json")) from exc
         if verbose:
             print("✅ Config JSON generation complete.\n")
     else:
-        if verbose:
-            print("Existing config JSON found. Skipping (use --force-config to regenerate).\n")
+        _warn_skip_exists("generate_config_json", existing_cfgs, verbose)
 
     config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
-    if bars and config_files:
-        for flight_line in flight_lines:
-            tasks = sum(1 for cfg in config_files if _belongs_to(flight_line, cfg.file_path))
-            _add_total(flight_line, tasks)
-        for cfg in config_files:
-            _tick_for_path(cfg.file_path)
 
     # Step 4: Apply topographic and BRDF corrections
     if verbose:
         print("⛰️ Applying topographic and BRDF corrections...")
 
     if config_files:
-        if bars:
+        corrections_needed = []
+        for cfg in config_files:
+            existing_corrected = list(cfg.file_path.parent.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
+                cfg.file_path.parent.glob("*brdfandtopo_corrected_envi*.img")
+            )
+            if existing_corrected:
+                _warn_skip_exists("topo_and_brdf_correction", existing_corrected, verbose)
+            else:
+                corrections_needed.append(cfg)
+
+        if bars and corrections_needed:
             for flight_line in flight_lines:
-                tasks = sum(1 for cfg in config_files if _belongs_to(flight_line, cfg.file_path))
+                tasks = sum(1 for cfg in corrections_needed if _belongs_to(flight_line, cfg.file_path))
                 _add_total(flight_line, tasks)
+
+        errors = 0
         for config_file in config_files:
+            existing_corrected = list(config_file.file_path.parent.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
+                config_file.file_path.parent.glob("*brdfandtopo_corrected_envi*.img")
+            )
+            if existing_corrected:
+                _tick_for_path(config_file.file_path)
+                continue
             if verbose:
                 print(f"⚙️ Applying corrections to: {config_file.file_path}")
-            topo_and_brdf_correction(str(config_file.file_path))
-            _tick_for_path(config_file.file_path)
+            try:
+                topo_and_brdf_correction(str(config_file.file_path))
+            except Exception as exc:
+                errors += 1
+                logging.error(
+                    "⚠️  Correction failed for %s: %r%s",
+                    config_file.file_path.name,
+                    exc,
+                    _stale_hint("topo_and_brdf_correction"),
+                )
+            else:
+                _tick_for_path(config_file.file_path)
+        corrected = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
+        summary_message = (
+            f"✅ All corrections applied. Corrected files found: {len(corrected)}. Errors: {errors}.\n"
+        )
         if verbose:
-            print("✅ All corrections applied.\n")
+            print(summary_message)
+        else:
+            logging.info(summary_message)
     else:
         if verbose:
             print("❌ No configuration JSON files found. Skipping corrections.\n")
@@ -230,9 +293,32 @@ def go_forth_and_multiply(
             for index, corrected_file in enumerate(corrected_files, start=1):
                 if verbose:
                     print(f"🔄 [{index}/{len(corrected_files)}] Resampling: {corrected_file.name}")
-                convolution_resample(corrected_file.directory)
-                if verbose:
-                    print(f"✅ Resampled: {corrected_file.name}\n")
+                existing_resampled = [
+                    getattr(resampled, "path", resampled)
+                    for resampled in NEONReflectanceResampledENVIFile.find_in_directory(
+                        corrected_file.directory
+                    )
+                ]
+                if not existing_resampled:
+                    existing_resampled = list(
+                        corrected_file.directory.glob("*_resampled_*_.hdr")
+                    ) + list(corrected_file.directory.glob("*_resampled_*_.img"))
+                if existing_resampled:
+                    _warn_skip_exists("resample", existing_resampled, verbose)
+                    _tick_for_path(corrected_file.path)
+                    continue
+                try:
+                    convolution_resample(corrected_file.directory)
+                except Exception as exc:
+                    logging.error(
+                        "⚠️  Resample failed for %s: %r%s",
+                        corrected_file.name,
+                        exc,
+                        _stale_hint("resample"),
+                    )
+                else:
+                    if verbose:
+                        print(f"✅ Resampled: {corrected_file.name}\n")
                 _tick_for_path(corrected_file.path)
         if verbose:
             print("✅ Resampling and translation complete.\n")
@@ -253,6 +339,8 @@ def go_forth_and_multiply(
                 for path in base_path.rglob("*.img")
                 if any(name in path.name for name in names_to_match)
             ]
+            if not candidates:
+                _warn_skip_exists("brightness_offset (no eligible targets)", candidates, verbose)
             if bars:
                 for flight_line in flight_lines:
                     tasks = sum(1 for path in candidates if _belongs_to(flight_line, path))
@@ -273,7 +361,7 @@ def go_forth_and_multiply(
                     _tick_for_path(path)
                     count_remaining -= 1
         except Exception as exc:
-            print(f"⚠️ Offset application failed: {exc}")
+            logging.error("⚠️  Offset application failed: %r%s", exc, _stale_hint("brightness_offset"))
 
     if bars:
         for progress in bars.values():
