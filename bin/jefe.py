@@ -8,7 +8,6 @@ import os
 import re
 import subprocess
 import sys
-from enum import Enum
 from io import StringIO
 from pathlib import Path
 
@@ -29,179 +28,6 @@ except Exception:  # pragma: no cover
     tqdm = None
 
 
-class OutputMode(Enum):
-    NORMAL = "normal"
-    VERBOSE = "verbose"
-    SKIP = "skip"
-
-    def __str__(self) -> str:  # pragma: no cover - argparse representation
-        return self.value
-
-    @classmethod
-    def from_string(cls, value: str | None) -> "OutputMode":
-        if not value:
-            return cls.NORMAL
-        for member in cls:
-            if member.value == value:
-                return member
-        raise ValueError(f"Unsupported output mode: {value}")
-
-
-class BarBook:
-    """Manage per-flight-line progress bars."""
-
-    def __init__(self, mode: OutputMode) -> None:
-        self._mode = mode
-        self._bars: dict[str, "tqdm"] = {}
-
-    @property
-    def enabled(self) -> bool:
-        return self._mode == OutputMode.NORMAL and tqdm is not None
-
-    def add(self, key: str, *, total: int, desc: str | None = None) -> None:
-        if not self.enabled:
-            return
-        if key in self._bars:
-            bar = self._bars[key]
-            bar.total = max(bar.total, total)
-            bar.refresh()
-            return
-        bar_fmt = "{desc:<14} {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} steps"
-        self._bars[key] = tqdm(
-            total=max(1, int(total)),
-            unit="steps",
-            desc=desc or key,
-            bar_format=bar_fmt,
-            dynamic_ncols=True,
-            leave=True,
-        )
-
-    def increment_total(self, key: str, amount: int) -> None:
-        if amount <= 0:
-            return
-        bar = self._bars.get(key)
-        if not bar:
-            return
-        bar.total += amount
-        bar.refresh()
-
-    def tick(self, key: str, amount: int = 1) -> None:
-        bar = self._bars.get(key)
-        if not bar:
-            return
-        bar.update(amount)
-
-    def complete(self, key: str) -> None:
-        bar = self._bars.get(key)
-        if not bar:
-            return
-        if bar.total < bar.n:
-            bar.total = bar.n
-        remaining = bar.total - bar.n
-        if remaining > 0:
-            bar.update(remaining)
-        else:
-            bar.refresh()
-
-    def close_all(self, *, complete_remaining: bool = False) -> None:
-        for key, bar in list(self._bars.items()):
-            if complete_remaining:
-                self.complete(key)
-            bar.close()
-
-
-class SkipCollector:
-    """Collect skipped items grouped by pipeline step."""
-
-    def __init__(self) -> None:
-        self._data: dict[str, list[str]] = {}
-
-    def record(self, step: str, items: list[str]) -> None:
-        if not items:
-            return
-        bucket = self._data.setdefault(step, [])
-        bucket.extend(items)
-
-    def is_empty(self) -> bool:
-        return not self._data
-
-    def summary_lines(self) -> list[str]:
-        lines: list[str] = []
-        for step in sorted(self._data.keys()):
-            items = sorted(dict.fromkeys(self._data[step]))
-            lines.append(f"• {step}: {len(items)} item(s)")
-            for name in items:
-                lines.append(f"   - {name}")
-        return lines
-
-
-class Out:
-    """Mode-aware output helper."""
-
-    def __init__(self, mode: OutputMode, barbook: BarBook, skip_collector: SkipCollector) -> None:
-        self.mode = mode
-        self._barbook = barbook
-        self._skips = skip_collector
-
-    def _write(self, message: str) -> None:
-        if self.mode == OutputMode.SKIP:
-            return
-        if self.mode == OutputMode.VERBOSE or not self._barbook.enabled:
-            print(message)
-            return
-        try:
-            tqdm.write(message)
-        except Exception:  # pragma: no cover - tqdm fallback
-            print(message)
-
-    def step(self, message: str) -> None:
-        if self.mode in (OutputMode.NORMAL, OutputMode.VERBOSE):
-            self._write(message)
-
-    def info(self, message: str) -> None:
-        if self.mode in (OutputMode.NORMAL, OutputMode.VERBOSE):
-            self._write(message)
-
-    def warn(self, message: str) -> None:
-        if self.mode == OutputMode.SKIP:
-            return
-        self._write(message)
-
-    def error(self, message: str) -> None:
-        print(message, file=sys.stderr)
-
-    def skip(self, step: str, items, scope: str | None = None) -> None:
-        names: list[str] = []
-        for item in items:
-            text = str(item)
-            if os.sep in text:
-                text = Path(text).name
-            names.append(text)
-        self._skips.record(step, names)
-        if self.mode == OutputMode.SKIP:
-            return
-        scope_txt = f" [{scope}]" if scope else ""
-        human_step = {
-            "download": "download already present",
-            "H5→ENVI (main+ancillary)": "ENVI + ancillary already exported",
-            "generate_config_json": "config already present",
-            "topo_and_brdf_correction": "BRDF+topo correction already present",
-            "resample": "resampled outputs already present",
-        }.get(step, step)
-        msg = f"⏭️  Skipped{scope_txt}: {human_step} ({len(names)})"
-        self._write(msg)
-
-    def print_skip_summary(self) -> None:
-        if self.mode != OutputMode.SKIP:
-            return
-        if self._skips.is_empty():
-            print("Skipped summary: nothing to report.")
-            return
-        print("Skipped summary:")
-        for line in self._skips.summary_lines():
-            print(line)
-
-
 def _pretty_line(line: str) -> str:
     """
     Return a short, readable label for a flight line (prefer the tile like L019-1).
@@ -210,6 +36,50 @@ def _pretty_line(line: str) -> str:
 
     m = re.search(r"(L\d{3}-\d)", line)
     return m.group(1) if m else line
+
+
+def _emit(msg: str, bars: dict[str, tqdm] | None, *, verbose: bool) -> None:
+    """
+    Print a human-readable message without mangling tqdm bars.
+    """
+    if verbose:
+        print(msg)
+        return
+    if bars and tqdm is not None:
+        try:  # pragma: no cover - tqdm.write may fail if tqdm missing features
+            tqdm.write(msg)
+            return
+        except Exception:  # pragma: no cover - fall back to plain print
+            pass
+    print(msg)
+
+
+def _warn_skip_exists(
+    step: str,
+    targets,
+    verbose: bool,
+    bars: dict[str, tqdm] | None = None,
+    scope: str | None = None,
+) -> None:
+    """
+    Emit a friendly skip line when expected outputs already exist.
+
+    scope: optional short context like a tile id (e.g., L019-1)
+    """
+
+    try:
+        count = len(list(targets))
+    except Exception:  # pragma: no cover - targets may be generator-like
+        count = "some"
+    human_step = {
+        "download": "download already present",
+        "H5→ENVI (main+ancillary)": "ENVI + ancillary already exported",
+        "generate_config_json": "config already present",
+        "topo_and_brdf_correction": "BRDF+topo correction already present",
+        "resample": "resampled outputs already present",
+    }.get(step, step)
+    scope_txt = f" [{scope}]" if scope else ""
+    _emit(f"⏭️  Skipped{scope_txt}: {human_step} ({count})", bars, verbose=verbose)
 
 
 def _stale_hint(step: str) -> str:
@@ -337,69 +207,6 @@ def _silence_noise(enabled: bool):
         except Exception:  # pragma: no cover - flush best effort
             pass
 
-
-_RAY_FILTERS = [
-    re.compile(r"^20\d{2}-\d{2}-\d{2} .*WARNING services\.py:.*object store is using /tmp"),
-    re.compile(r"^20\d{2}-\d{2}-\d{2} .*INFO worker\.py:.*Started a local Ray instance\."),
-    re.compile(r"^\[20\d{2}-\d{2}-\d{2} .* logging\.cc:\d+: Set ray log level"),
-    re.compile(r"^\(raylet\) \[20\d{2}-\d{2}-\d{2} .* logging\.cc:\d+: Set ray log level"),
-]
-
-_HYTOOLS_GR = re.compile(r"^\(HyTools pid=\d+\)\s*(GR)+\s*$")
-
-_ALLOW_LINES = [
-    re.compile(r"Saved:"),
-    re.compile(r"All processing complete"),
-]
-
-
-def _should_keep(line: str) -> bool:
-    if any(pattern.search(line) for pattern in _ALLOW_LINES):
-        return True
-    if any(pattern.search(line) for pattern in _RAY_FILTERS):
-        return False
-    if _HYTOOLS_GR.search(line):
-        return False
-    return False
-
-
-def run_noisy_step_quietly(argv: list[str], mode: OutputMode) -> int:
-    """Run a noisy step in a subprocess and filter its output."""
-
-    env = os.environ.copy()
-    env.setdefault("RAY_LOG_TO_STDERR", "0")
-    env.setdefault("RAY_BACKEND_LOG_LEVEL", "ERROR")
-    env.setdefault("RAY_DISABLE_DASHBOARD", "1")
-    env.setdefault("RAY_usage_stats_enabled", "0")
-    env.setdefault("RAY_disable_usage_stats", "1")
-    env.setdefault("RAY_LOG_TO_DRIVER", "0")
-
-    if mode == OutputMode.VERBOSE:
-        proc = subprocess.Popen(argv, env=env)
-        return proc.wait()
-
-    proc = subprocess.Popen(
-        argv,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-        text=True,
-        bufsize=1,
-    )
-    assert proc.stdout is not None and proc.stderr is not None
-    for stream in (proc.stdout, proc.stderr):
-        for raw in stream:
-            line = raw.rstrip("\n")
-            if _should_keep(line):
-                try:
-                    if tqdm is not None:
-                        tqdm.write(line)
-                    else:
-                        print(line)
-                except Exception:
-                    print(line)
-    return proc.wait()
-
 from src.envi_download import download_neon_flight_lines
 from src.file_types import NEONReflectanceConfigFile, \
     NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceENVIFile, NEONReflectanceResampledENVIFile
@@ -488,267 +295,258 @@ def go_forth_and_multiply(
     skip_download_if_present: bool = True,
     force_config: bool = False,
     brightness_offset: float = 0.0,
-    output_mode: OutputMode = OutputMode.NORMAL,
+    verbose: bool = False,
     **kwargs,
 ):
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
+    if verbose:
+        print("\n📥 Downloading NEON flight lines...")
+    existing_h5 = list(base_path.rglob("*.h5"))
+    if skip_download_if_present and existing_h5:
+        _warn_skip_exists("download", existing_h5, verbose)
+    else:
+        try:
+            _emit("⬇️  Fetching flight line HDF5...", bars=None, verbose=verbose)
+            with _silence_noise(enabled=not verbose):
+                download_neon_flight_lines(out_dir=base_path, **kwargs)
+        except Exception as exc:
+            raise RuntimeError(str(exc) + _stale_hint("download")) from exc
+    if verbose:
+        print("✅ Download step complete.")
 
     flight_lines = kwargs.get("flight_lines") or []
-
-    skip_collector = SkipCollector()
-    barbook = BarBook(output_mode)
-    out = Out(output_mode, barbook, skip_collector)
-
-    if output_mode == OutputMode.NORMAL and not barbook.enabled and flight_lines:
-        out.warn("⚠️  tqdm not installed; progress bars disabled.")
-
+    bars: dict[str, tqdm] = {}
+    totals = {fl: 0 for fl in flight_lines}
     for fl in flight_lines:
-        pretty = _pretty_line(fl)
-        barbook.add(pretty, total=_safe_total(1), desc=pretty)
+        totals[fl] += 1  # download slot
+        if not _line_outputs_present(base_path, fl):
+            totals[fl] += 1  # conversion slot
 
-    def _key(line: str) -> str:
-        return _pretty_line(line)
+    if not verbose and tqdm is not None and flight_lines:
+        bar_fmt = "{desc:<14} {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} steps"
+        for fl in flight_lines:
+            pretty = _pretty_line(fl)
+            bars[pretty] = tqdm(
+                total=_safe_total(totals[fl]),
+                unit="steps",
+                desc=pretty,
+                bar_format=bar_fmt,
+                dynamic_ncols=True,
+                leave=True,
+            )
+    elif not verbose and tqdm is None:
+        print("⚠️  tqdm not installed; progress bars disabled.")
 
     def _add_total(line: str, amount: int) -> None:
-        if amount:
-            barbook.increment_total(_key(line), amount)
+        key = _pretty_line(line)
+        if bars and key in bars and amount:
+            bars[key].total += amount
+            bars[key].refresh()
 
     def _add_total_for_path(path_obj: Path, amount: int = 1) -> None:
+        if not bars:
+            return
         for line in flight_lines:
             if _belongs_to(line, path_obj):
                 _add_total(line, amount)
                 break
 
-    def _tick_line(line: str, amount: int = 1) -> None:
-        barbook.tick(_key(line), amount)
-
-    def _tick_for_path(path_obj: Path, amount: int = 1) -> None:
+    def _tick_for_path(path_obj: Path) -> None:
+        if not bars:
+            return
         for line in flight_lines:
             if _belongs_to(line, path_obj):
-                _tick_line(line, amount)
+                key = _pretty_line(line)
+                if key in bars:
+                    bars[key].update(1)
                 break
 
-    try:
-        out.step("📥 Downloading NEON flight lines...")
-        existing_h5 = list(base_path.rglob("*.h5"))
-        if skip_download_if_present and existing_h5:
-            out.skip("download", existing_h5)
-        else:
-            try:
-                out.step("⬇️  Fetching flight line HDF5...")
-                with _silence_noise(enabled=output_mode != OutputMode.VERBOSE):
-                    download_neon_flight_lines(out_dir=base_path, **kwargs)
-            except Exception as exc:
-                raise RuntimeError(str(exc) + _stale_hint("download")) from exc
+    for fl in flight_lines:
+        _tick_download_slot(base_path, fl, _tick_for_path)
 
-        for fl in flight_lines:
-            _tick_download_slot(base_path, fl, _tick_for_path)
+    if verbose:
+        print("📦 Step 2/5 Converting H5 files to ENVI format...")
+    for fl in flight_lines:
+        if _line_outputs_present(base_path, fl):
+            _warn_skip_exists(
+                "H5→ENVI (main+ancillary)", [fl], verbose, bars, scope=_pretty_line(fl)
+            )
+            _add_total_for_path(base_path / fl / "_envi")
+            _tick_for_path(base_path / fl / "_envi")
+            continue
 
-        out.step("📦 Step 2/5 Converting H5 files to ENVI format...")
-        for fl in flight_lines:
-            _add_total(fl, 1)
-            pretty = _pretty_line(fl)
-            if _line_outputs_present(base_path, fl):
-                out.skip("H5→ENVI (main+ancillary)", [fl], scope=pretty)
-                _tick_line(fl)
-                continue
-
-            h5s_for_line = [h5 for h5 in base_path.rglob("*.h5") if _belongs_to(fl, h5)]
-            if not h5s_for_line:
-                out.warn(f"⚠️  No .h5 files found for line: {fl}")
-                _tick_line(fl)
-                continue
-            try:
-                out.step(f"📦 Exporting ENVI (main + ancillary) [{pretty}]...")
-                if output_mode == OutputMode.VERBOSE:
-                    neon_to_envi(images=[str(p) for p in h5s_for_line], output_dir=str(base_path), anc=True)
-                else:
-                    code = run_noisy_step_quietly(
-                        [
-                            "python",
-                            "-m",
-                            "src._noisy_wrappers",
-                            "neon_to_envi",
-                            "--images",
-                            *[str(p) for p in h5s_for_line],
-                            "--output_dir",
-                            str(base_path),
-                            "--anc",
-                        ],
-                        output_mode,
-                    )
-                    if code != 0:
-                        raise RuntimeError("neon_to_envi failed" + _stale_hint("H5→ENVI"))
-                _tick_line(fl)
-            except TypeError:
-                for h5 in h5s_for_line:
-                    if output_mode == OutputMode.VERBOSE:
+        h5s_for_line = [h5 for h5 in base_path.rglob("*.h5") if _belongs_to(fl, h5)]
+        if not h5s_for_line:
+            if verbose:
+                logging.warning("No .h5 files found for line: %s", fl)
+            _tick_for_path(base_path / fl / "missing.h5")
+            continue
+        try:
+            _emit(
+                f"📦 Exporting ENVI (main + ancillary) [{_pretty_line(fl)}]...",
+                bars,
+                verbose=verbose,
+            )
+            with _silence_noise(enabled=not verbose):
+                neon_to_envi(images=[str(p) for p in h5s_for_line], output_dir=str(base_path), anc=True)
+            _tick_for_path(h5s_for_line[0])
+        except TypeError:
+            for h5 in h5s_for_line:
+                try:
+                    with _silence_noise(enabled=not verbose):
                         neon_to_envi(images=[str(h5)], output_dir=str(base_path), anc=True)
-                    else:
-                        code = run_noisy_step_quietly(
-                            [
-                                "python",
-                                "-m",
-                                "src._noisy_wrappers",
-                                "neon_to_envi",
-                                "--images",
-                                str(h5),
-                                "--output_dir",
-                                str(base_path),
-                                "--anc",
-                            ],
-                            output_mode,
-                        )
-                        if code != 0:
-                            raise RuntimeError("neon_to_envi failed" + _stale_hint("H5→ENVI"))
-                _tick_line(fl)
-            except Exception as exc:
-                raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
+                except Exception as exc:
+                    raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
+            _tick_for_path(h5s_for_line[0])
+        except Exception as exc:
+            raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
 
-        hdrs = list(base_path.rglob("*.hdr"))
-        if not hdrs:
-            out.error("❌ No ENVI HDR files found after conversion. Investigate.")
+    hdrs = list(base_path.rglob("*.hdr"))
+    if not hdrs:
+        logging.error("❌ No ENVI HDR files found after conversion. Investigate.")
+    elif verbose:
+        print(f"✅ ENVI conversion complete. {len(hdrs)} HDR files present.")
 
-        out.step("📝 Step 3/5 Generating configuration JSON...")
-        existing_cfgs = list(base_path.rglob("*reflectance_envi_config_envi.json"))
-        if not force_config and existing_cfgs:
-            out.skip("generate_config_json", existing_cfgs)
-            for cfg in existing_cfgs:
-                path_obj = Path(cfg)
-                _add_total_for_path(path_obj)
-                _tick_for_path(path_obj)
-        else:
-            try:
-                generate_config_json(base_path)
-                new_cfgs = list(NEONReflectanceConfigFile.find_in_directory(base_path))
-                for cfg in new_cfgs:
-                    cfg_path = Path(cfg.file_path)
-                    _add_total_for_path(cfg_path)
-                    _tick_for_path(cfg_path)
-            except Exception as exc:
-                raise RuntimeError(str(exc) + _stale_hint("generate_config_json")) from exc
+    if verbose:
+        print("📝 Step 3/5 Generating configuration JSON...")
+    existing_cfgs = list(base_path.rglob("*reflectance_envi_config_envi.json"))
+    if not force_config and existing_cfgs:
+        _warn_skip_exists("generate_config_json", existing_cfgs, verbose, bars)
+        for cfg in existing_cfgs:
+            _add_total_for_path(Path(cfg))
+            _tick_for_path(Path(cfg))
+    else:
+        try:
+            generate_config_json(base_path)
+            new_cfgs = list(NEONReflectanceConfigFile.find_in_directory(base_path))
+            for cfg in new_cfgs:
+                _add_total_for_path(Path(cfg.file_path))
+                _tick_for_path(Path(cfg.file_path))
+        except Exception as exc:
+            raise RuntimeError(str(exc) + _stale_hint("generate_config_json")) from exc
 
-        config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
+    config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
+    if verbose:
+        print(f"✅ Config JSON step complete. Found {len(config_files)} configs.")
 
-        out.step("⛰️ Step 4/5 Applying topographic and BRDF corrections...")
-        if config_files:
-            for cfg in config_files:
-                cfg_path = Path(cfg.file_path)
-                _add_total_for_path(cfg_path)
-                corrected_dir = cfg.file_path.parent
-                existing_corrected = list(corrected_dir.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
-                    corrected_dir.glob("*brdfandtopo_corrected_envi*.img")
+    if verbose:
+        print("⛰️ Step 4/5 Applying topographic and BRDF corrections...")
+    if config_files:
+        errors = 0
+        for cfg in config_files:
+            corrected_dir = cfg.file_path.parent
+            existing_corrected = list(corrected_dir.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
+                corrected_dir.glob("*brdfandtopo_corrected_envi*.img")
+            )
+            _add_total_for_path(Path(cfg.file_path))
+            if existing_corrected:
+                _warn_skip_exists(
+                    "topo_and_brdf_correction",
+                    existing_corrected,
+                    verbose,
+                    bars,
+                    scope=_pretty_line(cfg.tile or cfg.file_path.name),
                 )
-                scope = _pretty_line(cfg.tile or cfg.file_path.name)
-                if existing_corrected:
-                    out.skip("topo_and_brdf_correction", existing_corrected, scope=scope)
-                    _tick_for_path(cfg_path)
+                _tick_for_path(Path(cfg.file_path))
+                continue
+            try:
+                topo_and_brdf_correction(str(cfg.file_path))
+                _tick_for_path(Path(cfg.file_path))
+            except Exception as exc:
+                errors += 1
+                logging.error(
+                    "⚠️  Correction failed for %s: %r%s",
+                    cfg.file_path.name,
+                    exc,
+                    _stale_hint("topo_and_brdf_correction"),
+                )
+        corrected = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
+        if verbose:
+            print(f"✅ Corrections done. Corrected files found: {len(corrected)}. Errors: {errors}.")
+    else:
+        logging.warning("❌ No configuration JSON files found. Skipping corrections.")
+
+    if resample_method == "convolution":
+        if verbose:
+            print("🔁 Step 5/5 Resampling and translating data (convolutional)...")
+        corrected_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
+        if not corrected_files:
+            logging.warning("❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps.")
+        else:
+            if verbose:
+                print(f"📂 Found {len(corrected_files)} BRDF-corrected files to process.")
+            for corrected_file in corrected_files:
+                _add_total_for_path(corrected_file.path)
+                existing_resampled = [
+                    resampled.path
+                    for resampled in NEONReflectanceResampledENVIFile.find_in_directory(
+                        corrected_file.directory
+                    )
+                ]
+                if existing_resampled:
+                    _warn_skip_exists(
+                        "resample",
+                        existing_resampled,
+                        verbose,
+                        bars,
+                        scope=corrected_file.path.name,
+                    )
+                    _tick_for_path(corrected_file.path)
                     continue
                 try:
-                    if output_mode == OutputMode.VERBOSE:
-                        topo_and_brdf_correction(str(cfg.file_path))
-                    else:
-                        code = run_noisy_step_quietly(
-                            [
-                                "python",
-                                "-m",
-                                "src._noisy_wrappers",
-                                "topo",
-                                "--config",
-                                str(cfg.file_path),
-                            ],
-                            output_mode,
-                        )
-                        if code != 0:
-                            raise RuntimeError(
-                                "topo_and_brdf_correction failed" + _stale_hint("topo_and_brdf_correction")
-                            )
-                    _tick_for_path(cfg_path)
+                    convolution_resample(corrected_file.directory)
                 except Exception as exc:
-                    out.error(
-                        f"⚠️  Correction failed for {cfg.file_path.name}: {exc}{_stale_hint('topo_and_brdf_correction')}"
+                    logging.error(
+                        "⚠️  Resample failed for %s: %r%s",
+                        corrected_file.name,
+                        exc,
+                        _stale_hint("resample"),
                     )
-        else:
-            out.warn("❌ No configuration JSON files found. Skipping corrections.")
+                _tick_for_path(corrected_file.path)
+        if verbose:
+            print("✅ Resampling and translation (convolution) complete.")
+    elif resample_method == "resample":
+        resample_translation_to_other_sensors(base_path)
+    else:
+        logging.warning("Unknown resample_method=%s (skipping Step 5).", resample_method)
 
-        if resample_method == "convolution":
-            out.step("🔁 Step 5/5 Resampling and translating data (convolutional)...")
-            corrected_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
-            if not corrected_files:
-                out.warn(
-                    "❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps."
+    if brightness_offset and float(brightness_offset) != 0.0:
+        if verbose:
+            print(f"🧮 Applying brightness offset: {float(brightness_offset):+g}")
+        try:
+            names_to_match = ["brdfandtopo_corrected_envi", "resampled_envi"]
+            candidates = [
+                path
+                for path in base_path.rglob("*.img")
+                if any(name in path.name for name in names_to_match)
+            ]
+            if not candidates:
+                _warn_skip_exists(
+                    "brightness_offset (no eligible targets)",
+                    candidates,
+                    verbose,
+                    bars,
                 )
-            else:
-                for corrected_file in corrected_files:
-                    _add_total_for_path(corrected_file.path)
-                    existing_resampled = [
-                        resampled.path
-                        for resampled in NEONReflectanceResampledENVIFile.find_in_directory(
-                            corrected_file.directory
-                        )
-                    ]
-                    if existing_resampled:
-                        out.skip("resample", existing_resampled, scope=corrected_file.path.name)
-                        _tick_for_path(corrected_file.path)
-                        continue
-                    try:
-                        if output_mode == OutputMode.VERBOSE:
-                            convolution_resample(corrected_file.directory)
-                        else:
-                            code = run_noisy_step_quietly(
-                                [
-                                    "python",
-                                    "-m",
-                                    "src._noisy_wrappers",
-                                    "resample",
-                                    "--dir",
-                                    str(corrected_file.directory),
-                                ],
-                                output_mode,
-                            )
-                            if code != 0:
-                                raise RuntimeError("resample failed" + _stale_hint("resample"))
-                    except Exception as exc:
-                        out.error(f"⚠️  Resample failed for {corrected_file.name}: {exc}{_stale_hint('resample')}")
-                    finally:
-                        _tick_for_path(corrected_file.path)
-        elif resample_method == "resample":
-            resample_translation_to_other_sensors(base_path)
-        else:
-            out.warn(f"Unknown resample_method={resample_method} (skipping Step 5).")
+            changed = apply_offset_to_envi(
+                input_dir=base_path,
+                offset=float(brightness_offset),
+                clip_to_01=True,
+                only_if_name_contains=names_to_match,
+            )
+            for path in candidates:
+                _add_total_for_path(path)
+                _tick_for_path(path)
+            if verbose:
+                print(f"✅ Offset applied to {changed} ENVI file(s).")
+        except Exception as exc:
+            logging.error("⚠️  Offset application failed: %r%s", exc, _stale_hint("brightness_offset"))
 
-        if brightness_offset and float(brightness_offset) != 0.0:
-            out.step(f"🧮 Applying brightness offset: {float(brightness_offset):+g}")
-            try:
-                names_to_match = ["brdfandtopo_corrected_envi", "resampled_envi"]
-                candidates = [
-                    path
-                    for path in base_path.rglob("*.img")
-                    if any(name in path.name for name in names_to_match)
-                ]
-                if not candidates:
-                    out.warn("No ENVI files found for brightness offset application.")
-                changed = apply_offset_to_envi(
-                    input_dir=base_path,
-                    offset=float(brightness_offset),
-                    clip_to_01=True,
-                    only_if_name_contains=names_to_match,
-                )
-                for path in candidates:
-                    _add_total_for_path(path)
-                    _tick_for_path(path)
-                out.info(f"✅ Offset applied to {changed} ENVI file(s).")
-            except Exception as exc:
-                out.error(f"⚠️  Offset application failed: {exc}{_stale_hint('brightness_offset')}")
+    if bars:
+        for progress in bars.values():
+            progress.close()
 
-        out.info("🎉 Pipeline complete!")
-
-    finally:
-        barbook.close_all(complete_remaining=True)
-        if output_mode == OutputMode.SKIP:
-            out.print_skip_summary()
-
+    print("🎉 Pipeline complete!")
 
 def resample_translation_to_other_sensors(base_folder: Path):
     # List all subdirectories in the base folder
@@ -822,7 +620,7 @@ def jefe(
     skip_download_if_present: bool = True,
     force_config: bool = False,
     brightness_offset: float = 0.0,
-    output_mode: OutputMode = OutputMode.NORMAL,
+    verbose: bool = False,
 ):
     """
     A control function that orchestrates the processing of spectral data.
@@ -838,7 +636,6 @@ def jefe(
     - polygon_layer_path (str): Path to polygon shapefile or GeoJSON.
     - remote_prefix (str): Optional custom path to add after i:/iplant/ for remote paths.
     - sync_files (bool): Whether to sync files to iRODS or just generate the list.
-    - output_mode (OutputMode): Controls user-visible output style.
     """
     product_code = 'DP1.30006.001'
 
@@ -854,7 +651,7 @@ def jefe(
         skip_download_if_present=skip_download_if_present,
         force_config=force_config,
         brightness_offset=brightness_offset,
-        output_mode=output_mode,
+        verbose=verbose,
     )
 
     process_base_folder(
@@ -879,10 +676,8 @@ def jefe(
     # merge_csvs_by_columns(base_folder)
     # validate_output_files(base_folder)
 
-    if output_mode != OutputMode.SKIP:
-        print(
-            "Jefe finished. Please check for the _with_mask_and_all_spectra.csv for your  hyperspectral data from NEON flight lines extracted to match your provided polygons"
-        )
+    print(
+        "Jefe finished. Please check for the _with_mask_and_all_spectra.csv for your  hyperspectral data from NEON flight lines extracted to match your provided polygons")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -910,21 +705,11 @@ def parse_args():
         action="store_true",
         help="Emit detailed per-step logs instead of compact progress bars.",
     )
-    parser.add_argument(
-        "--output",
-        choices=[mode.value for mode in OutputMode],
-        default=None,
-        help="Output style: normal (default), verbose, or skip.",
-    )
 
     args = parser.parse_args()
     if args.reflectance_offset and float(args.reflectance_offset) != 0.0:
         args.brightness_offset = float(args.reflectance_offset)
         print("⚠️  --reflectance-offset is deprecated; using --brightness-offset instead.")
-    if args.output is None:
-        args.output = OutputMode.VERBOSE.value if args.verbose else OutputMode.NORMAL.value
-    elif args.verbose and args.output != OutputMode.VERBOSE.value:
-        print("⚠️  --verbose flag ignored because --output was provided.", file=sys.stderr)
     return args
 
 
@@ -946,7 +731,7 @@ def main():
         remote_prefix=args.remote_prefix,
         sync_files=not args.no_sync,
         brightness_offset=args.brightness_offset,
-        output_mode=OutputMode.from_string(args.output),
+        verbose=args.verbose,
     )
 
 
