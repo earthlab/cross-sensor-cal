@@ -6,7 +6,7 @@ from pathlib import Path
 from src.envi_download import download_neon_flight_lines
 from src.file_types import NEONReflectanceConfigFile, \
     NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceENVIFile, NEONReflectanceResampledENVIFile
-from src.neon_to_envi import flight_lines_to_envi
+from src.neon_to_envi import neon_to_envi
 from src.topo_and_brdf_correction import generate_config_json, topo_and_brdf_correction, apply_offset_to_envi
 from src.convolution_resample import resample as convolution_resample
 from src.standard_resample import translate_to_other_sensors
@@ -81,48 +81,63 @@ def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: b
 
 
 def go_forth_and_multiply(base_folder="output", resample_method: str = 'convolution', **kwargs):
-    # Create the base folder if it doesn't exist
-    os.makedirs(base_folder, exist_ok=True)
+    base_path = Path(base_folder)
+    base_path.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Download NEON flight lines with kwargs passed to this step
-    download_neon_flight_lines(out_dir=base_folder, **kwargs)
+    # Step 1: Download NEON flight lines
+    print("\n📥 Downloading NEON flight lines...")
+    download_neon_flight_lines(out_dir=base_path, **kwargs)
+    print("✅ Download complete.\n")
 
-    # Step 2: Convert flight lines to ENVI format
-    flight_lines_to_envi(input_dir=base_folder, output_dir=base_folder)
+    # Step 2: Convert H5 to ENVI format using neon_to_envi
+    print("📦 Converting H5 files to ENVI format...")
+    h5_files = list(base_path.rglob("*.h5"))
+    if not h5_files:
+        print("❌ No .h5 files found for conversion.")
+    else:
+        for index, h5_file in enumerate(h5_files, start=1):
+            print(f"🔄 [{index}/{len(h5_files)}] Converting: {h5_file.name}")
+            neon_to_envi(images=[str(h5_file)], output_dir=str(base_path), anc=True)
+            print(f"✅ Finished: {h5_file.name}\n")
+    print("✅ ENVI conversion complete.\n")
 
     # Step 3: Generate configuration JSON
-    generate_config_json(base_folder)
+    print("📝 Generating configuration JSON...")
+    generate_config_json(base_path)
+    print("✅ Config JSON generation complete.\n")
 
     # Step 4: Apply topographic and BRDF corrections
-    apply_topo_and_brdf_corrections(Path(base_folder))
+    print("⛰️ Applying topographic and BRDF corrections...")
+    config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
+
+    if config_files:
+        for config_file in config_files:
+            print(f"⚙️ Applying corrections to: {config_file.file_path}")
+            topo_and_brdf_correction(str(config_file.file_path))
+        print("✅ All corrections applied.\n")
+    else:
+        print("❌ No configuration JSON files found. Skipping corrections.\n")
 
     # Step 5: Resample and translate data to other sensor formats
     if resample_method == 'convolution':
-        convolution_resample(Path(base_folder))
+        print("🔁 Resampling and translating data...")
+        corrected_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
+        if not corrected_files:
+            print("❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps.\n")
+        else:
+            print(f"📂 Found {len(corrected_files)} BRDF-corrected files to process.")
+            for index, corrected_file in enumerate(corrected_files, start=1):
+                print(f"🔄 [{index}/{len(corrected_files)}] Resampling: {corrected_file.name}")
+                convolution_resample(corrected_file.directory)
+                print(f"✅ Resampled: {corrected_file.name}\n")
+        print("✅ Resampling and translation complete.\n")
     elif resample_method == 'resample':
-        resample_translation_to_other_sensors(Path(base_folder))
+        resample_translation_to_other_sensors(base_path)
 
     # TODO: Move this to after the convolution diagnostic option to keep the unadjusted ones
-    apply_offset_to_envi(input_dir=Path(base_folder), offset=-0)
+    apply_offset_to_envi(input_dir=base_path, offset=-0)
 
-    print("Processing complete.")
-
-
-def apply_topo_and_brdf_corrections(input_dir: Path):
-    print("Starting topo and BRDF correction. This takes a long time.")
-    envi_config_files = NEONReflectanceConfigFile.find_in_directory(input_dir, "envi")
-
-    for envi_config_file in envi_config_files:
-        print(f"\nProcessing folder for BRDF correction: {envi_config_file.directory}")
-        try:
-            topo_and_brdf_correction(envi_config_file.file_path)
-        except Exception as e:
-             print(f"❌ Error executing BRDF correction: {e}")
-        else:
-             print(f"✅ Successfully processed BRDF correction for: {envi_config_file.file_path}")
-
-    print("\nAll topo and BRDF corrections completed.")
-
+    print("🎉 Pipeline complete!")
 
 
 def resample_translation_to_other_sensors(base_folder: Path):
