@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cross_sensor_cal"
+version = "0.1.0"
+description = "Cross-sensor calibration pipeline."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Earth Lab" }]
+license = { file = "LICENSE" }
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
