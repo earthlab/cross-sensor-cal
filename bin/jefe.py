@@ -1,8 +1,18 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import subprocess
 from pathlib import Path
+
+# --- Silence Ray’s stderr warnings BEFORE any potential imports of ray ---
+# Send Ray logs to files (not stderr), reduce backend log level, disable usage pings.
+os.environ.setdefault("RAY_LOG_TO_STDERR", "0")
+os.environ.setdefault("RAY_BACKEND_LOG_LEVEL", "ERROR")
+os.environ.setdefault("RAY_usage_stats_enabled", "0")
+os.environ.setdefault("RAY_DEDUP_LOGS", "1")
 
 # Optional progress bars (fallback to no-bars if tqdm not present)
 try:
@@ -14,8 +24,8 @@ except Exception:  # pragma: no cover
 def _warn_skip_exists(step: str, targets, verbose: bool) -> None:
     """Emit a consistent skip message when expected outputs already exist."""
     try:
-        count = len(targets)
-    except TypeError:  # pragma: no cover - targets may be generator-like
+        count = len(list(targets))
+    except Exception:  # pragma: no cover - targets may be generator-like
         count = "some"
     message = f"SKIP_EXISTS [{step}] — found existing output(s) ({count})."
     if verbose:
@@ -29,8 +39,45 @@ def _stale_hint(step: str) -> str:
     return (
         f"\n💡 Hint: This failure occurred in '{step}'. If this step was previously skipped "
         f"because matching output files already existed, a stale/corrupt file may be present. "
-        f"Try deleting the corresponding output(s) for this step and re-running so they can be re-created fresh."
+        f"Delete the corresponding output(s) and re-run to recreate them fresh."
     )
+
+
+def _belongs_to(line: str, path_obj: Path) -> bool:
+    name = path_obj.name
+    return (line in name) or (line in str(path_obj.parent))
+
+
+def _safe_total(total: int) -> int:
+    return max(1, int(total))
+
+
+def _line_outputs_present(base: Path, flight_line: str) -> bool:
+    """Return True iff both main and ancillary ENVI outputs for flight line exist."""
+    main_img = next(
+        (p for p in base.rglob("*_reflectance_envi.img") if _belongs_to(flight_line, p)),
+        None,
+    )
+    main_hdr = next(
+        (p for p in base.rglob("*_reflectance_envi.hdr") if _belongs_to(flight_line, p)),
+        None,
+    )
+    anc_img = next(
+        (p for p in base.rglob("*_reflectance_ancillary_envi.img") if _belongs_to(flight_line, p)),
+        None,
+    )
+    anc_hdr = next(
+        (p for p in base.rglob("*_reflectance_ancillary_envi.hdr") if _belongs_to(flight_line, p)),
+        None,
+    )
+    return all([main_img, main_hdr, anc_img, anc_hdr])
+
+
+def _tick_download_slot(base: Path, flight_line: str, tick_cb) -> None:
+    """Tick the download slot for a flight line once at least one matching .h5 exists."""
+    found = next((p for p in base.rglob("*.h5") if _belongs_to(flight_line, p)), None)
+    if found is not None:
+        tick_cb(found)
 
 from src.envi_download import download_neon_flight_lines
 from src.file_types import NEONReflectanceConfigFile, \
@@ -115,7 +162,7 @@ def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: b
 
 def go_forth_and_multiply(
     base_folder="output",
-    resample_method: str = 'convolution',
+    resample_method: str = "convolution",
     max_workers: int = 1,
     skip_download_if_present: bool = True,
     force_config: bool = False,
@@ -125,34 +172,6 @@ def go_forth_and_multiply(
 ):
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
-
-    flight_lines = kwargs.get("flight_lines") or []
-    bars = {}
-    if not verbose and flight_lines and tqdm is not None:
-        for flight_line in flight_lines:
-            bars[flight_line] = tqdm(total=0, unit="task", desc=flight_line, leave=True)
-    elif not verbose and tqdm is None:
-        print("⚠️  tqdm not installed; progress bars disabled.")
-
-    def _belongs_to(line: str, path_obj: Path) -> bool:
-        name = path_obj.name
-        return (line in name) or (line in str(path_obj.parent))
-
-    def _add_total(line: str, amount: int) -> None:
-        if bars and line in bars and amount:
-            current_total = bars[line].total or 0
-            bars[line].total = current_total + amount
-            bars[line].refresh()
-
-    def _tick_for_path(path_obj: Path) -> None:
-        if not bars:
-            return
-        for line in flight_lines:
-            if _belongs_to(line, path_obj):
-                bars[line].update(1)
-                break
-
-    # Step 1: Download NEON flight lines
     if verbose:
         print("\n📥 Downloading NEON flight lines...")
     existing_h5 = list(base_path.rglob("*.h5"))
@@ -164,145 +183,150 @@ def go_forth_and_multiply(
         except Exception as exc:
             raise RuntimeError(str(exc) + _stale_hint("download")) from exc
     if verbose:
-        print("✅ Download step complete.\n")
+        print("✅ Download step complete.")
 
-    # Step 2: Convert H5 to ENVI format using neon_to_envi
+    flight_lines = kwargs.get("flight_lines") or []
+    bars: dict[str, tqdm] = {}
+    totals = {fl: 0 for fl in flight_lines}
+    for fl in flight_lines:
+        totals[fl] += 1  # download slot
+        if not _line_outputs_present(base_path, fl):
+            totals[fl] += 1  # conversion slot
+
+    if not verbose and tqdm is not None and flight_lines:
+        for fl in flight_lines:
+            bars[fl] = tqdm(total=_safe_total(totals[fl]), unit="task", desc=fl, leave=True)
+    elif not verbose and tqdm is None:
+        print("⚠️  tqdm not installed; progress bars disabled.")
+
+    def _add_total(line: str, amount: int) -> None:
+        if bars and line in bars and amount:
+            bars[line].total += amount
+            bars[line].refresh()
+
+    def _add_total_for_path(path_obj: Path, amount: int = 1) -> None:
+        if not bars:
+            return
+        for line in flight_lines:
+            if _belongs_to(line, path_obj):
+                _add_total(line, amount)
+                break
+
+    def _tick_for_path(path_obj: Path) -> None:
+        if not bars:
+            return
+        for line in flight_lines:
+            if _belongs_to(line, path_obj):
+                bars[line].update(1)
+                break
+
+    for fl in flight_lines:
+        _tick_download_slot(base_path, fl, _tick_for_path)
+
     if verbose:
-        print("📦 Converting H5 files to ENVI format...")
-    h5_files = list(base_path.rglob("*.h5"))
-    if not h5_files:
-        if verbose:
-            print("❌ No .h5 files found for conversion.")
-    else:
-        pending = [
-            h5
-            for h5 in h5_files
-            if not any(h5.with_suffix(ext).exists() for ext in (".hdr", ".img", ".dat"))
-        ]
-        if not pending:
-            already = [
-                h5
-                for h5 in h5_files
-                if any(h5.with_suffix(ext).exists() for ext in (".hdr", ".img", ".dat"))
-            ]
-            _warn_skip_exists("H5→ENVI", already, verbose)
-        else:
-            if bars:
-                for flight_line in flight_lines:
-                    tasks = sum(1 for h5 in pending if _belongs_to(flight_line, h5))
-                    _add_total(flight_line, tasks)
-            for index, h5_file in enumerate(pending, start=1):
-                if verbose:
-                    print(f"🔄 [{index}/{len(pending)}] Converting: {h5_file.name}")
+        print("📦 Step 2/5 Converting H5 files to ENVI format...")
+    for fl in flight_lines:
+        if _line_outputs_present(base_path, fl):
+            _warn_skip_exists("H5→ENVI (main+ancillary)", [fl], verbose)
+            _add_total_for_path(base_path / fl / "_envi")
+            _tick_for_path(base_path / fl / "_envi")
+            continue
+
+        h5s_for_line = [h5 for h5 in base_path.rglob("*.h5") if _belongs_to(fl, h5)]
+        if not h5s_for_line:
+            if verbose:
+                logging.warning("No .h5 files found for line: %s", fl)
+            _tick_for_path(base_path / fl / "missing.h5")
+            continue
+        try:
+            neon_to_envi(images=[str(p) for p in h5s_for_line], output_dir=str(base_path), anc=True)
+            _tick_for_path(h5s_for_line[0])
+        except TypeError:
+            for h5 in h5s_for_line:
                 try:
-                    neon_to_envi(images=[str(h5_file)], output_dir=str(base_path), anc=True)
+                    neon_to_envi(images=[str(h5)], output_dir=str(base_path), anc=True)
                 except Exception as exc:
                     raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
-                if verbose:
-                    print(f"✅ Finished: {h5_file.name}\n")
-                _tick_for_path(h5_file)
-    if verbose:
-        print("✅ ENVI conversion complete.\n")
+            _tick_for_path(h5s_for_line[0])
+        except Exception as exc:
+            raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
 
-    # Step 3: Generate configuration JSON
+    hdrs = list(base_path.rglob("*.hdr"))
+    if not hdrs:
+        logging.error("❌ No ENVI HDR files found after conversion. Investigate.")
+    elif verbose:
+        print(f"✅ ENVI conversion complete. {len(hdrs)} HDR files present.")
+
     if verbose:
-        print("📝 Generating configuration JSON...")
-    existing_cfgs = list(base_path.rglob("*_reflectance_envi_config_envi.json"))
-    if force_config or not existing_cfgs:
+        print("📝 Step 3/5 Generating configuration JSON...")
+    existing_cfgs = list(base_path.rglob("*reflectance_envi_config_envi.json"))
+    if not force_config and existing_cfgs:
+        _warn_skip_exists("generate_config_json", existing_cfgs, verbose)
+        for cfg in existing_cfgs:
+            _add_total_for_path(Path(cfg))
+            _tick_for_path(Path(cfg))
+    else:
         try:
-            generate_config_json(base_path, num_cpus=max_workers)
+            generate_config_json(base_path)
+            new_cfgs = list(NEONReflectanceConfigFile.find_in_directory(base_path))
+            for cfg in new_cfgs:
+                _add_total_for_path(Path(cfg.file_path))
+                _tick_for_path(Path(cfg.file_path))
         except Exception as exc:
             raise RuntimeError(str(exc) + _stale_hint("generate_config_json")) from exc
-        if verbose:
-            print("✅ Config JSON generation complete.\n")
-    else:
-        _warn_skip_exists("generate_config_json", existing_cfgs, verbose)
 
     config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
-
-    # Step 4: Apply topographic and BRDF corrections
     if verbose:
-        print("⛰️ Applying topographic and BRDF corrections...")
+        print(f"✅ Config JSON step complete. Found {len(config_files)} configs.")
 
+    if verbose:
+        print("⛰️ Step 4/5 Applying topographic and BRDF corrections...")
     if config_files:
-        corrections_needed = []
+        errors = 0
         for cfg in config_files:
-            existing_corrected = list(cfg.file_path.parent.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
-                cfg.file_path.parent.glob("*brdfandtopo_corrected_envi*.img")
+            corrected_dir = cfg.file_path.parent
+            existing_corrected = list(corrected_dir.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
+                corrected_dir.glob("*brdfandtopo_corrected_envi*.img")
             )
+            _add_total_for_path(Path(cfg.file_path))
             if existing_corrected:
                 _warn_skip_exists("topo_and_brdf_correction", existing_corrected, verbose)
-            else:
-                corrections_needed.append(cfg)
-
-        if bars and corrections_needed:
-            for flight_line in flight_lines:
-                tasks = sum(1 for cfg in corrections_needed if _belongs_to(flight_line, cfg.file_path))
-                _add_total(flight_line, tasks)
-
-        errors = 0
-        for config_file in config_files:
-            existing_corrected = list(config_file.file_path.parent.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
-                config_file.file_path.parent.glob("*brdfandtopo_corrected_envi*.img")
-            )
-            if existing_corrected:
-                _tick_for_path(config_file.file_path)
+                _tick_for_path(Path(cfg.file_path))
                 continue
-            if verbose:
-                print(f"⚙️ Applying corrections to: {config_file.file_path}")
             try:
-                topo_and_brdf_correction(str(config_file.file_path))
+                topo_and_brdf_correction(str(cfg.file_path))
+                _tick_for_path(Path(cfg.file_path))
             except Exception as exc:
                 errors += 1
                 logging.error(
                     "⚠️  Correction failed for %s: %r%s",
-                    config_file.file_path.name,
+                    cfg.file_path.name,
                     exc,
                     _stale_hint("topo_and_brdf_correction"),
                 )
-            else:
-                _tick_for_path(config_file.file_path)
         corrected = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
-        summary_message = (
-            f"✅ All corrections applied. Corrected files found: {len(corrected)}. Errors: {errors}.\n"
-        )
         if verbose:
-            print(summary_message)
-        else:
-            logging.info(summary_message)
+            print(f"✅ Corrections done. Corrected files found: {len(corrected)}. Errors: {errors}.")
     else:
-        if verbose:
-            print("❌ No configuration JSON files found. Skipping corrections.\n")
+        logging.warning("❌ No configuration JSON files found. Skipping corrections.")
 
-    # Step 5: Resample and translate data to other sensor formats
-    if resample_method == 'convolution':
+    if resample_method == "convolution":
         if verbose:
-            print("🔁 Resampling and translating data...")
+            print("🔁 Step 5/5 Resampling and translating data (convolutional)...")
         corrected_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
         if not corrected_files:
-            print("❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps.\n")
+            logging.warning("❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps.")
         else:
             if verbose:
                 print(f"📂 Found {len(corrected_files)} BRDF-corrected files to process.")
-            if bars:
-                for flight_line in flight_lines:
-                    tasks = sum(
-                        1 for corrected in corrected_files if _belongs_to(flight_line, corrected.path)
-                    )
-                    _add_total(flight_line, tasks)
-            for index, corrected_file in enumerate(corrected_files, start=1):
-                if verbose:
-                    print(f"🔄 [{index}/{len(corrected_files)}] Resampling: {corrected_file.name}")
+            for corrected_file in corrected_files:
+                _add_total_for_path(corrected_file.path)
                 existing_resampled = [
-                    getattr(resampled, "path", resampled)
+                    resampled.path
                     for resampled in NEONReflectanceResampledENVIFile.find_in_directory(
                         corrected_file.directory
                     )
                 ]
-                if not existing_resampled:
-                    existing_resampled = list(
-                        corrected_file.directory.glob("*_resampled_*_.hdr")
-                    ) + list(corrected_file.directory.glob("*_resampled_*_.img"))
                 if existing_resampled:
                     _warn_skip_exists("resample", existing_resampled, verbose)
                     _tick_for_path(corrected_file.path)
@@ -316,24 +340,19 @@ def go_forth_and_multiply(
                         exc,
                         _stale_hint("resample"),
                     )
-                else:
-                    if verbose:
-                        print(f"✅ Resampled: {corrected_file.name}\n")
                 _tick_for_path(corrected_file.path)
         if verbose:
-            print("✅ Resampling and translation complete.\n")
-    elif resample_method == 'resample':
+            print("✅ Resampling and translation (convolution) complete.")
+    elif resample_method == "resample":
         resample_translation_to_other_sensors(base_path)
+    else:
+        logging.warning("Unknown resample_method=%s (skipping Step 5).", resample_method)
 
-    # TODO: Move this to after the convolution diagnostic option to keep the unadjusted ones
     if brightness_offset and float(brightness_offset) != 0.0:
         if verbose:
-            print(f"🧮 Applying brightness offset: {brightness_offset:+g}")
+            print(f"🧮 Applying brightness offset: {float(brightness_offset):+g}")
         try:
-            names_to_match = [
-                "brdfandtopo_corrected_envi",
-                "resampled_envi",
-            ]
+            names_to_match = ["brdfandtopo_corrected_envi", "resampled_envi"]
             candidates = [
                 path
                 for path in base_path.rglob("*.img")
@@ -341,25 +360,17 @@ def go_forth_and_multiply(
             ]
             if not candidates:
                 _warn_skip_exists("brightness_offset (no eligible targets)", candidates, verbose)
-            if bars:
-                for flight_line in flight_lines:
-                    tasks = sum(1 for path in candidates if _belongs_to(flight_line, path))
-                    _add_total(flight_line, tasks)
             changed = apply_offset_to_envi(
                 input_dir=base_path,
                 offset=float(brightness_offset),
                 clip_to_01=True,
                 only_if_name_contains=names_to_match,
             )
+            for path in candidates:
+                _add_total_for_path(path)
+                _tick_for_path(path)
             if verbose:
                 print(f"✅ Offset applied to {changed} ENVI file(s).")
-            if bars:
-                count_remaining = changed
-                for path in candidates:
-                    if count_remaining <= 0:
-                        break
-                    _tick_for_path(path)
-                    count_remaining -= 1
         except Exception as exc:
             logging.error("⚠️  Offset application failed: %r%s", exc, _stale_hint("brightness_offset"))
 
