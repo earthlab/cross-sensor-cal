@@ -25,6 +25,7 @@ Choose the approach that matches your hardware and scene size; the output format
 Each row represents one pixel.
 Columns typically include `scene_id`, `tile_id`, `x`, `y`, band values, and `is_masked`.
 Write tables as CSV for quick inspection or Parquet for efficient storage.
+Keep Parquet outputs in a `full_extracted_pixels` folder that lives alongside the tile folder so the extracted tables sit next to, not inside, the source data.
 Partition by scene and tile so you can read subsets without loading the whole dataset.
 
 ## Memory tips

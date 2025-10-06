@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.file_sort import categorize_file, generate_file_move_list
 from src.file_types import (
+    DataFile,
     NEONReflectanceFile,
     NEONReflectanceENVIFile,
     NEONReflectanceENVHDRFile,
@@ -30,6 +31,32 @@ from src.file_types import (
     SpectralDataParquetFile,
     SensorType,
 )
+
+
+class TestSpectralDataParquetFile(unittest.TestCase):
+    """Tests for the SpectralDataParquetFile helper."""
+
+    def test_from_raster_file_uses_parent_directory(self):
+        """Ensure Parquet outputs are placed alongside the raster folder."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parent_dir = Path(tmpdir) / "processed_scene"
+            raster_dir = parent_dir / "tile_001"
+            raster_dir.mkdir(parents=True)
+
+            raster_path = raster_dir / "NEON_D13_NIWO_DP1_20200801_161441_reflectance.h5"
+            raster_path.touch()
+
+            raster_file = DataFile(raster_path)
+            parquet_file = SpectralDataParquetFile.from_raster_file(raster_file)
+
+            expected_directory = parent_dir / "full_extracted_pixels"
+
+            self.assertTrue(expected_directory.is_dir())
+            self.assertEqual(parquet_file.path.parent, expected_directory)
+            self.assertEqual(
+                parquet_file.path.name,
+                "NEON_D13_NIWO_DP1_20200801_161441_reflectance_spectral_data.parquet",
+            )
 
 
 class TestCategorizeFile(unittest.TestCase):
