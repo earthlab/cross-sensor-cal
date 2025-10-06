@@ -1,8 +1,12 @@
 import re
-from pathlib import Path
 from collections import defaultdict
+from contextlib import nullcontext
+from multiprocessing import Manager
+from pathlib import Path
+from queue import Empty
 from typing import List, Optional
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import threading
 
 import pandas as pd
 from rasterio.features import rasterize
@@ -22,15 +26,21 @@ def _process_single_raster(
     raster_file: DataFile,
     polygon_path: Optional[Path],
     tqdm_position: int = 0,
+    progress_queue=None,
 ):
     spectral_parquet_file = SpectralDataParquetFile.from_raster_file(raster_file)
     print(f"[DEBUG] Writing to {spectral_parquet_file.path}")
-    process_raster_in_chunks(
-        raster_file,
-        polygon_path,
-        spectral_parquet_file,
-        tqdm_position=tqdm_position,
-    )
+    try:
+        process_raster_in_chunks(
+            raster_file,
+            polygon_path,
+            spectral_parquet_file,
+            tqdm_position=tqdm_position,
+            progress_queue=progress_queue,
+        )
+    finally:
+        if progress_queue is not None:
+            progress_queue.put(("finish", raster_file.path.name, None))
 
 
 def control_function_for_extraction(directory, polygon_path: Optional[Path], max_workers: Optional[int] = None):
@@ -55,17 +65,80 @@ def control_function_for_extraction(directory, polygon_path: Optional[Path], max
             print(f"[ERROR] Error while processing raster file {raster_files[0].file_path}: {e}")
         return
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(_process_single_raster, raster_file, polygon_path, idx): raster_file
-            for idx, raster_file in enumerate(raster_files)
-        }
-        for future in as_completed(futures):
-            raster_file = futures[future]
+    manager = Manager()
+    progress_queue = manager.Queue()
+
+    file_bar = tqdm(
+        total=len(raster_files),
+        desc="Raster files",
+        position=0,
+        leave=True,
+        dynamic_ncols=True,
+        unit="file",
+    )
+    chunk_bar = tqdm(
+        total=0,
+        desc="Chunks",
+        position=1,
+        leave=True,
+        dynamic_ncols=True,
+        unit="chunk",
+    )
+
+    stop_event = threading.Event()
+
+    def _progress_worker():
+        while True:
             try:
-                future.result()
-            except Exception as e:
-                print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
+                message = progress_queue.get(timeout=0.1)
+            except Empty:
+                if stop_event.is_set():
+                    break
+                continue
+
+            if message is None:
+                break
+
+            action, name, value = message
+            if action == "start":
+                chunk_bar.total += int(value)
+                chunk_bar.set_description(f"Chunks ({name})")
+                chunk_bar.refresh()
+            elif action == "update":
+                chunk_bar.update(int(value))
+            elif action == "finish":
+                file_bar.update(1)
+
+        chunk_bar.refresh()
+
+    progress_thread = threading.Thread(target=_progress_worker, daemon=True)
+    progress_thread.start()
+
+    try:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _process_single_raster,
+                    raster_file,
+                    polygon_path,
+                    0,
+                    progress_queue,
+                ): raster_file
+                for raster_file in raster_files
+            }
+            for future in as_completed(futures):
+                raster_file = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
+    finally:
+        stop_event.set()
+        progress_queue.put(None)
+        progress_thread.join()
+        file_bar.close()
+        chunk_bar.close()
+        manager.shutdown()
 
 
 def select_best_files(files: List[DataFile]) -> List[DataFile]:
@@ -179,6 +252,7 @@ def process_raster_in_chunks(
     output_parquet_file: DataFile,
     chunk_size=100000,
     tqdm_position: int = 0,
+    progress_queue=None,
 ):
     """
     Processes a raster file in chunks, intersects pixels with a polygon, and writes extracted
@@ -240,14 +314,23 @@ def process_raster_in_chunks(
         print(f"[INFO] Processing {raster_path.name} with {total_bands} bands as {band_prefix}")
 
         pq_writer = None
-        try:
-            with tqdm(
+        progress_context = (
+            tqdm(
                 total=num_chunks,
                 desc=f"Processing {raster_path.name}",
                 unit="chunk",
                 position=tqdm_position,
                 leave=True,
-            ) as pbar:
+            )
+            if progress_queue is None
+            else nullcontext()
+        )
+
+        try:
+            with progress_context as pbar:
+                if progress_queue is not None:
+                    progress_queue.put(("start", raster_path.name, num_chunks))
+
                 for i in range(num_chunks):
                     row_start = (i * chunk_size) // width
                     row_end = min(((i + 1) * chunk_size) // width + 1, height)
@@ -304,7 +387,10 @@ def process_raster_in_chunks(
                         pq_writer = pq.ParquetWriter(output_parquet_path, table.schema)
                     pq_writer.write_table(table)
 
-                    pbar.update(1)
+                    if progress_queue is not None:
+                        progress_queue.put(("update", raster_path.name, 1))
+                    else:
+                        pbar.update(1)
         finally:
             if pq_writer is not None:
                 pq_writer.close()
