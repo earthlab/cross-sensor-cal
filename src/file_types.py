@@ -1083,24 +1083,24 @@ class NEONReflectanceResampledMaskHDRFile(MaskedFileMixin, DataFile):
 # CSV + TIF helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-class SpectralDataCSVFile(DataFile):
-    pattern = re.compile(r"^(?P<base>NEON_.*)_spectral_data\.csv$")
+class SpectralDataParquetFile(DataFile):
+    pattern = re.compile(r"^(?P<base>NEON_.*)_spectral_data\.parquet$")
 
     def __init__(self, path: Path, base: str):
         super().__init__(path)
         self.base = base
 
     @classmethod
-    def from_raster_file(cls, raster_file: DataFile) -> "SpectralDataCSVFile":
+    def from_raster_file(cls, raster_file: DataFile) -> "SpectralDataParquetFile":
         base = raster_file.path.stem
-        filename = f"{base}_spectral_data.csv"
+        filename = f"{base}_spectral_data.parquet"
         return cls(raster_file.path.parent / filename, base=base)
 
     @classmethod
-    def from_filename(cls, path: Path) -> "SpectralDataCSVFile":
+    def from_filename(cls, path: Path) -> "SpectralDataParquetFile":
         match = cls.match(path.name)
         if not match:
-            raise ValueError(f"Filename does not match SpectralDataCSVFile pattern: {path}")
+            raise ValueError(f"Filename does not match SpectralDataParquetFile pattern: {path}")
         return cls(path, base=match.group("base"))
 
 

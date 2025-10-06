@@ -27,7 +27,7 @@ from src.file_types import (
     NEONReflectanceResampledHDRFile,
     NEONReflectanceResampledMaskENVIFile,
     NEONReflectanceResampledMaskHDRFile,
-    SpectralDataCSVFile,
+    SpectralDataParquetFile,
     SensorType,
 )
 
@@ -182,9 +182,9 @@ class TestCategorizeFile(unittest.TestCase):
         )
         self.assertEqual(categorize_file(file_obj), "Generic")
         
-        # Test spectral data CSV
-        file_obj = SpectralDataCSVFile(
-            path=Path("test/NEON_D13_NIWO_DP1_20200801_161441_spectral_data.csv"),
+        # Test spectral data Parquet
+        file_obj = SpectralDataParquetFile(
+            path=Path("test/NEON_D13_NIWO_DP1_20200801_161441_spectral_data.parquet"),
             base="NEON_D13_NIWO_DP1_20200801_161441"
         )
         self.assertEqual(categorize_file(file_obj), "Generic")

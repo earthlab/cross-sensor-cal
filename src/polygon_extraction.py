@@ -11,21 +11,23 @@ import geopandas as gpd
 from tqdm import tqdm
 import numpy as np
 from rasterio.crs import CRS
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, \
-    NEONReflectanceResampledENVIFile, SpectralDataCSVFile
+    NEONReflectanceResampledENVIFile, SpectralDataParquetFile
 
 
 def _process_single_raster(raster_file: DataFile, polygon_path: Optional[Path]):
-    spectral_csv_file = SpectralDataCSVFile.from_raster_file(raster_file)
-    print(f"[DEBUG] Writing to {spectral_csv_file.path}")
-    process_raster_in_chunks(raster_file, polygon_path, spectral_csv_file)
+    spectral_parquet_file = SpectralDataParquetFile.from_raster_file(raster_file)
+    print(f"[DEBUG] Writing to {spectral_parquet_file.path}")
+    process_raster_in_chunks(raster_file, polygon_path, spectral_parquet_file)
 
 
 def control_function_for_extraction(directory, polygon_path: Optional[Path], max_workers: Optional[int] = None):
     """
     Finds and processes raster files in a directory.
-    Processes data in chunks and saves output to CSV.
+    Processes data in chunks and saves output to Parquet.
 
     When more than one raster file is found, the extractions run in parallel using a
     process pool. The ``max_workers`` argument can be used to control the number of
@@ -146,16 +148,18 @@ def get_crs_from_hdr(hdr_path):
 def process_raster_in_chunks(
     raster_file: DataFile,
     polygon_path: Optional[Path],
-    output_csv_file: DataFile,
+    output_parquet_file: DataFile,
     chunk_size=100000,
 ):
     """
     Processes a raster file in chunks, intersects pixels with a polygon, and writes extracted
-    spectral and spatial data to a CSV file.
+    spectral and spatial data to a Parquet file.
     """
 
     raster_path = raster_file.path
-    output_csv_path = output_csv_file.path
+    output_parquet_path = output_parquet_file.path
+    if output_parquet_path.exists():
+        output_parquet_path.unlink()
     hdr_path = raster_path.with_suffix(".hdr")
 
     with rasterio.open(raster_path) as src:
@@ -205,61 +209,66 @@ def process_raster_in_chunks(
 
         print(f"[INFO] Processing {raster_path.name} with {total_bands} bands as {band_prefix}")
 
-        with tqdm(total=num_chunks, desc=f"Processing {raster_path.name}", unit="chunk") as pbar:
-            first_chunk = True
-            for i in range(num_chunks):
-                row_start = (i * chunk_size) // width
-                row_end = min(((i + 1) * chunk_size) // width + 1, height)
+        pq_writer = None
+        try:
+            with tqdm(total=num_chunks, desc=f"Processing {raster_path.name}", unit="chunk") as pbar:
+                for i in range(num_chunks):
+                    row_start = (i * chunk_size) // width
+                    row_end = min(((i + 1) * chunk_size) // width + 1, height)
 
-                data = src.read(window=((row_start, row_end), (0, width)))
-                data_chunk = data.reshape(total_bands, -1).T
+                    data = src.read(window=((row_start, row_end), (0, width)))
+                    data_chunk = data.reshape(total_bands, -1).T
 
-                row_indices, col_indices = np.meshgrid(
-                    np.arange(row_start, row_end),
-                    np.arange(width),
-                    indexing='ij'
-                )
-                row_indices_flat = row_indices.flatten()
-                col_indices_flat = col_indices.flatten()
+                    row_indices, col_indices = np.meshgrid(
+                        np.arange(row_start, row_end),
+                        np.arange(width),
+                        indexing='ij'
+                    )
+                    row_indices_flat = row_indices.flatten()
+                    col_indices_flat = col_indices.flatten()
 
-                valid_mask = ~np.any(data_chunk == -9999, axis=1)
-                data_chunk = data_chunk[valid_mask]
+                    valid_mask = ~np.any(data_chunk == -9999, axis=1)
+                    data_chunk = data_chunk[valid_mask]
 
-                valid_rows = row_indices_flat[valid_mask]
-                valid_cols = col_indices_flat[valid_mask]
-                pixel_ids = valid_rows * width + valid_cols
+                    valid_rows = row_indices_flat[valid_mask]
+                    valid_cols = col_indices_flat[valid_mask]
+                    pixel_ids = valid_rows * width + valid_cols
 
-                transform = src.transform
-                x_coords = transform.a * valid_cols + transform.b * valid_rows + transform.c
-                y_coords = transform.d * valid_cols + transform.e * valid_rows + transform.f
+                    transform = src.transform
+                    x_coords = transform.a * valid_cols + transform.b * valid_rows + transform.c
+                    y_coords = transform.d * valid_cols + transform.e * valid_rows + transform.f
 
-                if polygon_values is not None:
-                    polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
-                else:
-                    polygon_chunk = None
+                    if polygon_values is not None:
+                        polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
+                    else:
+                        polygon_chunk = None
 
-                chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
-                chunk_df["Raster_File"] = raster_path.name
-                chunk_df["Polygon_File"] = polygon_path
-                chunk_df["Chunk_Number"] = i
-                chunk_df["Pixel_ID"] = pixel_ids
-                chunk_df["Pixel_X"] = x_coords
-                chunk_df["Pixel_Y"] = y_coords
-                if polygon_chunk is not None:
-                    chunk_df["Polygon_ID"] = pd.Series(polygon_chunk, dtype="Int64")
-                else:
-                    chunk_df["Polygon_ID"] = pd.Series(pd.NA, index=chunk_df.index, dtype="Int64")
-                if dataset_crs:
-                    chunk_df["CRS"] = dataset_crs.to_string()
+                    chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
+                    chunk_df["Raster_File"] = raster_path.name
+                    chunk_df["Polygon_File"] = str(polygon_path) if polygon_path is not None else None
+                    chunk_df["Chunk_Number"] = i
+                    chunk_df["Pixel_ID"] = pixel_ids
+                    chunk_df["Pixel_X"] = x_coords
+                    chunk_df["Pixel_Y"] = y_coords
+                    if polygon_chunk is not None:
+                        chunk_df["Polygon_ID"] = pd.Series(polygon_chunk, dtype="Int64")
+                    else:
+                        chunk_df["Polygon_ID"] = pd.Series(pd.NA, index=chunk_df.index, dtype="Int64")
+                    if dataset_crs:
+                        chunk_df["CRS"] = dataset_crs.to_string()
 
-                chunk_df.rename(columns={f"Band_{b + 1}": f"{band_prefix}{b + 1}" for b in range(total_bands)},
-                                inplace=True)
+                    chunk_df.rename(columns={f"Band_{b + 1}": f"{band_prefix}{b + 1}" for b in range(total_bands)},
+                                    inplace=True)
 
-                if polygon_attributes is not None:
-                    chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
+                    if polygon_attributes is not None:
+                        chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
 
-                mode = 'w' if first_chunk else 'a'
-                chunk_df.to_csv(output_csv_path, mode=mode, header=first_chunk, index=False)
+                    table = pa.Table.from_pandas(chunk_df, preserve_index=False)
+                    if pq_writer is None:
+                        pq_writer = pq.ParquetWriter(output_parquet_path, table.schema)
+                    pq_writer.write_table(table)
 
-                first_chunk = False
-                pbar.update(1)
+                    pbar.update(1)
+        finally:
+            if pq_writer is not None:
+                pq_writer.close()
