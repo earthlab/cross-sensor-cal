@@ -18,10 +18,19 @@ from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRD
     NEONReflectanceResampledENVIFile, SpectralDataParquetFile
 
 
-def _process_single_raster(raster_file: DataFile, polygon_path: Optional[Path]):
+def _process_single_raster(
+    raster_file: DataFile,
+    polygon_path: Optional[Path],
+    tqdm_position: int = 0,
+):
     spectral_parquet_file = SpectralDataParquetFile.from_raster_file(raster_file)
     print(f"[DEBUG] Writing to {spectral_parquet_file.path}")
-    process_raster_in_chunks(raster_file, polygon_path, spectral_parquet_file)
+    process_raster_in_chunks(
+        raster_file,
+        polygon_path,
+        spectral_parquet_file,
+        tqdm_position=tqdm_position,
+    )
 
 
 def control_function_for_extraction(directory, polygon_path: Optional[Path], max_workers: Optional[int] = None):
@@ -47,7 +56,10 @@ def control_function_for_extraction(directory, polygon_path: Optional[Path], max
         return
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_process_single_raster, raster_file, polygon_path): raster_file for raster_file in raster_files}
+        futures = {
+            executor.submit(_process_single_raster, raster_file, polygon_path, idx): raster_file
+            for idx, raster_file in enumerate(raster_files)
+        }
         for future in as_completed(futures):
             raster_file = futures[future]
             try:
@@ -166,6 +178,7 @@ def process_raster_in_chunks(
     polygon_path: Optional[Path],
     output_parquet_file: DataFile,
     chunk_size=100000,
+    tqdm_position: int = 0,
 ):
     """
     Processes a raster file in chunks, intersects pixels with a polygon, and writes extracted
@@ -228,7 +241,13 @@ def process_raster_in_chunks(
 
         pq_writer = None
         try:
-            with tqdm(total=num_chunks, desc=f"Processing {raster_path.name}", unit="chunk") as pbar:
+            with tqdm(
+                total=num_chunks,
+                desc=f"Processing {raster_path.name}",
+                unit="chunk",
+                position=tqdm_position,
+                leave=True,
+            ) as pbar:
                 for i in range(num_chunks):
                     row_start = (i * chunk_size) // width
                     row_end = min(((i + 1) * chunk_size) // width + 1, height)
