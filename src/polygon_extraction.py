@@ -1,13 +1,9 @@
-import os
-import glob
 import re
 from pathlib import Path
-from typing import List
 from collections import defaultdict
-from typing import List, Type
+from typing import List, Optional
 
 import pandas as pd
-from shapely.geometry import box
 from rasterio.features import rasterize
 import rasterio
 import geopandas as gpd
@@ -19,7 +15,7 @@ from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRD
     NEONReflectanceResampledENVIFile, SpectralDataCSVFile
 
 
-def control_function_for_extraction(directory, polygon_path):
+def control_function_for_extraction(directory, polygon_path: Optional[Path]):
     """
     Finds and processes raster files in a directory.
     Processes data in chunks and saves output to CSV.
@@ -128,7 +124,12 @@ def get_crs_from_hdr(hdr_path):
         return None
 
 
-def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_csv_file: DataFile, chunk_size=100000):
+def process_raster_in_chunks(
+    raster_file: DataFile,
+    polygon_path: Optional[Path],
+    output_csv_file: DataFile,
+    chunk_size=100000,
+):
     """
     Processes a raster file in chunks, intersects pixels with a polygon, and writes extracted
     spectral and spatial data to a CSV file.
@@ -143,26 +144,33 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
         if hdr_path.exists():
             crs_from_hdr = get_crs_from_hdr(hdr_path)
 
-        polygons = gpd.read_file(polygon_path)
+        dataset_crs = src.crs if src.crs is not None else crs_from_hdr
+        if src.crs is None and crs_from_hdr is not None:
+            print(f"[INFO] Using CRS from .hdr file: {crs_from_hdr}")
 
-        if polygons.crs is None:
-            print(f"[WARNING] {polygon_path} has no CRS. Assigning from .hdr file if available.")
-            polygons = polygons.set_crs(crs_from_hdr if crs_from_hdr else "EPSG:4326")
+        polygons = None
+        polygon_values = None
+        polygon_attributes = None
 
-        if src.crs is None and crs_from_hdr:
-            print(f"[INFO] Assigning CRS from .hdr file: {crs_from_hdr}")
-            src = src.to_crs(crs_from_hdr)
+        if polygon_path is not None:
+            polygons = gpd.read_file(polygon_path)
 
-        if polygons.crs != src.crs:
-            polygons = polygons.to_crs(src.crs)
+            if polygons.crs is None:
+                print(f"[WARNING] {polygon_path} has no CRS. Assigning from .hdr file if available.")
+                polygons = polygons.set_crs(dataset_crs if dataset_crs else "EPSG:4326")
 
-        polygon_values = rasterize(
-            [(geom, idx + 1) for idx, geom in enumerate(polygons.geometry)],
-            out_shape=(src.height, src.width),
-            transform=src.transform,
-            fill=0,
-            dtype="int32"
-        ).ravel()
+            if dataset_crs is not None and polygons.crs != dataset_crs:
+                polygons = polygons.to_crs(dataset_crs)
+
+            polygon_values = rasterize(
+                [(geom, idx + 1) for idx, geom in enumerate(polygons.geometry)],
+                out_shape=(src.height, src.width),
+                transform=src.transform,
+                fill=0,
+                dtype="int32"
+            ).ravel()
+
+            polygon_attributes = polygons.reset_index().rename(columns={'index': 'Polygon_ID'})
 
         total_bands = src.count
         height, width = src.height, src.width
@@ -206,7 +214,10 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
                 x_coords = transform.a * valid_cols + transform.b * valid_rows + transform.c
                 y_coords = transform.d * valid_cols + transform.e * valid_rows + transform.f
 
-                polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
+                if polygon_values is not None:
+                    polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
+                else:
+                    polygon_chunk = None
 
                 chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
                 chunk_df["Raster_File"] = raster_path.name
@@ -215,15 +226,18 @@ def process_raster_in_chunks(raster_file: DataFile, polygon_path: Path, output_c
                 chunk_df["Pixel_ID"] = pixel_ids
                 chunk_df["Pixel_X"] = x_coords
                 chunk_df["Pixel_Y"] = y_coords
-                chunk_df["Polygon_ID"] = polygon_chunk
-                if src.crs:
-                    chunk_df["CRS"] = src.crs.to_string()
+                if polygon_chunk is not None:
+                    chunk_df["Polygon_ID"] = pd.Series(polygon_chunk, dtype="Int64")
+                else:
+                    chunk_df["Polygon_ID"] = pd.Series(pd.NA, index=chunk_df.index, dtype="Int64")
+                if dataset_crs:
+                    chunk_df["CRS"] = dataset_crs.to_string()
 
                 chunk_df.rename(columns={f"Band_{b + 1}": f"{band_prefix}{b + 1}" for b in range(total_bands)},
                                 inplace=True)
 
-                polygon_attributes = polygons.reset_index().rename(columns={'index': 'Polygon_ID'})
-                chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
+                if polygon_attributes is not None:
+                    chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
 
                 mode = 'w' if first_chunk else 'a'
                 chunk_df.to_csv(output_csv_path, mode=mode, header=first_chunk, index=False)
