@@ -23,6 +23,180 @@ from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRD
 _BAND_RE = re.compile(r"^(ENVI|Masked|Original)_band_(\d+)$")
 
 
+def _leading_band_columns(colnames):
+    """Return the leading run of band columns (in stored order)."""
+
+    bands = []
+    for column in colnames:
+        match = _BAND_RE.match(column)
+        if match:
+            bands.append(column)
+        else:
+            break
+    return bands
+
+
+def _band_indices(band_cols):
+    """Return the integer band indices extracted from band column names."""
+
+    indices = []
+    for column in band_cols:
+        match = _BAND_RE.match(column)
+        if match:
+            indices.append(int(match.group(2)))
+    return indices
+
+
+def validate_bands_in_dir(
+    directory,
+    expected_bands: int = 426,
+    sample_rows: int = 4000,
+    recursive: bool = True,
+    value_range: tuple | None = (0.0, 1.0),
+    eps_all_zero: float = 1e-12,
+    show_preview: bool = True,
+    meta_cols=("Raster_File", "CRS", "Chunk_Number", "Pixel_X", "Pixel_Y"),
+):
+    """Validate band layout and sample values for each Parquet file in ``directory``."""
+
+    directory = Path(directory)
+    files = sorted(directory.rglob("*.parquet") if recursive else directory.glob("*.parquet"))
+    if not files:
+        print(f"[INFO] No .parquet files in {directory}")
+        return pd.DataFrame()
+
+    pd.set_option("display.max_colwidth", None)
+    pd.set_option("display.width", None)
+    pd.set_option("display.max_columns", None)
+
+    rows = []
+    for parquet_file in files:
+        record = {
+            "file": str(parquet_file),
+            "ok_open": False,
+            "num_row_groups": None,
+            "num_rows_meta": None,
+            "band_count": None,
+            "first_cols_head": None,
+            "first_band": None,
+            "last_band": None,
+            "band_index_min": None,
+            "band_index_max": None,
+            "bands_ok": None,
+            "finite_ok": None,
+            "all_zero_bands": [],
+            "range_fail_bands": [],
+            "error": None,
+        }
+
+        try:
+            pq_file = pq.ParquetFile(parquet_file)
+            record["ok_open"] = True
+            record["num_row_groups"] = pq_file.num_row_groups
+            record["num_rows_meta"] = pq_file.metadata.num_rows if pq_file.metadata else None
+
+            schema_columns = pq_file.schema_arrow.names
+            record["first_cols_head"] = schema_columns[:8]
+
+            band_columns = _leading_band_columns(schema_columns)
+            record["band_count"] = len(band_columns)
+
+            indices = _band_indices(band_columns)
+            if indices:
+                record["band_index_min"] = int(np.min(indices))
+                record["band_index_max"] = int(np.max(indices))
+            record["first_band"] = band_columns[0] if band_columns else None
+            record["last_band"] = band_columns[-1] if band_columns else None
+
+            record["bands_ok"] = record["band_count"] == expected_bands
+
+            meta_columns = [column for column in meta_cols if column in schema_columns]
+            columns_to_read = band_columns + meta_columns
+            table = pq_file.read_row_group(0, columns=columns_to_read)
+            dataframe = table.to_pandas()
+            if len(dataframe) > sample_rows:
+                dataframe = dataframe.head(sample_rows)
+            band_dataframe = dataframe[band_columns].astype("float32") if band_columns else pd.DataFrame()
+
+            record["finite_ok"] = bool(np.isfinite(band_dataframe.to_numpy()).all()) if not band_dataframe.empty else False
+
+            all_zero_bands = []
+            if not band_dataframe.empty:
+                max_abs = band_dataframe.abs().max(axis=0)
+                for column, maximum in max_abs.items():
+                    if not (maximum > eps_all_zero):
+                        all_zero_bands.append(column)
+            record["all_zero_bands"] = all_zero_bands
+
+            range_fail_bands = []
+            if value_range is not None and not band_dataframe.empty:
+                lo, hi = value_range
+                too_low = (band_dataframe < lo).any(axis=0)
+                too_high = (band_dataframe > hi).any(axis=0)
+                for column in band_columns:
+                    if (column in too_low.index and bool(too_low[column])) or (
+                        column in too_high.index and bool(too_high[column])
+                    ):
+                        range_fail_bands.append(column)
+            record["range_fail_bands"] = range_fail_bands
+
+            if show_preview and not dataframe.empty:
+                preview_columns = meta_columns + band_columns[:5]
+                preview_df = dataframe[preview_columns].head(1)
+                print(f"\n=== {parquet_file.name} ===")
+                print(
+                    "leading band cols: "
+                    f"{record['band_count']} (expected {expected_bands}) | "
+                    f"first: {record['first_band']} | last: {record['last_band']} | "
+                    f"indices: [{record['band_index_min']}, {record['band_index_max']}] | "
+                    f"row_groups: {record['num_row_groups']} | rows(meta): {record['num_rows_meta']}"
+                )
+                print(preview_df.to_string(index=False))
+
+        except Exception as exc:  # pragma: no cover - diagnostic print for unexpected failure
+            record["error"] = str(exc)
+
+        rows.append(record)
+
+    result = pd.DataFrame(rows)
+
+    print("\n===== BAND LAYOUT VALIDATION =====")
+    print(f"Directory: {directory}")
+    print(f"Files: {len(result)}")
+    print(f"Open errors: {(result['ok_open'] == False).sum()}")
+    print(f"Band-count mismatches: {(result['bands_ok'] == False).sum()} (expected {expected_bands})")
+    print(f"Finite check failures: {(result['finite_ok'] == False).sum()}")
+    print(
+        "Files with all-zero bands (any): "
+        f"{(result['all_zero_bands'].apply(lambda x: len(x) > 0)).sum()}"
+    )
+    if value_range is not None:
+        print(
+            "Range check failures (any band outside "
+            f"{value_range}): {(result['range_fail_bands'].apply(lambda x: len(x) > 0)).sum()}"
+        )
+
+    compact = result[
+        [
+            "file",
+            "band_count",
+            "bands_ok",
+            "first_band",
+            "last_band",
+            "band_index_min",
+            "band_index_max",
+            "num_row_groups",
+            "num_rows_meta",
+            "finite_ok",
+            "all_zero_bands",
+            "range_fail_bands",
+            "error",
+        ]
+    ].copy()
+    print(compact.head(50).to_string(index=False))
+    return result
+
+
 def _leading_band_columns_sorted(colnames):
     bands = []
     for c in colnames:
@@ -95,6 +269,7 @@ def control_function_for_extraction(
         except Exception as e:
             print(f"[ERROR] Error while processing raster file {raster_files[0].file_path}: {e}")
         else:
+            _validate_extracted_directories(plot_directories)
             _generate_spectral_plots(plot_directories)
         return
 
@@ -116,7 +291,23 @@ def control_function_for_extraction(
                     plot_directories.add(output_path.parent)
             except Exception as e:
                 print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
+    _validate_extracted_directories(plot_directories)
     _generate_spectral_plots(plot_directories)
+
+
+def _validate_extracted_directories(plot_directories: Set[Path]) -> None:
+    for directory in sorted(plot_directories):
+        try:
+            validate_bands_in_dir(
+                directory,
+                expected_bands=426,
+                value_range=(0.0, 10000.0),
+                sample_rows=4000,
+                recursive=True,
+                show_preview=True,
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic print for unexpected failure
+            print(f"[ERROR] Failed to validate bands for {directory}: {exc}")
 
 
 def _generate_spectral_plots(plot_directories: Set[Path]) -> None:
