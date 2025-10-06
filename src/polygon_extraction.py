@@ -84,20 +84,36 @@ def find_best_resampled_files(directory: Path, suffix: str) -> List[NEONReflecta
 
 
 def get_all_priority_rasters(base_dir: Path, suffix: str = 'envi') -> List[DataFile]:
+    """Return all raster files in ``base_dir`` prioritising BRDF corrected files first.
+
+    Previously this function attempted to select a single "best" raster per
+    (domain, site, date, time) combination which meant only one file was
+    processed when multiple valid rasters were present in the directory.  The
+    polygon extraction workflow now requires that every available raster be
+    processed, so we gather all matches while still preferring BRDF corrected
+    rasters when duplicates exist.
+    """
+
     # 1. Get BRDF-corrected reflectance files
     brdf_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_dir, suffix)
 
     # 2. Get original reflectance files
     raw_files = NEONReflectanceENVIFile.find_in_directory(base_dir)
 
-    # 3. Combine and select best
-    all_candidates = brdf_files + raw_files
-    selected_originals = select_best_files(all_candidates)
+    # 3. Get all resampled files
+    resampled_files = NEONReflectanceResampledENVIFile.find_all_sensors_in_directory(base_dir, suffix)
 
-    # 4. Get best resampled files
-    selected_resampled = find_best_resampled_files(base_dir, suffix)
+    ordered_groups: List[List[DataFile]] = [brdf_files, raw_files, resampled_files]
+    seen_paths = set()
+    prioritised_files: List[DataFile] = []
 
-    return selected_originals + selected_resampled
+    for group in ordered_groups:
+        for data_file in group:
+            if data_file.path not in seen_paths:
+                prioritised_files.append(data_file)
+                seen_paths.add(data_file.path)
+
+    return prioritised_files
 
 
 
@@ -158,6 +174,7 @@ def process_raster_in_chunks(
 
     raster_path = raster_file.path
     output_parquet_path = output_parquet_file.path
+    output_parquet_path.parent.mkdir(parents=True, exist_ok=True)
     if output_parquet_path.exists():
         output_parquet_path.unlink()
     hdr_path = raster_path.with_suffix(".hdr")
