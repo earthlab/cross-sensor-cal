@@ -1094,7 +1094,9 @@ class SpectralDataParquetFile(DataFile):
     def from_raster_file(cls, raster_file: DataFile) -> "SpectralDataParquetFile":
         base = raster_file.path.stem
         filename = f"{base}_spectral_data.parquet"
-        return cls(raster_file.path.parent / filename, base=base)
+        output_directory = raster_file.path.parent / "full_extracted_pixels"
+        output_directory.mkdir(parents=True, exist_ok=True)
+        return cls(output_directory / filename, base=base)
 
     @classmethod
     def from_filename(cls, path: Path) -> "SpectralDataParquetFile":
