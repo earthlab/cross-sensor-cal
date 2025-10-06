@@ -18,20 +18,44 @@ from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRD
     NEONReflectanceResampledENVIFile, SpectralDataParquetFile
 
 
-def _process_single_raster(raster_file: DataFile, polygon_path: Optional[Path]):
+def _process_single_raster(
+    raster_file: DataFile,
+    polygon_path: Optional[Path],
+    *,
+    overwrite: bool = False,
+):
     spectral_parquet_file = SpectralDataParquetFile.from_raster_file(raster_file)
+    if spectral_parquet_file.path.exists() and not overwrite:
+        print(
+            f"[INFO] Skipping extraction for {raster_file.path.name};"
+            f" output {spectral_parquet_file.path} already exists."
+        )
+        return
+
     print(f"[DEBUG] Writing to {spectral_parquet_file.path}")
-    process_raster_in_chunks(raster_file, polygon_path, spectral_parquet_file)
+    process_raster_in_chunks(
+        raster_file,
+        polygon_path,
+        spectral_parquet_file,
+        overwrite=overwrite,
+    )
 
 
-def control_function_for_extraction(directory, polygon_path: Optional[Path], max_workers: Optional[int] = None):
+def control_function_for_extraction(
+    directory,
+    polygon_path: Optional[Path],
+    max_workers: Optional[int] = None,
+    *,
+    overwrite: bool = False,
+):
     """
     Finds and processes raster files in a directory.
     Processes data in chunks and saves output to Parquet.
 
     When more than one raster file is found, the extractions run in parallel using a
     process pool. The ``max_workers`` argument can be used to control the number of
-    concurrent processes.
+    concurrent processes. By default, existing extraction outputs are reused; pass
+    ``overwrite=True`` to regenerate them.
     """
     raster_files = get_all_priority_rasters(directory, 'envi')
 
@@ -41,13 +65,25 @@ def control_function_for_extraction(directory, polygon_path: Optional[Path], max
 
     if len(raster_files) == 1:
         try:
-            _process_single_raster(raster_files[0], polygon_path)
+            _process_single_raster(
+                raster_files[0],
+                polygon_path,
+                overwrite=overwrite,
+            )
         except Exception as e:
             print(f"[ERROR] Error while processing raster file {raster_files[0].file_path}: {e}")
         return
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_process_single_raster, raster_file, polygon_path): raster_file for raster_file in raster_files}
+        futures = {
+            executor.submit(
+                _process_single_raster,
+                raster_file,
+                polygon_path,
+                overwrite=overwrite,
+            ): raster_file
+            for raster_file in raster_files
+        }
         for future in as_completed(futures):
             raster_file = futures[future]
             try:
@@ -166,17 +202,27 @@ def process_raster_in_chunks(
     polygon_path: Optional[Path],
     output_parquet_file: DataFile,
     chunk_size=100000,
+    *,
+    overwrite: bool = False,
 ):
     """
     Processes a raster file in chunks, intersects pixels with a polygon, and writes extracted
-    spectral and spatial data to a Parquet file.
+    spectral and spatial data to a Parquet file. Existing outputs are reused unless
+    ``overwrite`` is ``True``.
     """
 
     raster_path = raster_file.path
     output_parquet_path = output_parquet_file.path
     output_parquet_path.parent.mkdir(parents=True, exist_ok=True)
     if output_parquet_path.exists():
-        output_parquet_path.unlink()
+        if overwrite:
+            output_parquet_path.unlink()
+        else:
+            print(
+                f"[INFO] Output {output_parquet_path} already exists; skipping extraction."
+                " Use overwrite=True to regenerate."
+            )
+            return
     hdr_path = raster_path.with_suffix(".hdr")
 
     with rasterio.open(raster_path) as src:
