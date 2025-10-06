@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from collections import defaultdict
 from typing import List, Optional
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import pandas as pd
 from rasterio.features import rasterize
@@ -15,10 +16,20 @@ from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRD
     NEONReflectanceResampledENVIFile, SpectralDataCSVFile
 
 
-def control_function_for_extraction(directory, polygon_path: Optional[Path]):
+def _process_single_raster(raster_file: DataFile, polygon_path: Optional[Path]):
+    spectral_csv_file = SpectralDataCSVFile.from_raster_file(raster_file)
+    print(f"[DEBUG] Writing to {spectral_csv_file.path}")
+    process_raster_in_chunks(raster_file, polygon_path, spectral_csv_file)
+
+
+def control_function_for_extraction(directory, polygon_path: Optional[Path], max_workers: Optional[int] = None):
     """
     Finds and processes raster files in a directory.
     Processes data in chunks and saves output to CSV.
+
+    When more than one raster file is found, the extractions run in parallel using a
+    process pool. The ``max_workers`` argument can be used to control the number of
+    concurrent processes.
     """
     raster_files = get_all_priority_rasters(directory, 'envi')
 
@@ -26,13 +37,21 @@ def control_function_for_extraction(directory, polygon_path: Optional[Path]):
         print(f"[DEBUG] No matching raster files found in {directory}.")
         return
 
-    for raster_file in raster_files:
+    if len(raster_files) == 1:
         try:
-            spectral_csv_file = SpectralDataCSVFile.from_raster_file(raster_file)
-            print(f"[DEBUG] Writing to {spectral_csv_file.path}")
-            process_raster_in_chunks(raster_file, polygon_path, spectral_csv_file)
+            _process_single_raster(raster_files[0], polygon_path)
         except Exception as e:
-            print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
+            print(f"[ERROR] Error while processing raster file {raster_files[0].file_path}: {e}")
+        return
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_process_single_raster, raster_file, polygon_path): raster_file for raster_file in raster_files}
+        for future in as_completed(futures):
+            raster_file = futures[future]
+            try:
+                future.result()
+            except Exception as e:
+                print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
 
 
 def select_best_files(files: List[DataFile]) -> List[DataFile]:
