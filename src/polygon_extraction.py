@@ -1,9 +1,11 @@
+import math
 import re
 from pathlib import Path
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Set
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+import matplotlib.pyplot as plt
 import pandas as pd
 from rasterio.features import rasterize
 import rasterio
@@ -18,6 +20,21 @@ from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRD
     NEONReflectanceResampledENVIFile, SpectralDataParquetFile
 
 
+_BAND_RE = re.compile(r"^(ENVI|Masked|Original)_band_(\d+)$")
+
+
+def _leading_band_columns_sorted(colnames):
+    bands = []
+    for c in colnames:
+        match = _BAND_RE.match(c)
+        if match:
+            bands.append((c, int(match.group(2))))
+        else:
+            break
+    bands.sort(key=lambda x: x[1])
+    return [c for c, _ in bands], [i for _, i in bands]
+
+
 def _process_single_raster(
     raster_file: DataFile,
     polygon_path: Optional[Path],
@@ -30,7 +47,7 @@ def _process_single_raster(
             f"[INFO] Skipping extraction for {raster_file.path.name};"
             f" output {spectral_parquet_file.path} already exists."
         )
-        return
+        return spectral_parquet_file.path
 
     print(f"[DEBUG] Writing to {spectral_parquet_file.path}")
     process_raster_in_chunks(
@@ -39,6 +56,8 @@ def _process_single_raster(
         spectral_parquet_file,
         overwrite=overwrite,
     )
+
+    return spectral_parquet_file.path
 
 
 def control_function_for_extraction(
@@ -58,6 +77,7 @@ def control_function_for_extraction(
     ``overwrite=True`` to regenerate them.
     """
     raster_files = get_all_priority_rasters(directory, 'envi')
+    plot_directories: Set[Path] = set()
 
     if not raster_files:
         print(f"[DEBUG] No matching raster files found in {directory}.")
@@ -65,13 +85,17 @@ def control_function_for_extraction(
 
     if len(raster_files) == 1:
         try:
-            _process_single_raster(
+            output_path = _process_single_raster(
                 raster_files[0],
                 polygon_path,
                 overwrite=overwrite,
             )
+            if output_path:
+                plot_directories.add(output_path.parent)
         except Exception as e:
             print(f"[ERROR] Error while processing raster file {raster_files[0].file_path}: {e}")
+        else:
+            _generate_spectral_plots(plot_directories)
         return
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -87,9 +111,164 @@ def control_function_for_extraction(
         for future in as_completed(futures):
             raster_file = futures[future]
             try:
-                future.result()
+                output_path = future.result()
+                if output_path:
+                    plot_directories.add(output_path.parent)
             except Exception as e:
                 print(f"[ERROR] Error while processing raster file {raster_file.file_path}: {e}")
+    _generate_spectral_plots(plot_directories)
+
+
+def _generate_spectral_plots(plot_directories: Set[Path]) -> None:
+    if not plot_directories:
+        return
+
+    for directory in sorted(plot_directories):
+        try:
+            output_dir = directory.parent / f"{directory.name}_spectral_plots"
+            plot_spectra_from_parquet_dir(
+                directory,
+                output_dir=output_dir,
+                recursive=False,
+            )
+        except Exception as exc:
+            print(f"[ERROR] Failed to generate spectral plots for {directory}: {exc}")
+
+
+def plot_spectra_from_parquet_dir(
+    directory,
+    output_dir: Optional[str] = None,
+    recursive: bool = True,
+    max_lines_per_file: int = 5000,
+    median_sample_rows: int = 50000,
+    sentinel_at_or_below: float = -9990,
+    mask_integer_lo: int = 1,
+    mask_integer_hi: int = 255,
+    dpi: int = 200,
+):
+    """Generate spectral plots for each Parquet file within ``directory``."""
+
+    directory = Path(directory)
+    if output_dir:
+        out_dir = Path(output_dir)
+    else:
+        out_dir = directory.parent / f"{directory.name}_spectral_plots"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(directory.rglob("*.parquet") if recursive else directory.glob("*.parquet"))
+    if not files:
+        print(f"[INFO] No .parquet files found under: {directory}")
+        return []
+
+    generated = []
+    rng = np.random.default_rng(42)
+
+    for parquet_path in files:
+        try:
+            parquet_file = pq.ParquetFile(parquet_path)
+        except Exception as exc:
+            print(f"[WARN] Skipping {parquet_path.name}: cannot open ({exc})")
+            continue
+
+        columns = parquet_file.schema_arrow.names
+        band_columns, band_indices = _leading_band_columns_sorted(columns)
+        if not band_columns:
+            print(f"[WARN] {parquet_path.name}: no leading band columns found; skipping.")
+            continue
+
+        total_rows = (
+            parquet_file.metadata.num_rows
+            if parquet_file.metadata and parquet_file.metadata.num_rows is not None
+            else None
+        )
+        if total_rows is None or total_rows == 0:
+            print(f"[WARN] {parquet_path.name}: no rows; skipping.")
+            continue
+
+        stride = max(1, math.ceil(total_rows / max_lines_per_file)) if max_lines_per_file else 1
+        probability = min(1.0, median_sample_rows / total_rows) if median_sample_rows else 1.0
+
+        fig = plt.figure(figsize=(10, 6))
+        ax = plt.gca()
+        x_values = np.array(band_indices, dtype=np.float32)
+
+        samples = []
+        plotted = 0
+        processed_rows = 0
+
+        for row_group_index in range(parquet_file.num_row_groups):
+            try:
+                table = parquet_file.read_row_group(row_group_index, columns=band_columns)
+            except Exception as exc:
+                print(
+                    f"[WARN] {parquet_path.name}: failed to read row group {row_group_index} ({exc}); continuing."
+                )
+                continue
+
+            dataframe = table.to_pandas()
+            array = dataframe.to_numpy(dtype=np.float32, copy=False)
+
+            array = np.where(array <= sentinel_at_or_below, np.nan, array)
+            integer_mask = (
+                (array >= mask_integer_lo)
+                & (array <= mask_integer_hi)
+                & (array == np.floor(array))
+            )
+            array = np.where(integer_mask, np.nan, array)
+
+            rows_in_group = array.shape[0]
+
+            if max_lines_per_file:
+                indices = np.arange(rows_in_group)
+                plot_mask = ((indices + processed_rows) % stride == 0)
+                rows_to_plot = array[plot_mask]
+                for row in rows_to_plot:
+                    if np.all(np.isnan(row)):
+                        continue
+                    ax.plot(x_values, row, linewidth=0.5, alpha=0.15)
+                    plotted += 1
+
+            if median_sample_rows:
+                if probability >= 1.0:
+                    sampled = array
+                else:
+                    sample_size = int(np.ceil(rows_in_group * probability))
+                    if sample_size > 0 and rows_in_group > 0:
+                        selected = rng.choice(rows_in_group, size=min(sample_size, rows_in_group), replace=False)
+                        sampled = array[selected]
+                    else:
+                        sampled = None
+                if sampled is not None and sampled.size > 0:
+                    samples.append(sampled)
+
+            processed_rows += rows_in_group
+
+        if median_sample_rows and samples:
+            sample_array = np.vstack(samples)
+            if sample_array.shape[0] > median_sample_rows:
+                selection = rng.choice(sample_array.shape[0], size=median_sample_rows, replace=False)
+                sample_array = sample_array[selection]
+            median_values = np.nanmedian(sample_array, axis=0)
+            ax.plot(x_values, median_values, linewidth=2.0, alpha=1.0, label="Median (50th)")
+            ax.legend()
+
+        ax.set_xlabel("Band index")
+        ax.set_ylabel("Reflectance")
+        ax.set_title(parquet_path.name)
+        fig.tight_layout()
+
+        output_path = out_dir / f"{parquet_path.stem}_spectra.png"
+        try:
+            fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+            generated.append(output_path)
+        except Exception as exc:
+            print(f"[WARN] Failed to save plot for {parquet_path.name}: {exc}")
+        finally:
+            plt.close(fig)
+
+        print(f"[OK] {parquet_path.name}: plotted ~{plotted} pixel lines -> {output_path}")
+
+    return generated
 
 
 def select_best_files(files: List[DataFile]) -> List[DataFile]:
