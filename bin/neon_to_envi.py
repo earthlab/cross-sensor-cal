@@ -11,12 +11,12 @@ try:  # pragma: no cover - optional dependency guard
     import ray
 except ModuleNotFoundError:  # pragma: no cover - handled at runtime
     ray = None  # type: ignore[assignment]
-import hytools as ht
 
 # Add the repo root and src to sys.path
 repo_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(repo_root / "src"))
 
+from hytools_compat import get_hytools_class
 from neon_to_envi import neon_to_envi_task, export_anc
 from neon_file_types import (
     NEONReflectanceENVIFile,
@@ -57,7 +57,8 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False):
 
     # Initialize Ray
     ray.init(num_cpus=min(len(images), ray.available_resources().get("CPU", 4)))
-    hytool = ray.remote(ht.HyTools)
+    HyTools = get_hytools_class()
+    hytool = ray.remote(HyTools)
 
     # Create actors pool
     actors = [hytool.remote() for _ in images]
