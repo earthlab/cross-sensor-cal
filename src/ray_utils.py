@@ -11,7 +11,10 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import ray
+try:  # pragma: no cover - exercised via integration paths
+    import ray
+except ModuleNotFoundError:  # pragma: no cover - handled gracefully below
+    ray = None  # type: ignore[assignment]
 
 
 def _resolve_cpu_request(requested: int | None) -> int:
@@ -69,6 +72,11 @@ def init_ray(
     int
         The CPU count actually passed to ``ray.init``.
     """
+
+    if ray is None:
+        raise ModuleNotFoundError(
+            "ray is required for parallel processing. Install it with ``pip install ray``"
+        )
 
     if "num_cpus" in ray_kwargs:
         raise TypeError("Pass num_cpus via the positional argument, not kwargs.")
