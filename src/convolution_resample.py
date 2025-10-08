@@ -27,6 +27,20 @@ _RAY_CONVOLUTION_WORKER = None
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
+def _files_exist_and_nonempty(*paths: Path) -> bool:
+    """Return ``True`` when every provided path exists and has a payload."""
+
+    for path in paths:
+        if not path.exists():
+            return False
+        try:
+            if path.stat().st_size == 0:
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def _parse_wavelengths(raw_wavelengths):
     """Normalise raw wavelength values from an ENVI header into floats."""
 
@@ -190,21 +204,32 @@ def _apply_convolution_with_renorm(
     """Apply spectral convolution with per-pixel renormalisation."""
 
     rows, cols, bands = cube.shape
-    flat = cube.reshape(-1, bands).astype(np.float64)
 
-    if nodata is not None:
-        flat = np.where(flat == nodata, np.nan, flat)
+    flat = cube.reshape(-1, bands).astype(np.float32, copy=False)
+    weights = np.asarray(weights, dtype=np.float32)
 
-    valid = (~np.isnan(flat)).astype(np.float64)
-    data = np.nan_to_num(flat, nan=0.0)
+    if nodata is not None and not np.isnan(nodata):
+        nodata_mask = np.isclose(flat, nodata)
+    else:
+        nodata_mask = np.zeros_like(flat, dtype=bool)
+
+    nan_mask = np.isnan(flat)
+    invalid_mask = nodata_mask | nan_mask
+
+    if invalid_mask.any():
+        data = np.where(invalid_mask, 0.0, flat)
+        valid = (~invalid_mask).astype(np.float32, copy=False)
+    else:
+        data = flat
+        valid = np.ones_like(flat, dtype=np.float32)
 
     numer = data @ weights.T
     denom = valid @ weights.T
 
     with np.errstate(invalid="ignore", divide="ignore"):
-        result = numer / denom
+        result = np.divide(numer, denom, out=np.zeros_like(numer), where=denom != 0)
 
-    return result.reshape(rows, cols, -1).astype(np.float32)
+    return result.reshape(rows, cols, -1).astype(np.float32, copy=False)
 
 
 def _ray_convolution_chunk_fn(
@@ -409,9 +434,22 @@ def resample(
                     directional=hdr_file.directional
                 )
 
-                if resampled_hdr_file.path.exists() and resampled_img_file.path.exists():
-                    print(f"⚠️ Skipping resampling for {sensor_name}: files already exist.")
+                if _files_exist_and_nonempty(
+                    resampled_hdr_file.path, resampled_img_file.path
+                ):
+                    print(
+                        f"⚠️ Skipping resampling for {sensor_name}: files already exist."
+                    )
                     continue
+
+                if (
+                    resampled_hdr_file.path.exists()
+                    or resampled_img_file.path.exists()
+                ):
+                    print(
+                        f"♻️ Incomplete resample detected for {sensor_name}; "
+                        "recomputing outputs."
+                    )
 
                 centers_nm = np.asarray(sensor_params["wavelengths"], dtype=float)
                 fwhms_nm = np.asarray(sensor_params.get("fwhms", []), dtype=float)
