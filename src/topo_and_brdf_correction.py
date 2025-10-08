@@ -8,11 +8,12 @@ import os
 import ray
 import numpy as np
 from hytools import HyTools
-from hytools.io.envi import WriteENVI
 from hytools.topo import calc_topo_coeffs
 from hytools.brdf import calc_brdf_coeffs
 from hytools.glint import set_glint_parameters
 from hytools.masks import mask_create
+
+from src.hytools_compat import get_write_envi
 
 from src.file_types import (
     NEONReflectanceENVIFile,
@@ -229,6 +230,7 @@ def export_coeffs(hy_obj, export_dict):
 
 def apply_corrections(hy_obj, config_dict):
     """Apply corrections and export corrected ENVI imagery and masks."""
+    WriteENVI = get_write_envi()
     header_dict = hy_obj.get_header()
     header_dict['data ignore value'] = hy_obj.no_data
     header_dict['data type'] = 4  # float32
