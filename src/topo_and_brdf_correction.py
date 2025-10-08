@@ -11,24 +11,14 @@ except ModuleNotFoundError:  # pragma: no cover - handled in callers
     ray = None  # type: ignore[assignment]
 import numpy as np
 
-try:  # pragma: no cover - import layout differs across hytools releases
-    from hytools import HyTools  # type: ignore[attr-defined]
-except ImportError as exc:  # pragma: no cover - handled in runtime environments
-    try:
-        from hytools.hytools import HyTools  # type: ignore[attr-defined]
-    except ImportError as inner_exc:  # pragma: no cover - handled in runtime environments
-        raise ModuleNotFoundError(
-            "HyTools could not be imported. Install the `hytools` package that provides the"
-            " `HyTools` class."
-        ) from inner_exc
-    else:
-        HyTools = HyTools  # type: ignore[assignment]
-else:
-    HyTools = HyTools  # type: ignore[assignment]
-from hytools.topo import calc_topo_coeffs
-from hytools.brdf import calc_brdf_coeffs
-from hytools.glint import set_glint_parameters
-from hytools.masks import mask_create
+# HyTools is an optional dependency. Import lazily so that other utilities in this module
+# remain usable even when the package is not installed.  This mirrors the runtime behaviour
+# in production where HyTools may be supplied via a plug-in environment.
+HyTools = None  # type: ignore[assignment]
+calc_topo_coeffs = None  # type: ignore[assignment]
+calc_brdf_coeffs = None  # type: ignore[assignment]
+set_glint_parameters = None  # type: ignore[assignment]
+mask_create = None  # type: ignore[assignment]
 
 from src.hytools_compat import get_write_envi
 
@@ -47,6 +37,51 @@ warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
 
 
+def _import_hytools() -> None:
+    """Import HyTools and related helpers on-demand.
+
+    Raises
+    ------
+    ModuleNotFoundError
+        If HyTools (and its supporting modules) are not installed.  The error message makes
+        it explicit how to install the dependency, instead of failing at module import time
+        for unrelated utilities.
+    """
+
+    global HyTools, calc_topo_coeffs, calc_brdf_coeffs, set_glint_parameters, mask_create
+
+    if HyTools is not None:
+        # Already imported in the current process.
+        return
+
+    try:  # pragma: no cover - import layout differs across hytools releases
+        from hytools import HyTools as _HyTools  # type: ignore[attr-defined]
+    except ImportError as exc:  # pragma: no cover - handled in runtime environments
+        try:
+            from hytools.hytools import HyTools as _HyTools  # type: ignore[attr-defined]
+        except ImportError as inner_exc:  # pragma: no cover - handled in runtime environments
+            raise ModuleNotFoundError(
+                "HyTools could not be imported. Install the `hytools` package that provides the"
+                " `HyTools` class."
+            ) from inner_exc
+    try:
+        from hytools.topo import calc_topo_coeffs as _calc_topo_coeffs
+        from hytools.brdf import calc_brdf_coeffs as _calc_brdf_coeffs
+        from hytools.glint import set_glint_parameters as _set_glint_parameters
+        from hytools.masks import mask_create as _mask_create
+    except ImportError as exc:  # pragma: no cover - handled in runtime environments
+        raise ModuleNotFoundError(
+            "HyTools ancillary modules could not be imported. Ensure the `hytools` package is"
+            " installed with BRDF/TOPO support."
+        ) from exc
+
+    HyTools = _HyTools  # type: ignore[assignment]
+    calc_topo_coeffs = _calc_topo_coeffs  # type: ignore[assignment]
+    calc_brdf_coeffs = _calc_brdf_coeffs  # type: ignore[assignment]
+    set_glint_parameters = _set_glint_parameters  # type: ignore[assignment]
+    mask_create = _mask_create  # type: ignore[assignment]
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Main correction driver
 # ──────────────────────────────────────────────────────────────────────────────
@@ -55,6 +90,8 @@ def topo_and_brdf_correction(config_file: str):
     """Apply TOPO and BRDF corrections using settings in the (HyTools-ready) config JSON file."""
     with open(config_file, 'r') as f:
         config_dict = json.load(f)
+
+    _import_hytools()
 
     if ray is None:
         raise ModuleNotFoundError(
@@ -226,6 +263,8 @@ apply_brightness_offset_to_envi = apply_offset_to_envi
 
 def export_coeffs(hy_obj, export_dict):
     """Export correction coefficients to JSON."""
+    _import_hytools()
+
     reflectance_file = NEONReflectanceENVIFile.from_filename(Path(hy_obj.file_name))
     for correction in hy_obj.corrections:
         coefficients_file = NEONReflectanceCoefficientsFile.from_components(
@@ -252,6 +291,8 @@ def export_coeffs(hy_obj, export_dict):
 
 def apply_corrections(hy_obj, config_dict):
     """Apply corrections and export corrected ENVI imagery and masks."""
+    _import_hytools()
+
     WriteENVI = get_write_envi()
     header_dict = hy_obj.get_header()
     header_dict['data ignore value'] = hy_obj.no_data
