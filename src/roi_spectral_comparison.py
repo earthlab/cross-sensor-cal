@@ -4,6 +4,8 @@ This module provides helper functions to extract spectral statistics from
 multiple rasters using vector regions of interest (ROIs) and to visualise the
 results.  It is primarily designed for ENVI hyperspectral cubes, but it works
 with any raster that can be opened by :mod:`rasterio`.
+
+Hi
 """
 
 from __future__ import annotations
