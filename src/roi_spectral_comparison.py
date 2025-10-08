@@ -361,32 +361,48 @@ def plot_roi_spectral_comparison(
 
 __all__ = ["extract_roi_spectra", "plot_roi_spectral_comparison", "RoiResult"]
 
-from pathlib import Path
 
-# Define paths to your raster images
-image_paths = [
-    Path("cross-sensor-cal/src/data/Table_mountain_data/HLS_L30_Boulder_09162021.tif"),
-    Path("cross-sensor-cal/src/data/Table_mountain_data/NEON_D10_R10C_DP1.30006.001_L002-1_20210915_directional_resampled_Landsat_8_OLI_envi.img"),
-    Path("cross-sensor-cal/src/data/Table_mountain_data/NEON_D10_R10C_DP1.30006.001_L003-1_20210915_directional_resampled_Landsat_8_OLI_envi.img"),
-]
+def _example_usage() -> None:
+    """Demonstrate the module API when example data are available.
 
-# Define path to your ROI shapefile or GeoJSON
-roi_path = Path("cross-sensor-cal/src/data/Table_mountain_data/ROI_TM_NEON_LST.geojson")
+    The example data are not bundled with the library in every environment, so
+    this helper should only be executed manually.  It lives behind
+    ``if __name__ == "__main__"`` to avoid importing the module triggering data
+    reads that might fail in production contexts (for instance, during test
+    discovery).
+    """
 
-# Run the extraction
-result = extract_roi_spectra(
-    image_paths=image_paths,
-    roi_path=roi_path,
-    label_column="id",        # or None if you don’t have one
-    statistics=("mean", "std"),   # you can include "median" too
-)
+    data_dir = Path(__file__).resolve().parent / "data" / "Table_mountain_data"
+    image_paths = [
+        data_dir / "HLS_L30_Boulder_09162021.tif",
+        data_dir / "NEON_D10_R10C_DP1.30006.001_L002-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
+        data_dir / "NEON_D10_R10C_DP1.30006.001_L003-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
+    ]
+    roi_path = data_dir / "ROI_TM_NEON_LST.geojson"
 
-# Plot and save results
-plots = plot_roi_spectral_comparison(
-    result,
-    statistic="mean",             # choose one of the extracted stats
-    output_dir="spectra_plots",   # directory to save figures
-    show=False                    # change to True to display interactively
-)
+    missing = [path for path in [*image_paths, roi_path] if not path.exists()]
+    if missing:
+        print("Example data missing; skipping demonstration:")
+        for path in missing:
+            print(f" - {path}")
+        return
 
-print("Saved plots:", plots)
+    result = extract_roi_spectra(
+        image_paths=image_paths,
+        roi_path=roi_path,
+        label_column="id",        # or None if you don’t have one
+        statistics=("mean", "std"),   # you can include "median" too
+    )
+
+    plots = plot_roi_spectral_comparison(
+        result,
+        statistic="mean",             # choose one of the extracted stats
+        output_dir="spectra_plots",   # directory to save figures
+        show=False                    # change to True to display interactively
+    )
+
+    print("Saved plots:", plots)
+
+
+if __name__ == "__main__":  # pragma: no cover - convenience example.
+    _example_usage()
