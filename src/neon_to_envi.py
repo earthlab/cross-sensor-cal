@@ -17,7 +17,10 @@ from functools import partial
 from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
 from src.ray_utils import init_ray
 
-import ray
+try:  # pragma: no cover - import guard for optional dependency
+    import ray
+except ModuleNotFoundError:  # pragma: no cover - handled in neon_to_envi
+    ray = None  # type: ignore[assignment]
 
 # --- Utility functions ---
 def get_all_keys(group):
@@ -186,6 +189,11 @@ def export_anc(hy_obj, output_dir):
 def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata_override: dict = None):
     if not images:
         raise ValueError("No input images provided to neon_to_envi().")
+
+    if ray is None:
+        raise ModuleNotFoundError(
+            "ray is required for parallel NEON conversion. Install it with `pip install ray`."
+        )
 
     num_cpus = init_ray(len(images))
     print(f"🚀 Using {num_cpus} CPUs for conversion.")

@@ -5,7 +5,10 @@ from typing import Iterable, Optional
 import glob
 import os
 
-import ray
+try:  # pragma: no cover - optional dependency guard
+    import ray
+except ModuleNotFoundError:  # pragma: no cover - handled in callers
+    ray = None  # type: ignore[assignment]
 import numpy as np
 from hytools import HyTools
 from hytools.topo import calc_topo_coeffs
@@ -38,6 +41,11 @@ def topo_and_brdf_correction(config_file: str):
     """Apply TOPO and BRDF corrections using settings in the (HyTools-ready) config JSON file."""
     with open(config_file, 'r') as f:
         config_dict = json.load(f)
+
+    if ray is None:
+        raise ModuleNotFoundError(
+            "ray is required for BRDF/TOPO correction workflows. Install it with `pip install ray`."
+        )
 
     images = config_dict["input_files"]
     if len(images) != 1:
