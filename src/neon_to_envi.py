@@ -7,7 +7,6 @@ from h5py import Dataset
 # Suppress Ray's /dev/shm fallback warning to keep conversion logs clean.
 os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
 
-import ray
 import numpy as np
 from pathlib import Path
 import hytools as ht
@@ -15,6 +14,9 @@ from hytools.io.envi import WriteENVI
 import re
 from functools import partial
 from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
+from src.ray_utils import init_ray
+
+import ray
 
 # --- Utility functions ---
 def get_all_keys(group):
@@ -179,9 +181,11 @@ def export_anc(hy_obj, output_dir):
 
 # --- Main driver ---
 def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata_override: dict = None):
-    if ray.is_initialized():
-        ray.shutdown()
-    ray.init(num_cpus=len(images))
+    if not images:
+        raise ValueError("No input images provided to neon_to_envi().")
+
+    num_cpus = init_ray(len(images))
+    print(f"🚀 Using {num_cpus} CPUs for conversion.")
 
     hytool = ray.remote(ht.HyTools)
     actors = [hytool.remote() for _ in images]

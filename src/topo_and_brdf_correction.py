@@ -23,6 +23,7 @@ from src.file_types import (
     NEONReflectanceBRDFMaskENVIFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile,  # imported in case you later need HDR
 )
+from src.ray_utils import init_ray
 
 warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
@@ -44,10 +45,8 @@ def topo_and_brdf_correction(config_file: str):
     image = images[0]
     reflectance_file = NEONReflectanceENVIFile.from_filename(Path(image))
 
-    if ray.is_initialized():
-        ray.shutdown()
-    print(f"🚀 Using {config_dict['num_cpus']} CPUs for correction.")
-    ray.init(num_cpus=config_dict['num_cpus'])
+    num_cpus = init_ray(config_dict.get('num_cpus'))
+    print(f"🚀 Using {num_cpus} CPUs for correction.")
 
     HyToolsActor = ray.remote(HyTools)
     actors = [HyToolsActor.remote() for _ in images]
