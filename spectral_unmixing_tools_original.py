@@ -15,7 +15,10 @@ import numpy as np
 import pandas as pd
 import rasterio
 import requests
-import ray
+try:  # pragma: no cover - optional dependency guard
+    import ray
+except ModuleNotFoundError:  # pragma: no cover - handled when features are used
+    ray = None  # type: ignore[assignment]
 from rasterio.features import rasterize
 from rasterio.mask import mask
 from rasterio.plot import show

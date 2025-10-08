@@ -7,7 +7,10 @@ from pathlib import Path
 # noisy log output while keeping the default behavior intact.
 os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
 
-import ray
+try:  # pragma: no cover - optional dependency guard
+    import ray
+except ModuleNotFoundError:  # pragma: no cover - handled at runtime
+    ray = None  # type: ignore[assignment]
 import hytools as ht
 
 # Add the repo root and src to sys.path
@@ -42,6 +45,11 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False):
     Convert NEON AOP H5 files to ENVI format and optionally export ancillary data.
     """
     print("🚀 Running updated neon_to_envi()...")
+
+    if ray is None:
+        raise ModuleNotFoundError(
+            "ray is required for parallel NEON conversion. Install it with `pip install ray`."
+        )
 
     # Shut down Ray if already running
     if ray.is_initialized():
