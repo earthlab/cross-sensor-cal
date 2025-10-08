@@ -15,7 +15,12 @@ from typing import Iterable, TypeVar
 T = TypeVar("T")
 
 
-def _load_attribute(module_paths: Iterable[str], attribute: str) -> T:
+def _load_attribute(
+    module_paths: Iterable[str],
+    attribute: str,
+    *,
+    error_hint: str,
+) -> T:
     """Attempt to load ``attribute`` from the first importable module.
 
     Parameters
@@ -52,10 +57,6 @@ def _load_attribute(module_paths: Iterable[str], attribute: str) -> T:
             f"Module '{path}' does not provide attribute '{attribute}'."
         )
 
-    error_hint = (
-        "Could not import 'WriteENVI' from HyTools. Ensure the 'hytools' package "
-        "is installed and up-to-date."
-    )
     raise ModuleNotFoundError(error_hint) from last_exception
 
 
@@ -67,4 +68,30 @@ def get_write_envi() -> T:
         "hytools.io",
         "hytools.envi",
     )
-    return _load_attribute(candidate_modules, "WriteENVI")
+    return _load_attribute(
+        candidate_modules,
+        "WriteENVI",
+        error_hint=(
+            "Could not import 'WriteENVI' from HyTools. Ensure the 'hytools' package "
+            "is installed and up-to-date."
+        ),
+    )
+
+
+def get_hytools_class() -> T:
+    """Return the ``HyTools`` class across supported package layouts."""
+
+    candidate_modules = (
+        "hytools",
+        "hytools.hytools",
+        "hytools.core",
+        "hytools.core.hytools",
+    )
+    return _load_attribute(
+        candidate_modules,
+        "HyTools",
+        error_hint=(
+            "Could not import the 'HyTools' class. Ensure the installed 'hytools' package "
+            "exposes the HyTools API."
+        ),
+    )

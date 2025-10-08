@@ -9,9 +9,7 @@ os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
 
 import numpy as np
 from pathlib import Path
-import hytools as ht
-
-from src.hytools_compat import get_write_envi
+from src.hytools_compat import get_write_envi, get_hytools_class
 import re
 from functools import partial
 from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
@@ -198,7 +196,8 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata
     num_cpus = init_ray(len(images))
     print(f"🚀 Using {num_cpus} CPUs for conversion.")
 
-    hytool = ray.remote(ht.HyTools)
+    HyTools = get_hytools_class()
+    hytool = ray.remote(HyTools)
     actors = [hytool.remote() for _ in images]
 
     _ = ray.get([
