@@ -10,7 +10,21 @@ try:  # pragma: no cover - optional dependency guard
 except ModuleNotFoundError:  # pragma: no cover - handled in callers
     ray = None  # type: ignore[assignment]
 import numpy as np
-from hytools import HyTools
+
+try:  # pragma: no cover - import layout differs across hytools releases
+    from hytools import HyTools  # type: ignore[attr-defined]
+except ImportError as exc:  # pragma: no cover - handled in runtime environments
+    try:
+        from hytools.hytools import HyTools  # type: ignore[attr-defined]
+    except ImportError as inner_exc:  # pragma: no cover - handled in runtime environments
+        raise ModuleNotFoundError(
+            "HyTools could not be imported. Install the `hytools` package that provides the"
+            " `HyTools` class."
+        ) from inner_exc
+    else:
+        HyTools = HyTools  # type: ignore[assignment]
+else:
+    HyTools = HyTools  # type: ignore[assignment]
 from hytools.topo import calc_topo_coeffs
 from hytools.brdf import calc_brdf_coeffs
 from hytools.glint import set_glint_parameters
