@@ -9,6 +9,7 @@ known locations before surfacing a helpful error message.
 from __future__ import annotations
 
 from importlib import import_module
+from pkgutil import walk_packages
 from types import ModuleType
 from typing import Iterable, TypeVar
 
@@ -43,6 +44,8 @@ def _load_attribute(
     """
 
     last_exception: Exception | None = None
+    imported_modules: list[ModuleType] = []
+
     for path in module_paths:
         try:
             module: ModuleType = import_module(path)
@@ -50,12 +53,44 @@ def _load_attribute(
             last_exception = exc
             continue
 
+        imported_modules.append(module)
+
         if hasattr(module, attribute):
             return getattr(module, attribute)
 
         last_exception = AttributeError(
             f"Module '{path}' does not provide attribute '{attribute}'."
         )
+
+    # If direct imports failed, search any imported package for the attribute. This
+    # accounts for HyTools reorganisations where the public class may live in a
+    # nested module that is not part of our historical candidate list.
+    seen_packages: set[str] = set()
+    for module in imported_modules:
+        package_name = module.__name__.split(".")[0]
+        if package_name in seen_packages:
+            continue
+        seen_packages.add(package_name)
+
+        try:
+            package = import_module(package_name)
+        except ModuleNotFoundError:
+            continue
+
+        if hasattr(package, attribute):
+            return getattr(package, attribute)
+
+        if not hasattr(package, "__path__"):
+            continue
+
+        for module_info in walk_packages(package.__path__, package.__name__ + "."):
+            try:
+                candidate = import_module(module_info.name)
+            except ModuleNotFoundError:
+                continue
+
+            if hasattr(candidate, attribute):
+                return getattr(candidate, attribute)
 
     raise ModuleNotFoundError(error_hint) from last_exception
 
