@@ -10,7 +10,8 @@ os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
 import numpy as np
 from pathlib import Path
 import hytools as ht
-from hytools.io.envi import WriteENVI
+
+from src.hytools_compat import get_write_envi
 import re
 from functools import partial
 from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
@@ -103,6 +104,7 @@ def neon_to_envi_task(hy_obj, output_dir, metadata=None):
 
     # Process and write
     hy_obj.load_data()
+    WriteENVI = get_write_envi()
     writer = WriteENVI(envi_file.file_path, hy_obj.get_header())
     iterator = hy_obj.iterate(by='chunk')
     while not iterator.complete:
@@ -123,6 +125,7 @@ def find_reflectance_metadata_group(h5_file):
     raise ValueError("Could not find Reflectance/Metadata group.")
 
 def export_anc(hy_obj, output_dir):
+    WriteENVI = get_write_envi()
     neon_file = NEONReflectanceFile.from_filename(Path(hy_obj.file_name))
     with h5py.File(hy_obj.file_name, 'r') as h5_file:
         try:
