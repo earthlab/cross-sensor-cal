@@ -1,6 +1,15 @@
+"""Spectral resampling utilities for NEON hyperspectral products.
+
+References:
+    Chander, G., Markham, B., & Helder, D. (2009). Remote Sensing of Environment.
+    Teillet, P. et al. (2007). Remote Sensing of Environment.
+    Claverie, M. et al. (2018). Harmonized Landsat and Sentinel-2 (HLS) framework.
+"""
+
 from pathlib import Path
 import numpy as np
 import json
+from typing import Dict, Iterable, Optional, Tuple
 from spectral import open_image
 from spectral.io import envi
 from scipy.stats import norm
@@ -13,13 +22,6 @@ from src.file_types import (
 )
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
-
-
-def gaussian_rsr(wavelengths, center, fwhm):
-    """Generate Gaussian Relative Spectral Response (RSR)"""
-    sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
-    rsr = norm.pdf(wavelengths, loc=center, scale=sigma)
-    return rsr / np.sum(rsr)
 
 
 def _parse_wavelengths(raw_wavelengths):
@@ -59,11 +61,187 @@ def _parse_wavelengths(raw_wavelengths):
     return cleaned
 
 
-def resample(input_dir: Path):
-    """Perform convolutional resampling for BRDF+TOPO corrected hyperspectral data"""
-    print(f"🚀 Starting convolutional resample for {input_dir}")
-    brdf_corrected_hdr_files = NEONReflectanceBRDFCorrectedENVIHDRFile.find_in_directory(input_dir)
+def _ensure_nm_and_sort(wavelengths: Iterable[float], cube: Optional[np.ndarray] = None
+                        ) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray]:
+    """Convert wavelength units to nm and enforce ascending order."""
 
+    wl = np.asarray(wavelengths, dtype=float).copy()
+    if wl.size == 0:
+        return wl, cube, np.array([], dtype=int)
+
+    if np.nanmax(wl) < 20.0:
+        wl *= 1000.0
+
+    order = np.argsort(wl)
+    wl_sorted = wl[order]
+
+    if cube is None:
+        return wl_sorted, None, order
+
+    return wl_sorted, cube[..., order], order
+
+
+def _nearest_or_linear_sample(
+    cube: np.ndarray,
+    wl_nm: np.ndarray,
+    target_centers_nm: Iterable[float],
+    mode: str = "nearest",
+) -> np.ndarray:
+    """Sample nearest or linearly interpolated spectra for each target wavelength."""
+
+    if mode not in {"nearest", "linear"}:
+        raise ValueError(f"Unsupported sampling mode: {mode}")
+
+    rows, cols, in_bands = cube.shape
+    centers = np.asarray(target_centers_nm, dtype=float)
+    if np.nanmax(centers) < 20.0:
+        centers = centers * 1000.0
+
+    out = np.empty((rows, cols, centers.size), dtype=cube.dtype)
+
+    if mode == "nearest":
+        # [B_out]
+        idx = np.abs(wl_nm[None, :] - centers[:, None]).argmin(axis=1)
+        out = cube[:, :, idx]
+        return out.astype(np.float32, copy=False)
+
+    # Linear interpolation along the spectral axis
+    for i, center in enumerate(centers):
+        j = int(np.searchsorted(wl_nm, center, side="left"))
+        if j <= 0:
+            out[:, :, i] = cube[:, :, 0]
+        elif j >= in_bands:
+            out[:, :, i] = cube[:, :, -1]
+        else:
+            left = j - 1
+            wl_left = wl_nm[left]
+            wl_right = wl_nm[j]
+            weight = (center - wl_left) / (wl_right - wl_left)
+            out[:, :, i] = (1 - weight) * cube[:, :, left] + weight * cube[:, :, j]
+
+    return out.astype(np.float32, copy=False)
+
+
+def _gaussian_rsr_delta_norm(wl_nm: np.ndarray, center_nm: float, fwhm_nm: float) -> np.ndarray:
+    """Create a Δλ-normalised Gaussian spectral response."""
+
+    sigma = fwhm_nm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    srf = norm.pdf(wl_nm, loc=center_nm, scale=sigma)
+    delta_lambda = np.gradient(wl_nm)
+    denom = np.sum(srf * delta_lambda)
+    if denom > 0:
+        return srf / denom
+    return srf
+
+
+def _build_W_from_gaussians(
+    wl_nm: np.ndarray,
+    centers_nm: Iterable[float],
+    fwhms_nm: Iterable[float],
+) -> np.ndarray:
+    """Construct weighting matrix from Gaussian SRFs (Δλ-normalised)."""
+
+    centers = np.asarray(centers_nm, dtype=float)
+    fwhms = np.asarray(fwhms_nm, dtype=float)
+
+    if centers.size == 0:
+        return np.zeros((0, wl_nm.size), dtype=float)
+
+    if np.nanmax(centers) < 20.0:
+        centers = centers * 1000.0
+    if np.nanmax(fwhms) < 20.0:
+        fwhms = fwhms * 1000.0
+
+    rows = [_gaussian_rsr_delta_norm(wl_nm, c, f) for c, f in zip(centers, fwhms)]
+    return np.vstack(rows) if rows else np.zeros((0, wl_nm.size), dtype=float)
+
+
+def _build_W_from_tabulated_srfs(wl_nm: np.ndarray, srfs_dict: Dict[str, Dict[str, Iterable[float]]]) -> np.ndarray:
+    """Construct weighting matrix using tabulated SRFs and Δλ normalisation."""
+
+    rows = []
+    for spec in srfs_dict.values():
+        lam = np.asarray(spec["wavelengths"], dtype=float)
+        rsp = np.asarray(spec["response"], dtype=float)
+
+        if lam.size == 0:
+            rows.append(np.zeros_like(wl_nm, dtype=float))
+            continue
+
+        if np.nanmax(lam) < 20.0:
+            lam = lam * 1000.0
+
+        srf = np.interp(wl_nm, lam, rsp, left=0.0, right=0.0)
+        delta_lambda = np.gradient(wl_nm)
+        denom = np.sum(srf * delta_lambda)
+        rows.append(srf / denom if denom > 0 else srf)
+
+    return np.vstack(rows) if rows else np.zeros((0, wl_nm.size), dtype=float)
+
+
+def _apply_convolution_with_renorm(
+    cube: np.ndarray,
+    weights: np.ndarray,
+    nodata: Optional[float] = None,
+) -> np.ndarray:
+    """Apply spectral convolution with per-pixel renormalisation."""
+
+    rows, cols, bands = cube.shape
+    flat = cube.reshape(-1, bands).astype(np.float64)
+
+    if nodata is not None:
+        flat = np.where(flat == nodata, np.nan, flat)
+
+    valid = (~np.isnan(flat)).astype(np.float64)
+    data = np.nan_to_num(flat, nan=0.0)
+
+    numer = data @ weights.T
+    denom = valid @ weights.T
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        result = numer / denom
+
+    return result.reshape(rows, cols, -1).astype(np.float32)
+
+
+def _legacy_gaussian_weights(wl_nm: np.ndarray, centers_nm: np.ndarray, fwhms_nm: np.ndarray) -> np.ndarray:
+    """Reproduce legacy Gaussian weights normalised by sum of weights."""
+
+    weights = []
+    for center, fwhm in zip(centers_nm, fwhms_nm):
+        sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
+        srf = norm.pdf(wl_nm, loc=center, scale=sigma)
+        total = np.sum(srf)
+        weights.append(srf / total if total > 0 else srf)
+    return np.vstack(weights) if weights else np.zeros((0, wl_nm.size), dtype=float)
+
+
+def resample(
+    input_dir: Path,
+    method: str = "convolution",
+    straight_mode: str = "nearest",
+):
+    """Perform spectral resampling using configurable response models.
+
+    Args:
+        input_dir: Directory containing BRDF+TOPO corrected hyperspectral imagery.
+        method: Resampling method. "convolution" performs Δλ-normalised SRF integration
+            with per-pixel renormalisation (preferred). "gaussian" preserves legacy
+            Gaussian-weighted sums. "straight" samples the nearest (or linearly
+            interpolated) band centres without SRFs.
+        straight_mode: Sampling mode for the "straight" method ("nearest" or "linear").
+    """
+
+    method = method.lower()
+    if method not in {"straight", "gaussian", "convolution"}:
+        raise ValueError(f"Unsupported resampling method: {method}")
+
+    straight_mode = straight_mode.lower()
+    if straight_mode not in {"nearest", "linear"}:
+        raise ValueError(f"Unsupported straight sampling mode: {straight_mode}")
+
+    print(f"🚀 Starting {method} resample for {input_dir}")
+    brdf_corrected_hdr_files = NEONReflectanceBRDFCorrectedENVIHDRFile.find_in_directory(input_dir)
 
     for hdr_file in brdf_corrected_hdr_files:
         if "mask" in (hdr_file.suffix or "").lower():
@@ -72,7 +250,7 @@ def resample(input_dir: Path):
         try:
             print(f"📂 Opening: {hdr_file.file_path}")
             img = open_image(hdr_file.file_path)
-            hyperspectral_data = img.load()
+            hyperspectral_data = np.asarray(img.load()).astype(np.float32, copy=False)
         except Exception as e:
             print(f"❌ ERROR: Could not load {hdr_file.file_path}: {e}")
             continue
@@ -88,16 +266,40 @@ def resample(input_dir: Path):
             print("❌ ERROR: No wavelengths found.")
             continue
 
+        wl_nm, hyperspectral_data, _ = _ensure_nm_and_sort(wavelengths, cube=hyperspectral_data)
+
         rows, cols, bands = hyperspectral_data.shape
-        if len(wavelengths) != bands:
-            print(f"❌ ERROR: Band mismatch ({len(wavelengths)} wavelengths vs {bands} bands).")
+        if len(wl_nm) != bands:
+            print(f"❌ ERROR: Band mismatch ({len(wl_nm)} wavelengths vs {bands} bands).")
             continue
+
+        nodata_value = header.get('data ignore value')
+        nodata_float: Optional[float] = None
+        if nodata_value is not None:
+            if isinstance(nodata_value, (list, tuple)) and nodata_value:
+                try:
+                    nodata_float = float(nodata_value[0])
+                except (TypeError, ValueError):
+                    nodata_float = None
+            else:
+                try:
+                    nodata_float = float(nodata_value)
+                except (TypeError, ValueError):
+                    nodata_float = None
+
+        if nodata_float is not None:
+            hyperspectral_data = np.where(
+                np.isclose(hyperspectral_data, nodata_float),
+                np.nan,
+                hyperspectral_data,
+            )
 
         with open(os.path.join(PROJ_DIR, 'data', 'landsat_band_parameters.json'), 'r') as f:
             all_sensor_params = json.load(f)
 
         for sensor_name, sensor_params in all_sensor_params.items():
-            resampled_dir = hdr_file.directory / f"Convolution_Reflectance_Resample_{sensor_name.replace(' ', '_')}"
+            dir_prefix = f"{method.capitalize()}_Reflectance_Resample"
+            resampled_dir = hdr_file.directory / f"{dir_prefix}_{sensor_name.replace(' ', '_')}"
             os.makedirs(resampled_dir, exist_ok=True)
 
             # Build output file paths using corrected naming conventions
@@ -129,20 +331,54 @@ def resample(input_dir: Path):
                 print(f"⚠️ Skipping resampling for {sensor_name}: files already exist.")
                 continue
 
-            # Perform convolutional resampling
-            band_centers = np.array(sensor_params["wavelengths"])
-            band_fwhms = np.array(sensor_params["fwhms"])
-            rsr_matrix = np.array([gaussian_rsr(wavelengths, c, f) for c, f in zip(band_centers, band_fwhms)])
-            n_out_bands = len(band_centers)
-            resampled = np.zeros((rows, cols, n_out_bands), dtype=np.float32)
+            centers_nm = np.asarray(sensor_params["wavelengths"], dtype=float)
+            fwhms_nm = np.asarray(sensor_params.get("fwhms", []), dtype=float)
 
-            for i in range(n_out_bands):
-                weights = rsr_matrix[i]
-                weighted = hyperspectral_data * weights[np.newaxis, np.newaxis, :]
-                resampled[:, :, i] = np.sum(weighted, axis=2)
+            if centers_nm.size and np.nanmax(centers_nm) < 20.0:
+                centers_nm = centers_nm * 1000.0
+            if fwhms_nm.size and np.nanmax(fwhms_nm) < 20.0:
+                fwhms_nm = fwhms_nm * 1000.0
 
+            if method == "straight":
+                resampled = _nearest_or_linear_sample(
+                    hyperspectral_data,
+                    wl_nm,
+                    centers_nm,
+                    mode=straight_mode,
+                )
+
+            elif method == "gaussian":
+                legacy_weights = _legacy_gaussian_weights(wl_nm, centers_nm, fwhms_nm)
+                flat = np.nan_to_num(hyperspectral_data, nan=0.0).reshape(-1, bands)
+                resampled = flat @ legacy_weights.T
+                resampled = resampled.reshape(rows, cols, -1).astype(np.float32)
+
+            else:  # convolution
+                srfs_filename = sensor_name.replace(' ', '_').lower() + '_srfs.json'
+                srfs_path = os.path.join(PROJ_DIR, 'data', srfs_filename)
+                if os.path.exists(srfs_path):
+                    with open(srfs_path, 'r') as srfs_file:
+                        srfs_dict: Dict[str, Dict[str, Iterable[float]]] = json.load(srfs_file)
+                    weights = _build_W_from_tabulated_srfs(wl_nm, srfs_dict)
+                else:
+                    weights = _build_W_from_gaussians(wl_nm, centers_nm, fwhms_nm)
+
+                resampled = _apply_convolution_with_renorm(
+                    hyperspectral_data,
+                    weights,
+                    nodata=None if nodata_float is None else nodata_float,
+                )
+
+            if nodata_float is not None:
+                resampled_to_save = np.where(np.isnan(resampled), nodata_float, resampled)
+            else:
+                resampled_to_save = resampled
+
+            resampled_to_save = resampled_to_save.astype(np.float32, copy=False)
+
+            n_out_bands = resampled.shape[2]
             new_metadata = {
-                'description': f'Resampled hyperspectral image using {sensor_name} RSR',
+                'description': f'Resampled hyperspectral image using {sensor_name} ({method} method)',
                 'samples': cols,
                 'lines': rows,
                 'bands': n_out_bands,
@@ -151,11 +387,11 @@ def resample(input_dir: Path):
                 'byte order': 0,
                 'sensor type': sensor_name,
                 'wavelength units': 'nanometers',
-                'wavelength': [str(w) for w in band_centers],
+                'wavelength': [str(w) for w in centers_nm],
                 'map info': header.get('map info'),
                 'coordinate system string': header.get('coordinate system string'),
-                'data ignore value': header.get('data ignore value'),
+                'data ignore value': nodata_value,
             }
 
-            envi.save_image(resampled_hdr_file.file_path, resampled, metadata=new_metadata, force=True)
+            envi.save_image(resampled_hdr_file.file_path, resampled_to_save, metadata=new_metadata, force=True)
             print(f"✅ Resampled file saved: {resampled_hdr_file.file_path}")
