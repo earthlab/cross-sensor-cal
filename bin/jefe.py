@@ -467,9 +467,15 @@ def go_forth_and_multiply(
     else:
         logging.warning("❌ No configuration JSON files found. Skipping corrections.")
 
-    if resample_method == "convolution":
+    # --- Step 5/5: Resampling/harmonization ---
+    method_norm = (resample_method or "convolution").lower()
+    if method_norm in {"resample", "legacy"}:
         if verbose:
-            print("🔁 Step 5/5 Resampling and translating data (convolutional)...")
+            print("🔁 Step 5/5 Resampling (legacy translate_to_other_sensors)...")
+        resample_translation_to_other_sensors(base_path)
+    elif method_norm in {"convolution", "gaussian", "straight"}:
+        if verbose:
+            print(f"🔁 Step 5/5 Resampling data ({method_norm})...")
         corrected_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
         if not corrected_files:
             logging.warning("❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps.")
@@ -495,7 +501,12 @@ def go_forth_and_multiply(
                     _tick_for_path(corrected_file.path)
                     continue
                 try:
-                    convolution_resample(corrected_file.directory)
+                    # Prefer new signature with method=...; fall back if not available
+                    try:
+                        convolution_resample(corrected_file.directory, method=method_norm)
+                    except TypeError:
+                        # Older resampler without 'method' kwarg—call as before
+                        convolution_resample(corrected_file.directory)
                 except Exception as exc:
                     logging.error(
                         "⚠️  Resample failed for %s: %r%s",
@@ -505,9 +516,7 @@ def go_forth_and_multiply(
                     )
                 _tick_for_path(corrected_file.path)
         if verbose:
-            print("✅ Resampling and translation (convolution) complete.")
-    elif resample_method == "resample":
-        resample_translation_to_other_sensors(base_path)
+            print(f"✅ Resampling complete ({method_norm}).")
     else:
         logging.warning("Unknown resample_method=%s (skipping Step 5).", resample_method)
 
@@ -701,6 +710,17 @@ def parse_args():
     parser.add_argument("--no-sync", action="store_true",
                         help="Generate file list but do not sync files to iRODS")
     parser.add_argument(
+        "--resample-method",
+        type=str,
+        choices=("convolution", "gaussian", "straight", "legacy", "resample"),
+        default="convolution",
+        help="Resampling strategy for Step 5. "
+             "'convolution' = Δλ-normalized SRF integration (recommended); "
+             "'gaussian' = Gaussian SRFs; "
+             "'straight' = nearest/linear band sampling; "
+             "'legacy'/'resample' = old translate_to_other_sensors path.",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Emit detailed per-step logs instead of compact progress bars.",
@@ -732,6 +752,7 @@ def main():
         sync_files=not args.no_sync,
         brightness_offset=args.brightness_offset,
         verbose=args.verbose,
+        resample_method=args.resample_method,
     )
 
 
