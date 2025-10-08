@@ -84,8 +84,10 @@ def get_hytools_class() -> T:
     candidate_modules = (
         "hytools",
         "hytools.hytools",
+        "hytools.base",
         "hytools.core",
         "hytools.core.hytools",
+        "hytools.core.base",
     )
     return _load_attribute(
         candidate_modules,
