@@ -97,3 +97,49 @@ def test_get_write_envi_discovers_nested_module(hytools_package):
 
     assert writer.file_path == "output.bsq"
     assert writer.header == {"data type": 4}
+
+
+def test_get_hytools_class_discovers_hytools_like_class(tmp_path, monkeypatch):
+    package_dir = tmp_path / "hytools"
+    package_dir.mkdir()
+
+    (package_dir / "__init__.py").write_text("\n")
+    (package_dir / "reader.py").write_text(
+        "class HyToolsReader:\n"
+        "    def __init__(self):\n"
+        "        self.file_name = ''\n"
+        "\n"
+        "    def read_file(self, file_name, file_type):\n"
+        "        self.file_name = file_name\n"
+        "        self._header = {'file type': file_type}\n"
+        "\n"
+        "    def get_header(self):\n"
+        "        return getattr(self, '_header', {})\n"
+        "\n"
+        "    def iterate(self, **kwargs):\n"
+        "        raise NotImplementedError\n"
+    )
+
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    for name in list(sys.modules):
+        if name == "hytools" or name.startswith("hytools."):
+            sys.modules.pop(name)
+
+    hytools_compat = importlib.reload(importlib.import_module("hytools_compat"))
+
+    HyTools = hytools_compat.get_hytools_class()
+
+    assert HyTools.__name__ == "HyToolsReader"
+
+
+def test_get_hytools_class_env_override(hytools_package, monkeypatch):
+    monkeypatch.setenv("CROSS_SENSOR_CAL_HYTOOLS_CLASS", "hytools.custom.toolbox:HyTools")
+
+    hytools_compat = importlib.reload(importlib.import_module("hytools_compat"))
+
+    HyTools = hytools_compat.get_hytools_class()
+
+    from hytools.custom.toolbox import HyTools as FixtureHyTools  # type: ignore
+
+    assert HyTools is FixtureHyTools
