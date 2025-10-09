@@ -13,6 +13,8 @@ from pkgutil import walk_packages
 from types import ModuleType
 from typing import Iterable, TypeVar
 
+from cross_sensor_cal.third_party.hytools_api import HyToolsNotAvailable, import_hytools
+
 T = TypeVar("T")
 
 
@@ -42,6 +44,11 @@ def _load_attribute(
         If none of the candidate modules can be imported or the attribute is
         missing from the imported module.
     """
+
+    try:
+        import_hytools()
+    except HyToolsNotAvailable as exc:
+        raise ModuleNotFoundError(str(exc)) from exc
 
     last_exception: Exception | None = None
     imported_modules: list[ModuleType] = []
@@ -103,8 +110,9 @@ def _load_attribute(
     if missing_packages:
         install_hint = (
             " None of the expected HyTools modules could be imported. "
-            "Install HyTools (for example `conda install -c conda-forge hytools` "
-            "or `pip install hytools`) and ensure it is available on the Python path."
+            "Install HyTools (for example `conda install -c conda-forge hytools`) or reuse the CI "
+            "pins (`pip install -c constraints/lock-hytools.txt hy-tools==1.6.1 numpy==1.26.4 h5py==3.10.0`) "
+            "and ensure it is available on the Python path."
         )
 
     raise ModuleNotFoundError(error_hint + install_hint) from last_exception
@@ -145,5 +153,73 @@ def get_hytools_class() -> T:
         error_hint=(
             "Could not import the 'HyTools' class. Ensure the installed 'hytools' package "
             "exposes the HyTools API."
+        ),
+    )
+
+
+def get_calc_topo_coeffs() -> T:
+    """Return HyTools' ``calc_topo_coeffs`` helper."""
+
+    candidate_modules = (
+        "hytools.topo",
+        "hytools.core.topo",
+    )
+    return _load_attribute(
+        candidate_modules,
+        "calc_topo_coeffs",
+        error_hint=(
+            "Could not import 'calc_topo_coeffs' from HyTools. Ensure HyTools is installed "
+            "with TOPO support."
+        ),
+    )
+
+
+def get_calc_brdf_coeffs() -> T:
+    """Return HyTools' ``calc_brdf_coeffs`` helper."""
+
+    candidate_modules = (
+        "hytools.brdf",
+        "hytools.core.brdf",
+    )
+    return _load_attribute(
+        candidate_modules,
+        "calc_brdf_coeffs",
+        error_hint=(
+            "Could not import 'calc_brdf_coeffs' from HyTools. Ensure HyTools is installed "
+            "with BRDF support."
+        ),
+    )
+
+
+def get_set_glint_parameters() -> T:
+    """Return HyTools' ``set_glint_parameters`` helper."""
+
+    candidate_modules = (
+        "hytools.glint",
+        "hytools.core.glint",
+    )
+    return _load_attribute(
+        candidate_modules,
+        "set_glint_parameters",
+        error_hint=(
+            "Could not import 'set_glint_parameters' from HyTools. Ensure HyTools is "
+            "installed with glint correction support."
+        ),
+    )
+
+
+def get_mask_create() -> T:
+    """Return HyTools' ``mask_create`` helper."""
+
+    candidate_modules = (
+        "hytools.masks",
+        "hytools.core.masks",
+    )
+    return _load_attribute(
+        candidate_modules,
+        "mask_create",
+        error_hint=(
+            "Could not import 'mask_create' from HyTools. Ensure HyTools is installed "
+            "with masking utilities."
         ),
     )

@@ -1,15 +1,26 @@
+import glob
 import json
+import os
 import warnings
 from pathlib import Path
 from typing import Iterable, Optional
-import glob
-import os
 
 try:  # pragma: no cover - optional dependency guard
     import ray
 except ModuleNotFoundError:  # pragma: no cover - handled in callers
     ray = None  # type: ignore[assignment]
 import numpy as np
+
+from cross_sensor_cal.third_party.hytools_api import import_hytools
+from cross_sensor_cal.validations.preflight import validate_inputs
+from src.hytools_compat import (
+    get_calc_brdf_coeffs,
+    get_calc_topo_coeffs,
+    get_hytools_class,
+    get_mask_create,
+    get_set_glint_parameters,
+    get_write_envi,
+)
 
 # HyTools is an optional dependency. Import lazily so that other utilities in this module
 # remain usable even when the package is not installed.  This mirrors the runtime behaviour
@@ -19,8 +30,6 @@ calc_topo_coeffs = None  # type: ignore[assignment]
 calc_brdf_coeffs = None  # type: ignore[assignment]
 set_glint_parameters = None  # type: ignore[assignment]
 mask_create = None  # type: ignore[assignment]
-
-from src.hytools_compat import get_write_envi
 
 from src.file_types import (
     NEONReflectanceENVIFile,
@@ -54,32 +63,31 @@ def _import_hytools() -> None:
         # Already imported in the current process.
         return
 
-    try:  # pragma: no cover - import layout differs across hytools releases
-        from hytools import HyTools as _HyTools  # type: ignore[attr-defined]
-    except ImportError as exc:  # pragma: no cover - handled in runtime environments
-        try:
-            from hytools.hytools import HyTools as _HyTools  # type: ignore[attr-defined]
-        except ImportError as inner_exc:  # pragma: no cover - handled in runtime environments
-            raise ModuleNotFoundError(
-                "HyTools could not be imported. Install the `hytools` package that provides the"
-                " `HyTools` class."
-            ) from inner_exc
-    try:
-        from hytools.topo import calc_topo_coeffs as _calc_topo_coeffs
-        from hytools.brdf import calc_brdf_coeffs as _calc_brdf_coeffs
-        from hytools.glint import set_glint_parameters as _set_glint_parameters
-        from hytools.masks import mask_create as _mask_create
-    except ImportError as exc:  # pragma: no cover - handled in runtime environments
-        raise ModuleNotFoundError(
-            "HyTools ancillary modules could not be imported. Ensure the `hytools` package is"
-            " installed with BRDF/TOPO support."
-        ) from exc
+    import_hytools()
 
-    HyTools = _HyTools  # type: ignore[assignment]
-    calc_topo_coeffs = _calc_topo_coeffs  # type: ignore[assignment]
-    calc_brdf_coeffs = _calc_brdf_coeffs  # type: ignore[assignment]
-    set_glint_parameters = _set_glint_parameters  # type: ignore[assignment]
-    mask_create = _mask_create  # type: ignore[assignment]
+    HyTools = get_hytools_class()  # type: ignore[assignment]
+    calc_topo_coeffs = get_calc_topo_coeffs()  # type: ignore[assignment]
+    calc_brdf_coeffs = get_calc_brdf_coeffs()  # type: ignore[assignment]
+    set_glint_parameters = get_set_glint_parameters()  # type: ignore[assignment]
+    mask_create = get_mask_create()  # type: ignore[assignment]
+
+
+def _resolve_ancillary_paths(mapping: dict[str, object]) -> dict[str, Path]:
+    """Extract ancillary file paths from HyTools config mapping."""
+
+    resolved: dict[str, Path] = {}
+    for key, value in mapping.items():
+        candidate: object
+        if isinstance(value, (list, tuple)) and value:
+            candidate = value[0]
+        else:
+            candidate = value
+
+        if not isinstance(candidate, (str, Path)):
+            continue
+        resolved[key] = Path(candidate)
+
+    return resolved
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -104,6 +112,11 @@ def topo_and_brdf_correction(config_file: str):
 
     image = images[0]
     reflectance_file = NEONReflectanceENVIFile.from_filename(Path(image))
+
+    ancillary_config = config_dict.get("anc_files", {})
+    ancillary_mapping = ancillary_config.get(str(image), {}) if isinstance(ancillary_config, dict) else {}
+    resolved_ancillary = _resolve_ancillary_paths(dict(ancillary_mapping)) if isinstance(ancillary_mapping, dict) else {}
+    validate_inputs(Path(image), resolved_ancillary, required_keys=resolved_ancillary.keys())
 
     num_cpus = init_ray(config_dict.get('num_cpus'))
     print(f"🚀 Using {num_cpus} CPUs for correction.")

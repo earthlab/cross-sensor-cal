@@ -115,5 +115,4 @@ def test_missing_hytools_error_includes_install_hint(monkeypatch):
         hytools_compat.get_hytools_class()
 
     message = str(excinfo.value)
-    assert "pip install hytools" in message
-    assert "conda install -c conda-forge hytools" in message
+    assert "constraints/lock-hytools.txt" in message
