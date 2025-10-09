@@ -45,12 +45,14 @@ def _load_attribute(
 
     last_exception: Exception | None = None
     imported_modules: list[ModuleType] = []
+    missing_roots: set[str] = set()
 
     for path in module_paths:
         try:
             module: ModuleType = import_module(path)
         except ModuleNotFoundError as exc:
             last_exception = exc
+            missing_roots.add(path.split(".")[0])
             continue
 
         imported_modules.append(module)
@@ -92,7 +94,20 @@ def _load_attribute(
             if hasattr(candidate, attribute):
                 return getattr(candidate, attribute)
 
-    raise ModuleNotFoundError(error_hint) from last_exception
+    install_hint = ""
+    if imported_modules:
+        missing_packages = sorted(missing_roots - {module.__name__.split(".")[0] for module in imported_modules})
+    else:
+        missing_packages = sorted(missing_roots)
+
+    if missing_packages:
+        install_hint = (
+            " None of the expected HyTools modules could be imported. "
+            "Install HyTools (for example `conda install -c conda-forge hytools` "
+            "or `pip install hytools`) and ensure it is available on the Python path."
+        )
+
+    raise ModuleNotFoundError(error_hint + install_hint) from last_exception
 
 
 def get_write_envi() -> T:

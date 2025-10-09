@@ -97,3 +97,23 @@ def test_get_write_envi_discovers_nested_module(hytools_package):
 
     assert writer.file_path == "output.bsq"
     assert writer.header == {"data type": 4}
+
+
+def test_missing_hytools_error_includes_install_hint(monkeypatch):
+    hytools_compat = importlib.reload(importlib.import_module("hytools_compat"))
+
+    original_import_module = hytools_compat.import_module
+
+    def _mock_import(name, package=None):
+        if name.startswith("hytools"):
+            raise ModuleNotFoundError(name)
+        return original_import_module(name, package=package)
+
+    monkeypatch.setattr(hytools_compat, "import_module", _mock_import)
+
+    with pytest.raises(ModuleNotFoundError) as excinfo:
+        hytools_compat.get_hytools_class()
+
+    message = str(excinfo.value)
+    assert "pip install hytools" in message
+    assert "conda install -c conda-forge hytools" in message
