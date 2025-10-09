@@ -363,15 +363,17 @@ __all__ = ["extract_roi_spectra", "plot_roi_spectral_comparison", "RoiResult"]
 
 from pathlib import Path
 
+TABLE_MOUNTAIN_DATA = Path(__file__).resolve().parent.parent / "data" / "Table_mountain_data"
+
 # Define paths to your raster images
 image_paths = [
-    Path("cross-sensor-cal/src/data/Table_mountain_data/HLS_L30_Boulder_09162021.tif"),
-    Path("cross-sensor-cal/src/data/Table_mountain_data/NEON_D10_R10C_DP1.30006.001_L002-1_20210915_directional_resampled_Landsat_8_OLI_envi.img"),
-    Path("cross-sensor-cal/src/data/Table_mountain_data/NEON_D10_R10C_DP1.30006.001_L003-1_20210915_directional_resampled_Landsat_8_OLI_envi.img"),
+    TABLE_MOUNTAIN_DATA / "HLS_L30_Boulder_09162021.tif",
+    TABLE_MOUNTAIN_DATA / "NEON_D10_R10C_DP1.30006.001_L002-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
+    TABLE_MOUNTAIN_DATA / "NEON_D10_R10C_DP1.30006.001_L003-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
 ]
 
 # Define path to your ROI shapefile or GeoJSON
-roi_path = Path("cross-sensor-cal/src/data/Table_mountain_data/ROI_TM_NEON_LST.geojson")
+roi_path = TABLE_MOUNTAIN_DATA / "ROI_TM_NEON_LST.geojson"
 
 # Run the extraction
 result = extract_roi_spectra(
