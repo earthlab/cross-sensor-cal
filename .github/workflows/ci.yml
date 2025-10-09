@@ -17,8 +17,12 @@ jobs:
       - name: Install pinned deps
         run: |
           python -m pip install -U pip
-          pip install -r constraints/lock-hytools.txt pytest
+          pip install -r constraints/lock-hytools.txt
           # Add any other exact pins here if you added them to the constraints file
+
+      - name: Install test tooling
+        run: |
+          pip install pytest
 
       - name: Install package (no dependency solve)
         run: |
