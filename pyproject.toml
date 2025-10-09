@@ -10,8 +10,11 @@ readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Earth Lab" }]
 license = { file = "LICENSE" }
-dependencies = [
-    "hytools>=1.5.0",
+dependencies = []
+
+[project.optional-dependencies]
+hytools = [
+    "hytools>=0.0.10",
 ]
 
 [tool.setuptools]
