@@ -24,12 +24,12 @@ Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line ident
 
 ## Install
 
-Cross-Sensor Calibration depends on GDAL, PROJ, Ray, and HyTools. HyTools is a required dependency and must be installed at a known-good version to avoid circular import failures inside the correction stages. We recommend the Conda workflow below because it installs the required native libraries automatically. If you prefer a pure `pip` workflow, install system packages for GDAL/PROJ first (e.g., `brew install gdal` on macOS or `apt-get install gdal-bin libgdal-dev proj-bin` on Debian/Ubuntu).
+Cross-Sensor Calibration depends on GDAL, PROJ, Ray, and HyTools. HyTools is a required dependency and must be installed at a known-good version to avoid circular import failures inside the correction stages. The 1.6.1 release currently publishes reliable wheels for Python 3.9, so start with a Python 3.9 environment unless you have confirmed newer interpreters locally. We recommend the Conda workflow below because it installs the required native libraries automatically. If you prefer a pure `pip` workflow, install system packages for GDAL/PROJ first (e.g., `brew install gdal` on macOS or `apt-get install gdal-bin libgdal-dev proj-bin` on Debian/Ubuntu).
 
 ### Conda
 
 ```bash
-conda create -n cscal python=3.10 gdal proj
+conda create -n cscal python=3.9 gdal proj
 conda activate cscal
 pip install -U pip
 pip install -e . -c constraints/lock-hytools.txt
@@ -38,7 +38,8 @@ pip install -e . -c constraints/lock-hytools.txt
 ### uv/pip
 
 ```bash
-uv venv
+uv python install 3.9
+uv venv --python 3.9
 source .venv/bin/activate
 pip install -U pip
 pip install -e . -c constraints/lock-hytools.txt
@@ -57,7 +58,7 @@ If HyTools fails to import or BRDF/TOPO stages crash immediately:
    pip install -e . -c constraints/lock-hytools.txt
    ```
 
-2. Verify the active environment reports `hy-tools 1.6.1`, `numpy 1.26.4`, and `h5py 3.10.0`.
+2. Verify the active environment reports `hy-tools 1.6.1`, `numpy 1.26.4`, and `h5py 3.10.0` while running on Python 3.9.
 3. Confirm ancillary ENVI files referenced in the config JSON exist on disk.
 4. Check that NEON metadata files include the expected Reflectance/Metadata groups and CRS fields.
 
@@ -82,7 +83,7 @@ Key entry points:
 
 | Python | OS            | GDAL | HyTools | Ray |
 |--------|---------------|------|--------|-----|
-| 3.10+  | Linux, macOS  | 3.4+ | 1.6.1  | 2.0+ |
+| 3.9    | Linux, macOS  | 3.4+ | 1.6.1  | 2.0+ |
 
 ## How to cite
 

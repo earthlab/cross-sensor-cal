@@ -11,7 +11,7 @@ requires-python = ">=3.9"
 authors = [{ name = "Earth Lab" }]
 license = { file = "LICENSE" }
 dependencies = [
-    "hy-tools==1.6.1",
+    "hy-tools>=1.6.1,<2",
     "numpy>=1.26",
     "h5py>=3.10",
 ]

@@ -1,4 +1,4 @@
-# Locked dependency versions for HyTools integration
+# Locked dependency versions for HyTools integration (tested with Python 3.9)
 hy-tools==1.6.1
 numpy==1.26.4
 h5py==3.10.0
