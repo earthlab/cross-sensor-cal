@@ -26,8 +26,12 @@ from shapely.geometry import box
 from sklearn.ensemble import GradientBoostingRegressor
 from tqdm import tqdm
 
-# Local Application/Specific Imports
-import hytools as ht
+from src.third_party.hytools_api import HyToolsNotAvailable, import_hytools
+
+try:
+    ht, _HYTOOLS_INFO = import_hytools()
+except HyToolsNotAvailable as exc:  # pragma: no cover - depends on environment setup
+    raise RuntimeError(str(exc)) from exc
 
 
 

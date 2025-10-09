@@ -1,5 +1,6 @@
 import json
 import warnings
+from importlib import import_module
 from pathlib import Path
 from typing import Iterable, Optional
 import glob
@@ -11,9 +12,6 @@ except ModuleNotFoundError:  # pragma: no cover - handled in callers
     ray = None  # type: ignore[assignment]
 import numpy as np
 
-# HyTools is an optional dependency. Import lazily so that other utilities in this module
-# remain usable even when the package is not installed.  This mirrors the runtime behaviour
-# in production where HyTools may be supplied via a plug-in environment.
 HyTools = None  # type: ignore[assignment]
 calc_topo_coeffs = None  # type: ignore[assignment]
 calc_brdf_coeffs = None  # type: ignore[assignment]
@@ -21,6 +19,8 @@ set_glint_parameters = None  # type: ignore[assignment]
 mask_create = None  # type: ignore[assignment]
 
 from src.hytools_compat import get_write_envi
+from src.third_party.hytools_api import HyToolsNotAvailable, import_hytools
+from src.validations.preflight import PreflightError, validate_inputs
 
 from src.file_types import (
     NEONReflectanceENVIFile,
@@ -37,49 +37,55 @@ warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
 
 
-def _import_hytools() -> None:
-    """Import HyTools and related helpers on-demand.
-
-    Raises
-    ------
-    ModuleNotFoundError
-        If HyTools (and its supporting modules) are not installed.  The error message makes
-        it explicit how to install the dependency, instead of failing at module import time
-        for unrelated utilities.
-    """
+def _ensure_hytools_components() -> None:
+    """Load HyTools and dependent correction helpers with friendly errors."""
 
     global HyTools, calc_topo_coeffs, calc_brdf_coeffs, set_glint_parameters, mask_create
 
     if HyTools is not None:
-        # Already imported in the current process.
         return
 
-    try:  # pragma: no cover - import layout differs across hytools releases
-        from hytools import HyTools as _HyTools  # type: ignore[attr-defined]
-    except ImportError as exc:  # pragma: no cover - handled in runtime environments
-        try:
-            from hytools.hytools import HyTools as _HyTools  # type: ignore[attr-defined]
-        except ImportError as inner_exc:  # pragma: no cover - handled in runtime environments
-            raise ModuleNotFoundError(
-                "HyTools could not be imported. Install the `hytools` package that provides the"
-                " `HyTools` class."
-            ) from inner_exc
     try:
-        from hytools.topo import calc_topo_coeffs as _calc_topo_coeffs
-        from hytools.brdf import calc_brdf_coeffs as _calc_brdf_coeffs
-        from hytools.glint import set_glint_parameters as _set_glint_parameters
-        from hytools.masks import mask_create as _mask_create
-    except ImportError as exc:  # pragma: no cover - handled in runtime environments
-        raise ModuleNotFoundError(
-            "HyTools ancillary modules could not be imported. Ensure the `hytools` package is"
-            " installed with BRDF/TOPO support."
+        ht, _info = import_hytools()
+    except HyToolsNotAvailable as exc:  # pragma: no cover - import depends on env
+        raise ModuleNotFoundError(str(exc)) from exc
+
+    try:
+        HyTools = getattr(ht, "HyTools")  # type: ignore[assignment]
+    except AttributeError as exc:
+        raise RuntimeError(
+            "HyTools import succeeded but the module is missing the `HyTools` class.\n"
+            "Common causes:\n"
+            "  • Incorrect HyTools version (reinstall with constraints/lock-hytools.txt)\n"
+            "  • Partial installation without BRDF/TOPO components\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
         ) from exc
 
-    HyTools = _HyTools  # type: ignore[assignment]
-    calc_topo_coeffs = _calc_topo_coeffs  # type: ignore[assignment]
-    calc_brdf_coeffs = _calc_brdf_coeffs  # type: ignore[assignment]
-    set_glint_parameters = _set_glint_parameters  # type: ignore[assignment]
-    mask_create = _mask_create  # type: ignore[assignment]
+    try:
+        topo_module = import_module("hytools.topo")
+        brdf_module = import_module("hytools.brdf")
+        glint_module = import_module("hytools.glint")
+        masks_module = import_module("hytools.masks")
+    except Exception as exc:  # pragma: no cover - depends on install
+        raise RuntimeError(
+            "HyTools ancillary modules failed to import.\n"
+            "Reinstall with `pip install -e . -c constraints/lock-hytools.txt` to ensure the"
+            " BRDF/TOPO helpers are available.\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    try:
+        calc_topo_coeffs = topo_module.calc_topo_coeffs  # type: ignore[assignment]
+        calc_brdf_coeffs = brdf_module.calc_brdf_coeffs  # type: ignore[assignment]
+        set_glint_parameters = glint_module.set_glint_parameters  # type: ignore[assignment]
+        mask_create = masks_module.mask_create  # type: ignore[assignment]
+    except AttributeError as exc:  # pragma: no cover - depends on package internals
+        raise RuntimeError(
+            "HyTools modules are missing expected correction helpers (`calc_topo_coeffs`,\n"
+            "`calc_brdf_coeffs`, `set_glint_parameters`, `mask_create`).\n"
+            "Verify the HyTools installation matches the pinned constraints.\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -91,7 +97,7 @@ def topo_and_brdf_correction(config_file: str):
     with open(config_file, 'r') as f:
         config_dict = json.load(f)
 
-    _import_hytools()
+    _ensure_hytools_components()
 
     if ray is None:
         raise ModuleNotFoundError(
@@ -105,6 +111,32 @@ def topo_and_brdf_correction(config_file: str):
     image = images[0]
     reflectance_file = NEONReflectanceENVIFile.from_filename(Path(image))
 
+    ancillary_mapping: dict[str, Path] = {}
+    if config_dict['file_type'] == 'envi':
+        anc_files = config_dict.get("anc_files", {})
+        file_key = anc_files.get(str(image))
+        if not file_key:
+            raise PreflightError(
+                "Ancillary mapping for the reflectance image is missing from the config JSON."
+            )
+        ancillary_mapping = {
+            key: Path(value[0]) if isinstance(value, (list, tuple)) and value else Path(str(value))
+            for key, value in file_key.items()
+            if value
+        }
+
+    try:
+        validate_inputs(Path(image), ancillary_mapping, required_keys=list(ancillary_mapping.keys()))
+    except PreflightError as exc:
+        raise RuntimeError(
+            "Preflight validation failed for HyTools correction inputs.\n"
+            "Common causes:\n"
+            "  • Missing ancillary ENVI files referenced in the config JSON\n"
+            "  • Incorrect paths or filename casing in the configuration\n"
+            "  • Input reflectance file was moved or deleted\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
+        ) from exc
+
     num_cpus = init_ray(config_dict.get('num_cpus'))
     print(f"🚀 Using {num_cpus} CPUs for correction.")
 
@@ -112,18 +144,29 @@ def topo_and_brdf_correction(config_file: str):
     actors = [HyToolsActor.remote() for _ in images]
 
     # read image (and ancillary mapping for ENVI)
-    if config_dict['file_type'] == 'envi':
-        anc_files = config_dict["anc_files"]
-        print(f"📦 Ancillary mapping for HyTools:\n{json.dumps(anc_files, indent=2)}\n")
-        ray.get([
-            actor.read_file.remote(image, config_dict['file_type'], anc_files[str(image)])
-            for actor, image in zip(actors, images)
-        ])
-    else:
-        ray.get([
-            actor.read_file.remote(image, config_dict['file_type'])
-            for actor, image in zip(actors, images)
-        ])
+    try:
+        if config_dict['file_type'] == 'envi':
+            anc_files = config_dict["anc_files"]
+            print(f"📦 Ancillary mapping for HyTools:\n{json.dumps(anc_files, indent=2)}\n")
+            ray.get([
+                actor.read_file.remote(image, config_dict['file_type'], anc_files[str(image)])
+                for actor, image in zip(actors, images)
+            ])
+        else:
+            ray.get([
+                actor.read_file.remote(image, config_dict['file_type'])
+                for actor, image in zip(actors, images)
+            ])
+    except Exception as exc:
+        raise RuntimeError(
+            "BRDF/Topographic correction failed at HyTools call.\n"
+            "Common causes:\n"
+            "  • Input/ancillary CRS mismatch or non-overlapping extents\n"
+            "  • Missing NEON .002 metadata fields expected by the routine\n"
+            "  • Nodata not set or masked bands in the imagery\n"
+            "  • Wavelength definitions differing from HyTools expectations\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
+        ) from exc
 
     # bad bands
     ray.get([actor.create_bad_bands.remote(config_dict['bad_bands']) for actor in actors])
@@ -263,7 +306,7 @@ apply_brightness_offset_to_envi = apply_offset_to_envi
 
 def export_coeffs(hy_obj, export_dict):
     """Export correction coefficients to JSON."""
-    _import_hytools()
+    _ensure_hytools_components()
 
     reflectance_file = NEONReflectanceENVIFile.from_filename(Path(hy_obj.file_name))
     for correction in hy_obj.corrections:
@@ -291,39 +334,16 @@ def export_coeffs(hy_obj, export_dict):
 
 def apply_corrections(hy_obj, config_dict):
     """Apply corrections and export corrected ENVI imagery and masks."""
-    _import_hytools()
+    _ensure_hytools_components()
 
-    WriteENVI = get_write_envi()
-    header_dict = hy_obj.get_header()
-    header_dict['data ignore value'] = hy_obj.no_data
-    header_dict['data type'] = 4  # float32
+    try:
+        WriteENVI = get_write_envi()
+        header_dict = hy_obj.get_header()
+        header_dict['data ignore value'] = hy_obj.no_data
+        header_dict['data type'] = 4  # float32
 
-    reflectance_file = NEONReflectanceENVIFile.from_filename(Path(hy_obj.file_name))
-    brdf_corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_components(
-        domain=reflectance_file.domain,
-        site=reflectance_file.site,
-        date=reflectance_file.date,
-        time=reflectance_file.time,
-        suffix=config_dict['export']["suffix"],
-        folder=Path(config_dict['export']['output_dir']),
-        tile=reflectance_file.tile,
-        directional=reflectance_file.directional
-    )
-
-    # write corrected image
-    if not brdf_corrected_file.path.exists():
-        print(f"📦 Writing corrected image: {brdf_corrected_file.file_path}")
-        writer = WriteENVI(brdf_corrected_file.file_path, header_dict)
-        iterator = hy_obj.iterate(by='line', corrections=hy_obj.corrections,
-                                  resample=config_dict['resample'])
-        while not iterator.complete:
-            line = iterator.read_next()
-            writer.write_line(line, iterator.current_line)
-        writer.close()
-
-    # write masks, if requested
-    if config_dict['export']['masks']:
-        brdf_corrected_masked_file = NEONReflectanceBRDFMaskENVIFile.from_components(
+        reflectance_file = NEONReflectanceENVIFile.from_filename(Path(hy_obj.file_name))
+        brdf_corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_components(
             domain=reflectance_file.domain,
             site=reflectance_file.site,
             date=reflectance_file.date,
@@ -333,32 +353,64 @@ def apply_corrections(hy_obj, config_dict):
             tile=reflectance_file.tile,
             directional=reflectance_file.directional
         )
-        if not brdf_corrected_masked_file.path.exists():
-            print(f"📦 Writing correction masks: {brdf_corrected_masked_file.file_path}")
-            masks = []
-            mask_names = []
-            for correction in config_dict["corrections"]:
-                for mask_type in config_dict[correction]['apply_mask']:
-                    masks.append(mask_create(hy_obj, [mask_type]))
-                    mask_names.append(f"{correction}_{mask_type[0]}")
 
-            hdr = dict(header_dict)  # shallow copy
-            hdr.update({
-                'data type': 1,            # uint8
-                'bands': len(masks),
-                'band names': mask_names,
-                'samples': hy_obj.columns,
-                'lines': hy_obj.lines,
-                'wavelength': [],
-                'fwhm': [],
-                'wavelength units': '',
-                'data ignore value': 255
-            })
-
-            writer = WriteENVI(brdf_corrected_masked_file.file_path, hdr)
-            for i, mask in enumerate(masks):
-                writer.write_band(mask.astype(np.uint8), i)
+        if not brdf_corrected_file.path.exists():
+            print(f"📦 Writing corrected image: {brdf_corrected_file.file_path}")
+            writer = WriteENVI(brdf_corrected_file.file_path, header_dict)
+            iterator = hy_obj.iterate(by='line', corrections=hy_obj.corrections,
+                                      resample=config_dict['resample'])
+            while not iterator.complete:
+                line = iterator.read_next()
+                writer.write_line(line, iterator.current_line)
             writer.close()
+
+        if config_dict['export']['masks']:
+            brdf_corrected_masked_file = NEONReflectanceBRDFMaskENVIFile.from_components(
+                domain=reflectance_file.domain,
+                site=reflectance_file.site,
+                date=reflectance_file.date,
+                time=reflectance_file.time,
+                suffix=config_dict['export']["suffix"],
+                folder=Path(config_dict['export']['output_dir']),
+                tile=reflectance_file.tile,
+                directional=reflectance_file.directional
+            )
+            if not brdf_corrected_masked_file.path.exists():
+                print(f"📦 Writing correction masks: {brdf_corrected_masked_file.file_path}")
+                masks = []
+                mask_names = []
+                for correction in config_dict["corrections"]:
+                    for mask_type in config_dict[correction]['apply_mask']:
+                        masks.append(mask_create(hy_obj, [mask_type]))
+                        mask_names.append(f"{correction}_{mask_type[0]}")
+
+                hdr = dict(header_dict)  # shallow copy
+                hdr.update({
+                    'data type': 1,            # uint8
+                    'bands': len(masks),
+                    'band names': mask_names,
+                    'samples': hy_obj.columns,
+                    'lines': hy_obj.lines,
+                    'wavelength': [],
+                    'fwhm': [],
+                    'wavelength units': '',
+                    'data ignore value': 255
+                })
+
+                writer = WriteENVI(brdf_corrected_masked_file.file_path, hdr)
+                for i, mask in enumerate(masks):
+                    writer.write_band(mask.astype(np.uint8), i)
+                writer.close()
+    except Exception as exc:
+        raise RuntimeError(
+            "BRDF/Topographic correction failed at HyTools call.\n"
+            "Common causes:\n"
+            "  • Input/ancillary CRS mismatch or non-overlapping extents\n"
+            "  • Missing NEON .002 metadata fields expected by the routine\n"
+            "  • Nodata not set or masked bands in the imagery\n"
+            "  • Wavelength definitions differing from HyTools expectations\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -10,6 +10,8 @@ os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
 import numpy as np
 from pathlib import Path
 from src.hytools_compat import get_write_envi, get_hytools_class
+from src.third_party.hytools_api import HyToolsNotAvailable, import_hytools
+from src.validations.preflight import PreflightError, validate_inputs
 import re
 from functools import partial
 from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
@@ -193,6 +195,25 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata
             "ray is required for parallel NEON conversion. Install it with `pip install ray`."
         )
 
+    for image in images:
+        try:
+            validate_inputs(Path(image), {}, required_keys=None)
+        except PreflightError as exc:
+            raise RuntimeError(
+                "Preflight validation failed for NEON to ENVI conversion.\n"
+                "Common causes:\n"
+                "  • Input HDF5 file path is incorrect or inaccessible\n"
+                "  • Network mounts or storage devices are unavailable\n"
+                "  • Permissions prevent the pipeline from reading the file\n"
+                f"\nOriginal error: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    try:
+        _hytools_mod, hy_info = import_hytools()
+        print(f"ℹ️ HyTools version detected: {hy_info.version}")
+    except HyToolsNotAvailable as exc:
+        raise RuntimeError(str(exc)) from exc
+
     num_cpus = init_ray(len(images))
     print(f"🚀 Using {num_cpus} CPUs for conversion.")
 
@@ -200,21 +221,41 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata
     hytool = ray.remote(HyTools)
     actors = [hytool.remote() for _ in images]
 
-    _ = ray.get([
-        actor.read_file.remote(image, 'neon')
-        for actor, image in zip(actors, images)
-    ])
+    try:
+        _ = ray.get([
+            actor.read_file.remote(image, 'neon')
+            for actor, image in zip(actors, images)
+        ])
+    except Exception as exc:
+        raise RuntimeError(
+            "HyTools failed while reading NEON reflectance inputs.\n"
+            "Common causes:\n"
+            "  • Missing metadata groups within the HDF5 file (e.g., Reflectance/Metadata)\n"
+            "  • HDF5 files exported with incompatible schema revisions\n"
+            "  • Corrupted downloads or partially transferred files\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
+        ) from exc
 
-    _ = ray.get([
-        actor.do.remote(
-            partial(
-                neon_to_envi_task,
-                output_dir=str(output_dir),
-                metadata=metadata_override.get(Path(image).name) if metadata_override else None
+    try:
+        _ = ray.get([
+            actor.do.remote(
+                partial(
+                    neon_to_envi_task,
+                    output_dir=str(output_dir),
+                    metadata=metadata_override.get(Path(image).name) if metadata_override else None
+                )
             )
-        )
-        for actor, image in zip(actors, images)
-    ])
+            for actor, image in zip(actors, images)
+        ])
+    except Exception as exc:
+        raise RuntimeError(
+            "HyTools conversion to ENVI failed during processing.\n"
+            "Common causes:\n"
+            "  • CRS or map info fields missing from the NEON metadata\n"
+            "  • Nodata values unset, leading to HyTools masking issues\n"
+            "  • Output directory lacks write permissions or space\n"
+            f"\nOriginal error: {type(exc).__name__}: {exc}"
+        ) from exc
 
     if anc:
         print("\n📦 Exporting ancillary ENVI data...")

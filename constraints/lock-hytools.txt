@@ -1,0 +1,6 @@
+# Locked dependency versions for HyTools integration
+hy-tools==1.6.1
+numpy==1.26.4
+h5py==3.10.0
+# rasterio==1.3.9
+# GDAL pin depends on platform; avoid pin if building from system packages

@@ -13,6 +13,8 @@ from pkgutil import walk_packages
 from types import ModuleType
 from typing import Iterable, TypeVar
 
+from src.third_party.hytools_api import HyToolsNotAvailable, import_hytools
+
 T = TypeVar("T")
 
 
@@ -103,8 +105,8 @@ def _load_attribute(
     if missing_packages:
         install_hint = (
             " None of the expected HyTools modules could be imported. "
-            "Install HyTools (for example `conda install -c conda-forge hytools` "
-            "or `pip install hytools`) and ensure it is available on the Python path."
+            "Reinstall with the pinned constraints (`pip install -e . -c "
+            "constraints/lock-hytools.txt`) to ensure a supported HyTools environment."
         )
 
     raise ModuleNotFoundError(error_hint + install_hint) from last_exception
@@ -112,6 +114,11 @@ def _load_attribute(
 
 def get_write_envi() -> T:
     """Return the ``WriteENVI`` class from HyTools regardless of version."""
+
+    try:
+        import_hytools()
+    except HyToolsNotAvailable as exc:
+        raise ModuleNotFoundError(str(exc)) from exc
 
     candidate_modules = (
         "hytools.io.envi",
@@ -130,6 +137,11 @@ def get_write_envi() -> T:
 
 def get_hytools_class() -> T:
     """Return the ``HyTools`` class across supported package layouts."""
+
+    try:
+        import_hytools()
+    except HyToolsNotAvailable as exc:
+        raise ModuleNotFoundError(str(exc)) from exc
 
     candidate_modules = (
         "hytools",

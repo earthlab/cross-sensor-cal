@@ -1,5 +1,6 @@
 import os
 import argparse
+from importlib import import_module
 from pathlib import Path
 
 import numpy as np
@@ -10,87 +11,19 @@ import sys
 from scipy.interpolate import interp1d
 import glob
 
-try:  # pragma: no cover - optional dependency
-    from hytools.transform.resampling import calc_resample_coeffs
-except ModuleNotFoundError:  # pragma: no cover - executed when hytools is absent
-    def calc_resample_coeffs(in_wave, in_fwhm, out_waves, out_fwhm):
-        """Calculate Gaussian resampling coefficients without HyTools.
+from src.third_party.hytools_api import HyToolsNotAvailable, import_hytools
 
-        This is a light-weight fallback implementation that mirrors the
-        behaviour relied upon by :func:`apply_resampler` when the optional
-        ``hytools`` dependency is not installed.  The coefficients are computed
-        by evaluating a Gaussian response function for each output band and
-        normalising the contribution from every input band so the resulting
-        weights form a convex combination.  The maths is intentionally
-        simplified compared to the HyTools implementation but it maintains the
-        critical property that output spectra are a weighted average of the
-        available input bands.
-
-        Parameters
-        ----------
-        in_wave : array-like
-            Wavelength centres for the source data.
-        in_fwhm : array-like
-            Full-width half-maximum values for the source data.  Only the
-            length of the array is used; values are incorporated by scaling the
-            contribution of each band.
-        out_waves : array-like
-            Target wavelength centres.
-        out_fwhm : array-like
-            Target FWHM values.
-
-        Returns
-        -------
-        numpy.ndarray
-            A ``(len(in_wave), len(out_waves))`` matrix of resampling
-            coefficients suitable for multiplication with spectra whose last
-            dimension corresponds to ``in_wave``.
-        """
-
-        in_wave = np.asarray(in_wave, dtype=np.float64)
-        out_waves = np.asarray(out_waves, dtype=np.float64)
-        in_fwhm = np.asarray(in_fwhm, dtype=np.float64)
-        out_fwhm = np.asarray(out_fwhm, dtype=np.float64)
-
-        if in_wave.ndim != 1 or out_waves.ndim != 1:
-            raise ValueError("Wavelength inputs must be one-dimensional arrays")
-
-        if in_wave.size != in_fwhm.size:
-            raise ValueError("Input wavelengths and FWHM arrays must be the same length")
-
-        if out_waves.size != out_fwhm.size:
-            raise ValueError("Output wavelengths and FWHM arrays must be the same length")
-
-        coeffs = np.zeros((in_wave.size, out_waves.size), dtype=np.float64)
-
-        # Convert FWHM to standard deviation.  Avoid division by zero by
-        # falling back to a very narrow Gaussian when needed.
-        fwhm_to_sigma = 2 * np.sqrt(2 * np.log(2))
-        out_sigma = np.where(out_fwhm > 0, out_fwhm / fwhm_to_sigma, np.finfo(float).eps)
-
-        for j, (centre, sigma) in enumerate(zip(out_waves, out_sigma)):
-            # Gaussian weights for the distance between each input wavelength
-            # and the target centre.  Broaden the response slightly using the
-            # input FWHM so broader input bands contribute a bit more.
-            distance = in_wave - centre
-            gaussian = np.exp(-0.5 * (distance / sigma) ** 2)
-
-            # Scale by the relative width of the input band to mimic HyTools'
-            # handling of varying FWHM values.
-            width_scale = np.where(in_fwhm > 0, in_fwhm, 1.0)
-            weights = gaussian * width_scale
-
-            weight_sum = weights.sum()
-            if weight_sum == 0:
-                # If all weights are zero (e.g. very distant wavelengths), fall
-                # back to a nearest-neighbour assignment so we still produce a
-                # sensible coefficient matrix.
-                nearest = np.argmin(np.abs(distance))
-                coeffs[nearest, j] = 1.0
-            else:
-                coeffs[:, j] = weights / weight_sum
-
-        return coeffs.astype(np.float32, copy=False)
+try:
+    import_hytools()
+    calc_resample_coeffs = import_module("hytools.transform.resampling").calc_resample_coeffs
+except (HyToolsNotAvailable, ModuleNotFoundError, AttributeError) as exc:  # pragma: no cover - environment specific
+    raise RuntimeError(
+        "HyTools resampling helpers are required for standard resampling.\n"
+        "Troubleshooting steps:\n"
+        "  • Reinstall with `pip install -e . -c constraints/lock-hytools.txt`\n"
+        "  • Confirm hy-tools>=1.6.1,<2 is installed in the active environment\n"
+        f"\nOriginal error: {type(exc).__name__}: {exc}"
+    ) from exc
 
 from src.file_types import NEONReflectanceBRDFCorrectedENVIHDRFile, NEONReflectanceResampledHDRFile, \
     NEONReflectanceBRDFCorrectedENVIFile
