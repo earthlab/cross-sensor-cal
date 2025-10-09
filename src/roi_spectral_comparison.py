@@ -361,52 +361,34 @@ def plot_roi_spectral_comparison(
 
 __all__ = ["extract_roi_spectra", "plot_roi_spectral_comparison", "RoiResult"]
 
+from pathlib import Path
 
-def _run_example() -> None:
-    """Execute the module's example workflow if bundled data are available.
+TABLE_MOUNTAIN_DATA = Path(__file__).resolve().parent.parent / "data" / "Table_mountain_data"
 
-    The previous implementation executed this example at import time, which
-    meant any missing example assets triggered exceptions for downstream
-    consumers.  Importing the module should now be side-effect free while still
-    allowing the example to be run manually (``python -m src.roi_spectral_comparison``).
-    """
+# Define paths to your raster images
+image_paths = [
+    TABLE_MOUNTAIN_DATA / "HLS_L30_Boulder_09162021.tif",
+    TABLE_MOUNTAIN_DATA / "NEON_D10_R10C_DP1.30006.001_L002-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
+    TABLE_MOUNTAIN_DATA / "NEON_D10_R10C_DP1.30006.001_L003-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
+]
 
-    table_mountain_data = Path(__file__).resolve().parent.parent / "data" / "Table_mountain_data"
+# Define path to your ROI shapefile or GeoJSON
+roi_path = TABLE_MOUNTAIN_DATA / "ROI_TM_NEON_LST.geojson"
 
-    image_paths = [
-        table_mountain_data / "HLS_L30_Boulder_09162021.tif",
-        table_mountain_data
-        / "NEON_D10_R10C_DP1.30006.001_L002-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
-        table_mountain_data
-        / "NEON_D10_R10C_DP1.30006.001_L003-1_20210915_directional_resampled_Landsat_8_OLI_envi.img",
-    ]
-    roi_path = table_mountain_data / "ROI_TM_NEON_LST.geojson"
+# Run the extraction
+result = extract_roi_spectra(
+    image_paths=image_paths,
+    roi_path=roi_path,
+    label_column="id",        # or None if you don’t have one
+    statistics=("mean", "std"),   # you can include "median" too
+)
 
-    missing_assets = [path for path in [*image_paths, roi_path] if not path.exists()]
-    if missing_assets:
-        missing = "\n".join(str(path) for path in missing_assets)
-        print(
-            "Example assets are not available. Skipping example run. Missing files:\n"
-            f"{missing}"
-        )
-        return
+# Plot and save results
+plots = plot_roi_spectral_comparison(
+    result,
+    statistic="mean",             # choose one of the extracted stats
+    output_dir="spectra_plots",   # directory to save figures
+    show=False                    # change to True to display interactively
+)
 
-    result = extract_roi_spectra(
-        image_paths=image_paths,
-        roi_path=roi_path,
-        label_column="id",
-        statistics=("mean", "std"),
-    )
-
-    plots = plot_roi_spectral_comparison(
-        result,
-        statistic="mean",
-        output_dir="spectra_plots",
-        show=False,
-    )
-
-    print("Saved plots:", plots)
-
-
-if __name__ == "__main__":  # pragma: no cover - convenience example
-    _run_example()
+print("Saved plots:", plots)
