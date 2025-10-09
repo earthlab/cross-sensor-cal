@@ -9,12 +9,101 @@ containerised environments with a small ``/dev/shm``.
 from __future__ import annotations
 
 import os
+import math
 from typing import Any
+
+# Ray inspects this environment variable during initialisation; set it eagerly so
+# the warning is suppressed even if ``ray`` is imported before :func:`init_ray`.
+os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
 
 try:  # pragma: no cover - exercised via integration paths
     import ray
 except ModuleNotFoundError:  # pragma: no cover - handled gracefully below
     ray = None  # type: ignore[assignment]
+
+
+_ENV_CPU_KEYS = (
+    "SLURM_CPUS_PER_TASK",
+    "SLURM_CPUS_ON_NODE",
+    "PBS_NP",
+    "NSLOTS",
+    "OMP_NUM_THREADS",
+    "RAY_NUM_CPUS",
+)
+
+
+def _cpu_quota() -> int | None:
+    """Return CPUs permitted by cgroup quotas (if configured)."""
+
+    # cgroups v2: ``cpu.max`` has "max" or ``<quota> <period>``
+    try:
+        with open("/sys/fs/cgroup/cpu.max", "r", encoding="utf-8") as fh:
+            quota_str, period_str = fh.read().strip().split()
+        if quota_str != "max":
+            quota = int(quota_str)
+            period = int(period_str)
+            if quota > 0 and period > 0:
+                return max(1, math.ceil(quota / period))
+    except FileNotFoundError:
+        pass
+    except Exception:
+        return None
+
+    # cgroups v1: ``cpu.cfs_quota_us`` and ``cpu.cfs_period_us``
+    try:
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "r", encoding="utf-8") as quota_fh, open(
+            "/sys/fs/cgroup/cpu/cpu.cfs_period_us", "r", encoding="utf-8"
+        ) as period_fh:
+            quota = int(quota_fh.read().strip())
+            period = int(period_fh.read().strip())
+        if quota > 0 and period > 0:
+            return max(1, math.ceil(quota / period))
+    except FileNotFoundError:
+        pass
+    except Exception:
+        return None
+
+    return None
+
+
+def _env_cpu_hint() -> int | None:
+    """Return a CPU count hinted via common scheduler environment variables."""
+
+    for key in _ENV_CPU_KEYS:
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if value > 0:
+            return max(1, int(value))
+    return None
+
+
+def _available_cpus() -> int:
+    """Best-effort detection of CPUs available to this process."""
+
+    affinity = getattr(os, "sched_getaffinity", None)
+    if affinity is not None:
+        try:
+            cpu_count = len(affinity(0))
+            if cpu_count:
+                return cpu_count
+        except Exception:
+            pass
+
+    hint = _env_cpu_hint()
+    if hint:
+        return hint
+
+    quota = _cpu_quota()
+    if quota:
+        return quota
+
+    detected = os.cpu_count()
+    return detected if detected and detected > 0 else 1
 
 
 def _resolve_cpu_request(requested: int | None) -> int:
@@ -28,7 +117,7 @@ def _resolve_cpu_request(requested: int | None) -> int:
         less clear error downstream.
     """
 
-    available = os.cpu_count() or 1
+    available = _available_cpus()
 
     if requested is None:
         return available
@@ -82,7 +171,7 @@ def init_ray(
         raise TypeError("Pass num_cpus via the positional argument, not kwargs.")
 
     if disable_object_store_warning:
-        os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
+        os.environ["RAY_DISABLE_OBJECT_STORE_WARNING"] = "1"
 
     resolved_cpus = _resolve_cpu_request(num_cpus)
 
