@@ -137,7 +137,7 @@ class MaskedFileMixin:
 
     @classmethod
     def masked_pattern(cls) -> re.Pattern:
-        """
+        r"""
         Adjust the class's regex pattern to allow optional '_masked' before file extensions.
         Assumes the original pattern ends with: \.img$ or \.hdr$
         """
@@ -348,17 +348,52 @@ class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
     )
 
     def __init__(
-        self, path: Path, domain: str, site: str, product: str, date: str,
-        time: Optional[str] = None, tile: Optional[str] = None, directional: bool = False
+        self,
+        path: Path,
+        domain: str,
+        site: str,
+        product: Optional[str] = None,
+        date: str,
+        time: Optional[str] = None,
+        tile: Optional[str] = None,
+        directional: bool = False,
     ):
-        super().__init__(path)
-        self.domain = domain
-        self.site = site
-        self.product = product
-        self.date = date
-        self.time = time
+        super().__init__(
+            path=path,
+            domain=domain,
+            site=site,
+            date=date,
+            time=time,
+            product=product,
+        )
         self.tile = tile
         self.directional = directional
+
+        stem = self.path.stem
+        if not self.product or self.product == "DP1":
+            if re.search(r"_reflectance_envi$", stem):
+                self.product = "reflectance_envi"
+            else:
+                mask_match = re.search(
+                    r"_resampled_mask_(?P<sensor>[^_]+(?:_[^_]+)*)_envi$",
+                    stem,
+                )
+                if mask_match:
+                    self.product = "resampled_mask"
+                    if not self.sensor:
+                        self.sensor = mask_match.group("sensor")
+                    self.masked = True
+                else:
+                    resampled_match = re.search(
+                        r"_resampled_(?P<sensor>[^_]+(?:_[^_]+)*)_envi$",
+                        stem,
+                    )
+                    if resampled_match:
+                        self.product = "resampled"
+                        if not self.sensor:
+                            self.sensor = resampled_match.group("sensor")
+                    else:
+                        self.product = "envi"
 
     @classmethod
     def from_filename(cls, path: Path) -> "NEONReflectanceENVIHDRFile":
@@ -534,8 +569,16 @@ class NEONReflectanceConfigFile(DataFile):
     )
 
     def __init__(
-        self, path: Path, domain: str, site: str, product: str, date: str,
-        time: Optional[str], tile: Optional[str] = None, directional: bool = False
+        self,
+        path: Path,
+        domain: str,
+        site: str,
+        product: str,
+        date: str,
+        time: Optional[str],
+        tile: Optional[str] = None,
+        directional: bool = False,
+        suffix: Optional[str] = None,
     ):
         super().__init__(path)
         self.domain = domain
@@ -545,6 +588,9 @@ class NEONReflectanceConfigFile(DataFile):
         self.time = time
         self.tile = tile
         self.directional = directional
+        if suffix is None and self.path.name.endswith("_config_envi.json"):
+            suffix = "envi"
+        self.suffix = suffix
 
     @classmethod
     def from_filename(cls, path: Path) -> "NEONReflectanceConfigFile":
@@ -553,6 +599,15 @@ class NEONReflectanceConfigFile(DataFile):
             raise ValueError(f"{cls.__name__} could not parse {path.name}")
         groups = match.groupdict()
         return cls(path, directional="_directional" in path.name, **groups)
+
+    @classmethod
+    def find_in_directory(
+        cls, directory: Path, suffix: Optional[str] = None
+    ) -> List["NEONReflectanceConfigFile"]:
+        files = super().find_in_directory(directory)
+        if suffix is None:
+            return files
+        return [f for f in files if getattr(f, "suffix", None) == suffix]
 
     @classmethod
     def from_components(

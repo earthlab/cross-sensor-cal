@@ -31,8 +31,14 @@ from src.file_types import (
 )
 
 
-_MASKED_SENSOR_RE = re.compile(r"_resampled_mask_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$")
-_SENSOR_RE = re.compile(r"_resampled_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$")
+RESAMPLED_MASK_RE = re.compile(
+    r"_resampled_mask_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$",
+    re.IGNORECASE,
+)
+RESAMPLED_RE = re.compile(
+    r"_resampled_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$",
+    re.IGNORECASE,
+)
 
 
 def _sensor_subdir(sensor: str, masked: bool) -> str:
@@ -64,12 +70,12 @@ def categorize_file(file_obj: DataFile) -> str:
         sensor_name = getattr(file_obj, "sensor", None)
         masked = bool(getattr(file_obj, "masked", False))
 
-        masked_match = _MASKED_SENSOR_RE.search(file_obj.path.name)
+        masked_match = RESAMPLED_MASK_RE.search(file_obj.path.name)
         if masked_match:
             sensor_name = sensor_name or masked_match.group("sensor")
             masked = True
         else:
-            unmasked_match = _SENSOR_RE.search(file_obj.path.name)
+            unmasked_match = RESAMPLED_RE.search(file_obj.path.name)
             if unmasked_match:
                 sensor_name = sensor_name or unmasked_match.group("sensor")
 
