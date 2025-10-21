@@ -28,33 +28,27 @@ from src.file_types import (
     UnmixingModelBestTIF,
     UnmixingModelFractionsTIF,
     UnmixingModelRMSETIF,
-    MaskedFileMixin,
     SensorType,
 )
 
 
 RESAMPLED_RE = re.compile(
-    r"_resampled(?:_mask)?_(?P<sensor>[A-Za-z0-9_+\-]+)_envi(?:_masked)?\.(?:img|hdr)$",
+    r"_resampled(?:_mask)?_(?P<sensor>[A-Za-z0-9_+\-]+)_envi\.(?:img|hdr)$",
     re.IGNORECASE,
 )
 
 
 def _extract_sensor_from_name(path_str: str) -> Optional[str]:
     match = RESAMPLED_RE.search(path_str)
-    if match:
-        return match.group("sensor")
-    return None
+    return match.group("sensor") if match else None
 
 
 def _normalize_sensor_label(sensor: str) -> str:
     return sensor.replace("_", " ")
 
 
-def _is_masked(file_obj: DataFile, path_str: str) -> bool:
-    if getattr(file_obj, "is_masked", False):
-        return True
-
-    if isinstance(file_obj, MaskedFileMixin):
+def _is_masked(file_obj: DataFile, name_lower: str) -> bool:
+    if hasattr(file_obj, "is_masked") and getattr(file_obj, "is_masked") is True:
         return True
 
     mask_classes = (
@@ -63,24 +57,23 @@ def _is_masked(file_obj: DataFile, path_str: str) -> bool:
         NEONReflectanceResampledMaskENVIFile,
         NEONReflectanceResampledMaskHDRFile,
     )
-    if isinstance(file_obj, mask_classes):
-        return True
+    try:
+        if isinstance(file_obj, mask_classes):
+            return True
+    except Exception:
+        pass
 
-    lower_name = path_str.lower()
-    if "_resampled_mask_" in lower_name:
-        return True
-    if lower_name.endswith("_mask_envi.img") or lower_name.endswith("_mask_envi.hdr"):
-        return True
-    if lower_name.endswith("_envi_masked.img") or lower_name.endswith("_envi_masked.hdr"):
-        return True
-
-    return False
+    return (
+        "_resampled_mask_" in name_lower
+        or name_lower.endswith("_mask_envi.img")
+        or name_lower.endswith("_mask_envi.hdr")
+    )
 
 
 def _category_to_folder(category: str) -> str:
-    if " " in category:
-        return category.replace(" ", "_")
-    return category
+    if category in {"Reflectance", "Reflectance_Masked"}:
+        return category
+    return category.replace(" ", "_")
 
 
 def categorize_file(file_obj: DataFile) -> str:
@@ -88,32 +81,42 @@ def categorize_file(file_obj: DataFile) -> str:
 
     path = getattr(file_obj, "path", None)
     path_str = str(path) if path else ""
+    lower_name = path_str.lower()
 
     sensor_token = _extract_sensor_from_name(path_str)
     if sensor_token:
-        human_label = _normalize_sensor_label(sensor_token)
-        if _is_masked(file_obj, path_str):
-            return f"{human_label}_Masked"
-        return human_label
+        label = _normalize_sensor_label(sensor_token)
+        return f"{label}_Masked" if _is_masked(file_obj, lower_name) else label
 
-    if isinstance(file_obj, (NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFCorrectedENVIHDRFile)):
+    if isinstance(
+        file_obj,
+        (NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFCorrectedENVIHDRFile),
+    ):
         return "Corrected"
 
-    if isinstance(file_obj, (NEONReflectanceENVIFile, NEONReflectanceENVIHDRFile, NEONReflectanceBRDFMaskENVIFile, NEONReflectanceBRDFMaskENVIHDRFile)):
-        return "Reflectance_Masked" if _is_masked(file_obj, path_str) else "Reflectance"
+    if isinstance(
+        file_obj,
+        (
+            NEONReflectanceENVIFile,
+            NEONReflectanceENVIHDRFile,
+            NEONReflectanceBRDFMaskENVIFile,
+            NEONReflectanceBRDFMaskENVIHDRFile,
+        ),
+    ):
+        return "Reflectance_Masked" if _is_masked(file_obj, lower_name) else "Reflectance"
 
-    if isinstance(file_obj, (NEONReflectanceFile, NEONReflectanceAncillaryENVIFile, NEONReflectanceAncillaryENVIHDRFile)):
+    if isinstance(
+        file_obj,
+        (
+            NEONReflectanceFile,
+            NEONReflectanceAncillaryENVIFile,
+            NEONReflectanceAncillaryENVIHDRFile,
+        ),
+    ):
         return "Generic"
 
-    lower_name = path_str.lower()
     if lower_name.endswith("_reflectance.h5") or "_ancillary_envi" in lower_name:
         return "Generic"
-
-    class_name = file_obj.__class__.__name__
-    if class_name == "MergedParquetFile":
-        return "Merged"
-    if class_name == "SensorPanelPNG":
-        return "Plots"
 
     return "Generic"
 
