@@ -319,6 +319,18 @@ class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
         return cls.from_filename(folder / filename)
 
 
+# --- Backwards-compat alias (tests import the misspelled name) ---
+# Some callers import NEONReflectanceENVHDRFile (missing the 'I' in ENVI).
+# Keep this alias so both spellings resolve to the same class.
+NEONReflectanceENVHDRFile = NEONReflectanceENVIHDRFile
+
+# If you maintain an __all__, expose both:
+try:
+    __all__.append("NEONReflectanceENVHDRFile")
+except Exception:
+    pass
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # ENVI ancillary
 # ──────────────────────────────────────────────────────────────────────────────

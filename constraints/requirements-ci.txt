@@ -5,3 +5,4 @@ spectral
 shapely
 geopandas
 rasterio
+tqdm
