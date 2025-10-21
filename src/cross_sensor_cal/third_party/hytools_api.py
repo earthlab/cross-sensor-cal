@@ -18,8 +18,8 @@ def _friendly_msg(prefix: str, exc: Exception) -> str:
         f"{prefix}\n\n"
         "Troubleshooting:\n"
         "  1) Use CI pins locally:\n"
-        "       pip install -U pip\n"
-        "       pip install -r constraints/lock-hytools.txt\n"
+        "       pip install -U \"pip<25\"\n"
+        "       pip install -r constraints/requirements-ci.txt\n"
         "  2) Ensure GDAL/PROJ are available (see README install instructions).\n"
         f"\nOriginal error: {type(exc).__name__}: {exc}"
     )

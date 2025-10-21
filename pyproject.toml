@@ -14,7 +14,7 @@ dependencies = []
 
 [project.optional-dependencies]
 hytools = [
-    "hy-tools>=1.6.1,<2",
+    "hy-tools>=1.6.0,<1.7",
 ]
 
 [tool.setuptools]

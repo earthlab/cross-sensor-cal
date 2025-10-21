@@ -111,7 +111,7 @@ def _load_attribute(
         install_hint = (
             " None of the expected HyTools modules could be imported. "
             "Install HyTools (for example `conda install -c conda-forge hytools`) or reuse the CI "
-            "pins (`pip install -r constraints/lock-hytools.txt`) "
+            "pins (`pip install -r constraints/requirements-ci.txt`) "
             "and ensure it is available on the Python path."
         )
 

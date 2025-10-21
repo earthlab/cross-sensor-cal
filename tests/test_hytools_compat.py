@@ -115,4 +115,4 @@ def test_missing_hytools_error_includes_install_hint(monkeypatch):
         hytools_compat.get_hytools_class()
 
     message = str(excinfo.value)
-    assert "constraints/lock-hytools.txt" in message
+    assert "constraints/requirements-ci.txt" in message

@@ -41,12 +41,12 @@ uv venv
 source .venv/bin/activate
 uv pip install -e .
 # hytools is required; install a compatible release from PyPI or Conda-forge
-pip install "hy-tools>=1.6.1,<2"  # or use `conda install -c conda-forge hytools`
+pip install "hy-tools>=1.6.0,<1.7"  # or use `conda install -c conda-forge hytools`
 ```
 
 If GDAL wheels are unavailable for your platform, install it from Conda-forge and then point `pip` at the Conda environment by exporting `CPLUS_INCLUDE_PATH` and `C_INCLUDE_PATH`.
 
-For reproducible local environments that match CI, reuse the constraint pins provided in [`constraints/lock-hytools.txt`](constraints/lock-hytools.txt), e.g. `pip install -U pip && pip install -r constraints/lock-hytools.txt` prior to installing this package with `--no-deps`.
+For reproducible local environments that match CI, reuse the constraint pins provided in [`constraints/requirements-ci.txt`](constraints/requirements-ci.txt), e.g. `pip install -U "pip<25" && pip install -r constraints/requirements-ci.txt` prior to installing this package with `--no-deps`.
 
 ## Documentation
 

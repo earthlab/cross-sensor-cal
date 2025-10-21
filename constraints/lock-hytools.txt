@@ -1,5 +1,0 @@
-# Hard pins used only in CI to ensure reproducibility
-hy-tools==1.6.1
-numpy==1.24.4
-h5py==3.8.0
-# Add any other exact pins you rely on; keep GDAL unpinned unless you ship wheels
