@@ -29,6 +29,10 @@ jobs:
           pip install -e . --no-deps
           python -c "import importlib.metadata as md;print('hy-tools version:', md.version('hy-tools'))"
 
+      - name: Install dev/test deps
+        run: |
+          pip install -r requirements-dev.txt
+
       - name: Run tests
         run: |
-          pytest -q
+          python -m pytest -q
