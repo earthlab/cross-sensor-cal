@@ -4,3 +4,4 @@ pytest
 spectral
 shapely
 geopandas
+rasterio

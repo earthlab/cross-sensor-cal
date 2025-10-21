@@ -8,8 +8,6 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import rasterio
-from rasterio.mask import mask
 
 
 def _require_shapely_box():
@@ -38,6 +36,35 @@ def _require_geopandas():
         ) from exc
 
     return gpd
+
+
+def _require_rasterio():
+    """Return the ``rasterio`` module while deferring the import until needed."""
+
+    try:
+        import rasterio
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
+        raise ModuleNotFoundError(
+            "The 'rasterio' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install rasterio"
+        ) from exc
+
+    return rasterio
+
+
+def _require_rasterio_mask():
+    """Return :func:`rasterio.mask.mask` while deferring the import until needed."""
+
+    rasterio = _require_rasterio()
+    try:
+        from rasterio.mask import mask as rasterio_mask
+    except ModuleNotFoundError as exc:  # pragma: no cover - mask is part of rasterio install.
+        raise ModuleNotFoundError(
+            "The 'rasterio' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install rasterio"
+        ) from exc
+
+    return rasterio_mask
 
 
 if TYPE_CHECKING:  # pragma: no cover - imports for type checking only.
@@ -132,6 +159,8 @@ def extract_roi_spectra(
     if not image_paths:
         raise ValueError("No image paths were provided")
 
+    rasterio = _require_rasterio()
+    mask = _require_rasterio_mask()
     rois = _prepare_rois(roi_path)
     roi_labels = _build_roi_labels(rois, label_column)
 
