@@ -29,6 +29,7 @@ jobs:
           pip install -e . --no-deps
           python -c "import importlib.metadata as md;print('hy-tools version:', md.version('hy-tools'))"
           python -c "import shapely, importlib.metadata as md;print('shapely version:', md.version('shapely'))"
+          python -c "import geopandas, importlib.metadata as md;print('geopandas version:', md.version('geopandas'))"
 
       - name: Install dev/test deps
         run: |

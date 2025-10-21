@@ -3,9 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 
-import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -25,6 +24,24 @@ def _require_shapely_box():
         ) from exc
 
     return box
+
+
+def _require_geopandas():
+    """Return the ``geopandas`` module while deferring the import until needed."""
+
+    try:
+        import geopandas as gpd
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
+        raise ModuleNotFoundError(
+            "The 'geopandas' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install geopandas"
+        ) from exc
+
+    return gpd
+
+
+if TYPE_CHECKING:  # pragma: no cover - imports for type checking only.
+    import geopandas as gpd
 
 try:  # ``spectral`` is an optional dependency used for ENVI headers.
     from spectral.io import envi
@@ -75,9 +92,10 @@ def _read_wavelengths(image_path: Path) -> Optional[np.ndarray]:
         return None
 
 
-def _prepare_rois(roi_path: Path) -> gpd.GeoDataFrame:
+def _prepare_rois(roi_path: Path) -> "gpd.GeoDataFrame":
     """Load ROIs from ``roi_path`` and ensure they contain valid geometries."""
 
+    gpd = _require_geopandas()
     rois = gpd.read_file(roi_path)
     if rois.empty:
         raise ValueError(f"No polygon features found in {roi_path}")
@@ -90,7 +108,7 @@ def _prepare_rois(roi_path: Path) -> gpd.GeoDataFrame:
     return rois
 
 
-def _build_roi_labels(rois: gpd.GeoDataFrame, label_column: Optional[str]) -> List[str]:
+def _build_roi_labels(rois: "gpd.GeoDataFrame", label_column: Optional[str]) -> List[str]:
     if label_column:
         if label_column not in rois.columns:
             raise ValueError(f"ROI column '{label_column}' not found")

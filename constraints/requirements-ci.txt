@@ -3,3 +3,4 @@ wheel
 pytest
 spectral
 shapely
+geopandas
