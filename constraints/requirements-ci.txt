@@ -1,2 +1,5 @@
 hy-tools==1.6.0
 wheel
+pytest
+spectral
+shapely

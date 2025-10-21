@@ -4,7 +4,6 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
-from shapely.geometry import box 
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -12,6 +11,20 @@ import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.mask import mask
+
+
+def _require_shapely_box():
+    """Return ``shapely.geometry.box`` while deferring the import until needed."""
+
+    try:
+        from shapely.geometry import box
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
+        raise ModuleNotFoundError(
+            "The 'shapely' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install shapely"
+        ) from exc
+
+    return box
 
 try:  # ``spectral`` is an optional dependency used for ENVI headers.
     from spectral.io import envi
@@ -126,6 +139,7 @@ def extract_roi_spectra(
                 dataset_rois = rois.to_crs(dataset_crs)
 
             # Prepare helpers
+            box = _require_shapely_box()
             raster_poly = box(*dataset.bounds)
             wavelengths = _read_wavelengths(image_path)
             if wavelengths is not None and len(wavelengths) == dataset.count:
