@@ -1,8 +1,10 @@
 import os
 import re
-import pandas as pd
 from pathlib import Path
-from typing import List, Tuple, Dict, Type
+from typing import List, Optional, Type
+
+import pandas as pd
+
 from src.file_types import (
     DataFile,
     NEONReflectanceFile,
@@ -27,95 +29,91 @@ from src.file_types import (
     UnmixingModelFractionsTIF,
     UnmixingModelRMSETIF,
     MaskedFileMixin,
-    SensorType
+    SensorType,
 )
 
 
-RESAMPLED_MASK_RE = re.compile(
-    r"_resampled_mask_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$",
-    re.IGNORECASE,
-)
 RESAMPLED_RE = re.compile(
-    r"_resampled_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$",
+    r"_resampled(?:_mask)?_(?P<sensor>[A-Za-z0-9_+\-]+)_envi(?:_masked)?\.(?:img|hdr)$",
     re.IGNORECASE,
 )
 
 
-def _sensor_subdir(sensor: str, masked: bool) -> str:
-    if masked:
-        return f"envi/{sensor}_Masked"
-    return f"envi/{sensor}"
+def _extract_sensor_from_name(path_str: str) -> Optional[str]:
+    match = RESAMPLED_RE.search(path_str)
+    if match:
+        return match.group("sensor")
+    return None
+
+
+def _normalize_sensor_label(sensor: str) -> str:
+    return sensor.replace("_", " ")
+
+
+def _is_masked(file_obj: DataFile, path_str: str) -> bool:
+    if getattr(file_obj, "is_masked", False):
+        return True
+
+    if isinstance(file_obj, MaskedFileMixin):
+        return True
+
+    mask_classes = (
+        NEONReflectanceBRDFMaskENVIFile,
+        NEONReflectanceBRDFMaskENVIHDRFile,
+        NEONReflectanceResampledMaskENVIFile,
+        NEONReflectanceResampledMaskHDRFile,
+    )
+    if isinstance(file_obj, mask_classes):
+        return True
+
+    lower_name = path_str.lower()
+    if "_resampled_mask_" in lower_name:
+        return True
+    if lower_name.endswith("_mask_envi.img") or lower_name.endswith("_mask_envi.hdr"):
+        return True
+    if lower_name.endswith("_envi_masked.img") or lower_name.endswith("_envi_masked.hdr"):
+        return True
+
+    return False
+
+
+def _category_to_folder(category: str) -> str:
+    if " " in category:
+        return category.replace(" ", "_")
+    return category
 
 
 def categorize_file(file_obj: DataFile) -> str:
-    """
-    Determine the category for a given file based on its type and attributes.
+    """Return the destination category name for ``file_obj``."""
 
-    Categories:
-    - For sensor files: sensor name (e.g., "Landsat_5_TM")
-    - For masked sensor files: sensor name + "_Masked" (e.g., "Landsat_5_TM_Masked")
-    - For non-sensor reflectance files: "Reflectance" or "Reflectance_Masked"
-    - For ancillary and non-img/hdr files: "Generic"
-    """
+    path = getattr(file_obj, "path", None)
+    path_str = str(path) if path else ""
 
-    if isinstance(
-        file_obj,
-        (
-            NEONReflectanceResampledENVIFile,
-            NEONReflectanceResampledHDRFile,
-            NEONReflectanceResampledMaskENVIFile,
-            NEONReflectanceResampledMaskHDRFile,
-        ),
-    ):
-        sensor_name = getattr(file_obj, "sensor", None)
-        masked = bool(getattr(file_obj, "masked", False))
+    sensor_token = _extract_sensor_from_name(path_str)
+    if sensor_token:
+        human_label = _normalize_sensor_label(sensor_token)
+        if _is_masked(file_obj, path_str):
+            return f"{human_label}_Masked"
+        return human_label
 
-        masked_match = RESAMPLED_MASK_RE.search(file_obj.path.name)
-        if masked_match:
-            sensor_name = sensor_name or masked_match.group("sensor")
-            masked = True
-        else:
-            unmasked_match = RESAMPLED_RE.search(file_obj.path.name)
-            if unmasked_match:
-                sensor_name = sensor_name or unmasked_match.group("sensor")
+    if isinstance(file_obj, (NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFCorrectedENVIHDRFile)):
+        return "Corrected"
 
-        if sensor_name:
-            file_obj.sensor = sensor_name
+    if isinstance(file_obj, (NEONReflectanceENVIFile, NEONReflectanceENVIHDRFile, NEONReflectanceBRDFMaskENVIFile, NEONReflectanceBRDFMaskENVIHDRFile)):
+        return "Reflectance_Masked" if _is_masked(file_obj, path_str) else "Reflectance"
 
-        if isinstance(
-            file_obj,
-            (NEONReflectanceResampledMaskENVIFile, NEONReflectanceResampledMaskHDRFile),
-        ):
-            masked = True
+    if isinstance(file_obj, (NEONReflectanceFile, NEONReflectanceAncillaryENVIFile, NEONReflectanceAncillaryENVIHDRFile)):
+        return "Generic"
 
-        if isinstance(file_obj, MaskedFileMixin) and getattr(file_obj, "is_masked", False):
-            masked = True
+    lower_name = path_str.lower()
+    if lower_name.endswith("_reflectance.h5") or "_ancillary_envi" in lower_name:
+        return "Generic"
 
-        file_obj.masked = masked
-        display_sensor = (sensor_name or "Sensor").replace("_", " ")
-        return f"{display_sensor}_Masked" if masked else display_sensor
-
-    if isinstance(
-        file_obj,
-        (
-            NEONReflectanceENVIFile,
-            NEONReflectanceENVIHDRFile,
-            NEONReflectanceBRDFCorrectedENVIFile,
-            NEONReflectanceBRDFCorrectedENVIHDRFile,
-        ),
-    ):
-        if isinstance(file_obj, MaskedFileMixin) and file_obj.is_masked:
-            return "Reflectance_Masked"
-        return "Reflectance"
-
-    if isinstance(file_obj, (NEONReflectanceBRDFMaskENVIFile, NEONReflectanceBRDFMaskENVIHDRFile)):
-        return "Reflectance_Masked"
-
-    if isinstance(file_obj, (UnmixingModelBestTIF, UnmixingModelFractionsTIF, UnmixingModelRMSETIF)):
-        return "Unmixing_Output"
-
-    if isinstance(file_obj, (EndmembersCSVFile, MaskedSpectralCSVFile)):
-        return "Unmixing_Data"
+    class_name = file_obj.__class__.__name__
+    if class_name == "MergedParquetFile":
+        return "Merged"
+    if class_name == "SensorPanelPNG":
+        return "Plots"
 
     return "Generic"
 
@@ -207,22 +205,12 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
                 found_files = file_class.find_in_directory(base_path)
             
             for file_obj in found_files:
-                # Get the category for this file
                 category = categorize_file(file_obj)
-                
-                # Normalize category for directory name (replace spaces with underscores)
-                category_dir = category.replace(" ", "_")
+                category_dir = _category_to_folder(category)
 
-                # Construct source path and determine destination directory
                 source_path = file_obj.path
 
-                if getattr(file_obj, "sensor", None):
-                    dest_dir = Path(destination_folder) / "sorted_files" / _sensor_subdir(
-                        file_obj.sensor,
-                        bool(getattr(file_obj, "masked", False)),
-                    )
-                else:
-                    dest_dir = Path(destination_folder) / "sorted_files" / "envi" / category_dir
+                dest_dir = Path(destination_folder) / "sorted_files" / "envi" / category_dir
 
                 # Create destination path maintaining filename
                 dest_path = dest_dir / source_path.name
