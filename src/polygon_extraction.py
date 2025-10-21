@@ -13,8 +13,27 @@ import geopandas as gpd
 from tqdm import tqdm
 import numpy as np
 from rasterio.crs import CRS
-import pyarrow as pa
-import pyarrow.parquet as pq
+
+
+def _require_pyarrow():
+    """Lazy import pyarrow with a helpful error message."""
+
+    try:
+        import pyarrow as pa
+
+        return pa
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised in optional envs
+        raise ModuleNotFoundError(
+            "The 'pyarrow' package is required for polygon extraction IO. "
+            "Install it with: pip install pyarrow"
+        ) from exc
+
+
+def _require_pyarrow_parquet():
+    """Lazy import pyarrow.parquet via :func:`_require_pyarrow`."""
+
+    pa = _require_pyarrow()
+    return pa.parquet
 
 from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, \
     NEONReflectanceResampledENVIFile, SpectralDataParquetFile
@@ -90,6 +109,7 @@ def validate_bands_in_dir(
         }
 
         try:
+            pq = _require_pyarrow_parquet()
             pq_file = pq.ParquetFile(parquet_file)
             record["ok_open"] = True
             record["num_row_groups"] = pq_file.num_row_groups
@@ -356,6 +376,7 @@ def plot_spectra_from_parquet_dir(
 
     for parquet_path in files:
         try:
+            pq = _require_pyarrow_parquet()
             parquet_file = pq.ParquetFile(parquet_path)
         except Exception as exc:
             print(f"[WARN] Skipping {parquet_path.name}: cannot open ({exc})")
@@ -642,6 +663,8 @@ def process_raster_in_chunks(
 
         print(f"[INFO] Processing {raster_path.name} with {total_bands} bands as {band_prefix}")
 
+        pq_module = _require_pyarrow_parquet()
+        pa_module = _require_pyarrow()
         pq_writer = None
         try:
             with tqdm(total=num_chunks, desc=f"Processing {raster_path.name}", unit="chunk") as pbar:
@@ -696,9 +719,9 @@ def process_raster_in_chunks(
                     if polygon_attributes is not None:
                         chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
 
-                    table = pa.Table.from_pandas(chunk_df, preserve_index=False)
+                    table = pa_module.Table.from_pandas(chunk_df, preserve_index=False)
                     if pq_writer is None:
-                        pq_writer = pq.ParquetWriter(output_parquet_path, table.schema)
+                        pq_writer = pq_module.ParquetWriter(output_parquet_path, table.schema)
                     pq_writer.write_table(table)
 
                     pbar.update(1)

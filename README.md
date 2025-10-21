@@ -26,6 +26,22 @@ Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line ident
 
 Cross-Sensor Calibration depends on GDAL, PROJ, Ray, and HyTools. We recommend the Conda workflow below because it installs the required native libraries automatically. If you prefer a pure `pip` workflow, install system packages for GDAL/PROJ first (e.g., `brew install gdal` on macOS or `apt-get install gdal-bin libgdal-dev proj-bin` on Debian/Ubuntu).
 
+### HyTools install (choose ONE)
+
+**PyPI (recommended for CI and most dev):**
+```bash
+python -m pip install -U "pip<25" "setuptools<75" wheel
+pip install "hy-tools==1.6.0"
+```
+
+**Conda (if you need GDAL/PROJ prebuilt):**
+```bash
+conda create -n cscal python=3.10 gdal proj hytools -c conda-forge
+conda activate cscal
+```
+
+> Don’t mix conda `hytools` with PyPI `hy-tools`. In CI we pin PyPI `hy-tools==1.6.0`.
+
 ### Conda
 
 ```bash
@@ -40,8 +56,7 @@ pip install -e .
 uv venv
 source .venv/bin/activate
 uv pip install -e .
-# hytools is not published on PyPI with the 1.x series, install it separately
-pip install "hytools>=0.0.10"  # or use `conda install -c conda-forge hytools`
+pip install "hy-tools==1.6.0"
 ```
 
 If GDAL wheels are unavailable for your platform, install it from Conda-forge and then point `pip` at the Conda environment by exporting `CPLUS_INCLUDE_PATH` and `C_INCLUDE_PATH`.

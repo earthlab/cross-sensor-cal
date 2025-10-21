@@ -1,0 +1,9 @@
+hy-tools==1.6.0
+wheel
+pytest
+spectral
+shapely
+geopandas
+rasterio
+tqdm
+pyarrow>=15

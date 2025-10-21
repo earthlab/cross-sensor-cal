@@ -3,15 +3,72 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
-from shapely.geometry import box 
+from typing import Dict, List, Optional, TYPE_CHECKING
 
-import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import rasterio
-from rasterio.mask import mask
+
+
+def _require_shapely_box():
+    """Return ``shapely.geometry.box`` while deferring the import until needed."""
+
+    try:
+        from shapely.geometry import box
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
+        raise ModuleNotFoundError(
+            "The 'shapely' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install shapely"
+        ) from exc
+
+    return box
+
+
+def _require_geopandas():
+    """Return the ``geopandas`` module while deferring the import until needed."""
+
+    try:
+        import geopandas as gpd
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
+        raise ModuleNotFoundError(
+            "The 'geopandas' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install geopandas"
+        ) from exc
+
+    return gpd
+
+
+def _require_rasterio():
+    """Return the ``rasterio`` module while deferring the import until needed."""
+
+    try:
+        import rasterio
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
+        raise ModuleNotFoundError(
+            "The 'rasterio' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install rasterio"
+        ) from exc
+
+    return rasterio
+
+
+def _require_rasterio_mask():
+    """Return :func:`rasterio.mask.mask` while deferring the import until needed."""
+
+    rasterio = _require_rasterio()
+    try:
+        from rasterio.mask import mask as rasterio_mask
+    except ModuleNotFoundError as exc:  # pragma: no cover - mask is part of rasterio install.
+        raise ModuleNotFoundError(
+            "The 'rasterio' package is required for ROI spectral comparison functions.\n"
+            "Install it with: pip install rasterio"
+        ) from exc
+
+    return rasterio_mask
+
+
+if TYPE_CHECKING:  # pragma: no cover - imports for type checking only.
+    import geopandas as gpd
 
 try:  # ``spectral`` is an optional dependency used for ENVI headers.
     from spectral.io import envi
@@ -62,9 +119,10 @@ def _read_wavelengths(image_path: Path) -> Optional[np.ndarray]:
         return None
 
 
-def _prepare_rois(roi_path: Path) -> gpd.GeoDataFrame:
+def _prepare_rois(roi_path: Path) -> "gpd.GeoDataFrame":
     """Load ROIs from ``roi_path`` and ensure they contain valid geometries."""
 
+    gpd = _require_geopandas()
     rois = gpd.read_file(roi_path)
     if rois.empty:
         raise ValueError(f"No polygon features found in {roi_path}")
@@ -77,7 +135,7 @@ def _prepare_rois(roi_path: Path) -> gpd.GeoDataFrame:
     return rois
 
 
-def _build_roi_labels(rois: gpd.GeoDataFrame, label_column: Optional[str]) -> List[str]:
+def _build_roi_labels(rois: "gpd.GeoDataFrame", label_column: Optional[str]) -> List[str]:
     if label_column:
         if label_column not in rois.columns:
             raise ValueError(f"ROI column '{label_column}' not found")
@@ -101,6 +159,8 @@ def extract_roi_spectra(
     if not image_paths:
         raise ValueError("No image paths were provided")
 
+    rasterio = _require_rasterio()
+    mask = _require_rasterio_mask()
     rois = _prepare_rois(roi_path)
     roi_labels = _build_roi_labels(rois, label_column)
 
@@ -126,6 +186,7 @@ def extract_roi_spectra(
                 dataset_rois = rois.to_crs(dataset_crs)
 
             # Prepare helpers
+            box = _require_shapely_box()
             raster_poly = box(*dataset.bounds)
             wavelengths = _read_wavelengths(image_path)
             if wavelengths is not None and len(wavelengths) == dataset.count:

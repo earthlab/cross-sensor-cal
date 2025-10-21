@@ -1,0 +1,42 @@
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Installer hygiene (avoid old-setup breakage)
+        run: |
+          python -m pip install -U "pip<25" "setuptools<75" wheel
+          python -m pip --version
+          python -c "import setuptools,sys;print('setuptools',setuptools.__version__)"
+
+      - name: Pin HyTools (PyPI) and install project
+        run: |
+          pip install -r constraints/requirements-ci.txt
+          pip install -e . --no-deps
+          python -c "import importlib.metadata as md;print('hy-tools version:', md.version('hy-tools'))"
+          python -c "import shapely, importlib.metadata as md;print('shapely version:', md.version('shapely'))"
+          python -c "import geopandas, importlib.metadata as md;print('geopandas version:', md.version('geopandas'))"
+          python -c "import rasterio, importlib.metadata as md;print('rasterio version:', md.version('rasterio'))"
+          python -c "import pyarrow, importlib.metadata as md;print('pyarrow version:', md.version('pyarrow'))"
+
+      - name: Install dev/test deps
+        run: |
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          python -m pytest -q

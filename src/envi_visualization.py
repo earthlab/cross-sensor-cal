@@ -7,7 +7,19 @@ from typing import Iterable, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from spectral import open_image
+
+
+def _require_spectral():
+    """Return :func:`spectral.open_image`, importing ``spectral`` lazily."""
+
+    try:
+        from spectral import open_image  # type: ignore import-error
+    except ModuleNotFoundError as exc:  # pragma: no cover - defensive guard
+        raise ModuleNotFoundError(
+            "The 'spectral' package is required for ENVI visualization functions.\n"
+            "Install it with: pip install spectral"
+        ) from exc
+    return open_image
 
 
 def _resolve_hdr_path(img_path: Path | str) -> Path:
@@ -48,6 +60,7 @@ def plot_envi_band(img_path: Path | str, band_index: int = 0, cmap: str = "gray"
     """
 
     hdr_path = _resolve_hdr_path(img_path)
+    open_image = _require_spectral()
     img = open_image(str(hdr_path))
 
     data = np.asarray(img[:, :, band_index], dtype=float)
@@ -78,6 +91,7 @@ def plot_envi_rgb(
     """
 
     hdr_path = _resolve_hdr_path(img_path)
+    open_image = _require_spectral()
     img = open_image(str(hdr_path))
 
     band_indices = tuple(rgb_bands)
