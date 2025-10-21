@@ -48,75 +48,47 @@ def _sensor_subdir(sensor: str, masked: bool) -> str:
 
 
 def categorize_file(file_obj: DataFile) -> str:
-    """
-    Determine the category for a given file based on its type and attributes.
+    """Return the destination category name for ``file_obj``.
 
-    Categories:
-    - For sensor files: sensor name (e.g., "Landsat_5_TM")
-    - For masked sensor files: sensor name + "_Masked" (e.g., "Landsat_5_TM_Masked")
-    - For non-sensor reflectance files: "Reflectance" or "Reflectance_Masked"
-    - For ancillary and non-img/hdr files: "Generic"
+    The function intentionally focuses on a small set of high-level categories
+    used by the move list generator.  Type checks are performed in order of
+    specificity and fall back to filename-based heuristics so that mis-typed
+    objects are still routed correctly.
     """
 
-    if isinstance(
-        file_obj,
-        (
-            NEONReflectanceResampledENVIFile,
-            NEONReflectanceResampledHDRFile,
-            NEONReflectanceResampledMaskENVIFile,
-            NEONReflectanceResampledMaskHDRFile,
-        ),
-    ):
-        sensor_name = getattr(file_obj, "sensor", None)
-        masked = bool(getattr(file_obj, "masked", False))
+    # Known direct mappings -------------------------------------------------
+    if isinstance(file_obj, NEONReflectanceENVIFile):
+        return "ENVI"
 
-        masked_match = RESAMPLED_MASK_RE.search(file_obj.path.name)
-        if masked_match:
-            sensor_name = sensor_name or masked_match.group("sensor")
-            masked = True
-        else:
-            unmasked_match = RESAMPLED_RE.search(file_obj.path.name)
-            if unmasked_match:
-                sensor_name = sensor_name or unmasked_match.group("sensor")
+    if isinstance(file_obj, NEONReflectanceFile):
+        return "Generic"
 
-        if sensor_name:
-            file_obj.sensor = sensor_name
+    if isinstance(file_obj, NEONReflectanceAncillaryENVIFile):
+        return "Generic"
 
-        if isinstance(
-            file_obj,
-            (NEONReflectanceResampledMaskENVIFile, NEONReflectanceResampledMaskHDRFile),
-        ):
-            masked = True
+    # Some repositories may expose specialised subclasses using different
+    # names (e.g., CorrectedENVIFile, MergedParquetFile, SensorPanelPNG).
+    # Rather than importing optional classes that might not exist, inspect the
+    # class name directly so the logic works even when those types are absent.
+    class_name = file_obj.__class__.__name__
 
-        if isinstance(file_obj, MaskedFileMixin) and getattr(file_obj, "is_masked", False):
-            masked = True
+    if class_name in {"CorrectedENVIFile", "NEONReflectanceBRDFCorrectedENVIFile"}:
+        return "Corrected"
 
-        file_obj.masked = masked
-        display_sensor = (sensor_name or "Sensor").replace("_", " ")
-        return f"{display_sensor}_Masked" if masked else display_sensor
+    if class_name == "MergedParquetFile":
+        return "Merged"
 
-    if isinstance(
-        file_obj,
-        (
-            NEONReflectanceENVIFile,
-            NEONReflectanceENVIHDRFile,
-            NEONReflectanceBRDFCorrectedENVIFile,
-            NEONReflectanceBRDFCorrectedENVIHDRFile,
-        ),
-    ):
-        if isinstance(file_obj, MaskedFileMixin) and file_obj.is_masked:
-            return "Reflectance_Masked"
-        return "Reflectance"
+    if class_name == "SensorPanelPNG":
+        return "Plots"
 
-    if isinstance(file_obj, (NEONReflectanceBRDFMaskENVIFile, NEONReflectanceBRDFMaskENVIHDRFile)):
-        return "Reflectance_Masked"
+    # Filename-based fallback -----------------------------------------------
+    path = getattr(file_obj, "path", None)
+    if path is not None:
+        path_str = str(path).lower()
+        if "_ancillary_envi" in path_str or "_reflectance.h5" in path_str:
+            return "Generic"
 
-    if isinstance(file_obj, (UnmixingModelBestTIF, UnmixingModelFractionsTIF, UnmixingModelRMSETIF)):
-        return "Unmixing_Output"
-
-    if isinstance(file_obj, (EndmembersCSVFile, MaskedSpectralCSVFile)):
-        return "Unmixing_Data"
-
+    # Default catch-all ------------------------------------------------------
     return "Generic"
 
 
