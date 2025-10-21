@@ -1,8 +1,10 @@
 import os
 import re
-import pandas as pd
 from pathlib import Path
-from typing import List, Tuple, Dict, Type
+from typing import List, Optional, Type
+
+import pandas as pd
+
 from src.file_types import (
     DataFile,
     NEONReflectanceFile,
@@ -27,68 +29,92 @@ from src.file_types import (
     UnmixingModelFractionsTIF,
     UnmixingModelRMSETIF,
     MaskedFileMixin,
-    SensorType
+    SensorType,
 )
 
 
-RESAMPLED_MASK_RE = re.compile(
-    r"_resampled_mask_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$",
-    re.IGNORECASE,
-)
 RESAMPLED_RE = re.compile(
-    r"_resampled_(?P<sensor>[^_]+(?:_[^_]+)*)_envi\.(?:img|hdr)$",
+    r"_resampled(?:_mask)?_(?P<sensor>[A-Za-z0-9_+\-]+)_envi(?:_masked)?\.(?:img|hdr)$",
     re.IGNORECASE,
 )
 
 
-def _sensor_subdir(sensor: str, masked: bool) -> str:
-    if masked:
-        return f"envi/{sensor}_Masked"
-    return f"envi/{sensor}"
+def _extract_sensor_from_name(path_str: str) -> Optional[str]:
+    match = RESAMPLED_RE.search(path_str)
+    if match:
+        return match.group("sensor")
+    return None
+
+
+def _normalize_sensor_label(sensor: str) -> str:
+    return sensor.replace("_", " ")
+
+
+def _is_masked(file_obj: DataFile, path_str: str) -> bool:
+    if getattr(file_obj, "is_masked", False):
+        return True
+
+    if isinstance(file_obj, MaskedFileMixin):
+        return True
+
+    mask_classes = (
+        NEONReflectanceBRDFMaskENVIFile,
+        NEONReflectanceBRDFMaskENVIHDRFile,
+        NEONReflectanceResampledMaskENVIFile,
+        NEONReflectanceResampledMaskHDRFile,
+    )
+    if isinstance(file_obj, mask_classes):
+        return True
+
+    lower_name = path_str.lower()
+    if "_resampled_mask_" in lower_name:
+        return True
+    if lower_name.endswith("_mask_envi.img") or lower_name.endswith("_mask_envi.hdr"):
+        return True
+    if lower_name.endswith("_envi_masked.img") or lower_name.endswith("_envi_masked.hdr"):
+        return True
+
+    return False
+
+
+def _category_to_folder(category: str) -> str:
+    if " " in category:
+        return category.replace(" ", "_")
+    return category
 
 
 def categorize_file(file_obj: DataFile) -> str:
-    """Return the destination category name for ``file_obj``.
+    """Return the destination category name for ``file_obj``."""
 
-    The function intentionally focuses on a small set of high-level categories
-    used by the move list generator.  Type checks are performed in order of
-    specificity and fall back to filename-based heuristics so that mis-typed
-    objects are still routed correctly.
-    """
+    path = getattr(file_obj, "path", None)
+    path_str = str(path) if path else ""
 
-    # Known direct mappings -------------------------------------------------
-    if isinstance(file_obj, NEONReflectanceENVIFile):
-        return "ENVI"
+    sensor_token = _extract_sensor_from_name(path_str)
+    if sensor_token:
+        human_label = _normalize_sensor_label(sensor_token)
+        if _is_masked(file_obj, path_str):
+            return f"{human_label}_Masked"
+        return human_label
 
-    if isinstance(file_obj, NEONReflectanceFile):
-        return "Generic"
-
-    if isinstance(file_obj, NEONReflectanceAncillaryENVIFile):
-        return "Generic"
-
-    # Some repositories may expose specialised subclasses using different
-    # names (e.g., CorrectedENVIFile, MergedParquetFile, SensorPanelPNG).
-    # Rather than importing optional classes that might not exist, inspect the
-    # class name directly so the logic works even when those types are absent.
-    class_name = file_obj.__class__.__name__
-
-    if class_name in {"CorrectedENVIFile", "NEONReflectanceBRDFCorrectedENVIFile"}:
+    if isinstance(file_obj, (NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceBRDFCorrectedENVIHDRFile)):
         return "Corrected"
 
+    if isinstance(file_obj, (NEONReflectanceENVIFile, NEONReflectanceENVIHDRFile, NEONReflectanceBRDFMaskENVIFile, NEONReflectanceBRDFMaskENVIHDRFile)):
+        return "Reflectance_Masked" if _is_masked(file_obj, path_str) else "Reflectance"
+
+    if isinstance(file_obj, (NEONReflectanceFile, NEONReflectanceAncillaryENVIFile, NEONReflectanceAncillaryENVIHDRFile)):
+        return "Generic"
+
+    lower_name = path_str.lower()
+    if lower_name.endswith("_reflectance.h5") or "_ancillary_envi" in lower_name:
+        return "Generic"
+
+    class_name = file_obj.__class__.__name__
     if class_name == "MergedParquetFile":
         return "Merged"
-
     if class_name == "SensorPanelPNG":
         return "Plots"
 
-    # Filename-based fallback -----------------------------------------------
-    path = getattr(file_obj, "path", None)
-    if path is not None:
-        path_str = str(path).lower()
-        if "_ancillary_envi" in path_str or "_reflectance.h5" in path_str:
-            return "Generic"
-
-    # Default catch-all ------------------------------------------------------
     return "Generic"
 
 
@@ -179,22 +205,12 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
                 found_files = file_class.find_in_directory(base_path)
             
             for file_obj in found_files:
-                # Get the category for this file
                 category = categorize_file(file_obj)
-                
-                # Normalize category for directory name (replace spaces with underscores)
-                category_dir = category.replace(" ", "_")
+                category_dir = _category_to_folder(category)
 
-                # Construct source path and determine destination directory
                 source_path = file_obj.path
 
-                if getattr(file_obj, "sensor", None):
-                    dest_dir = Path(destination_folder) / "sorted_files" / _sensor_subdir(
-                        file_obj.sensor,
-                        bool(getattr(file_obj, "masked", False)),
-                    )
-                else:
-                    dest_dir = Path(destination_folder) / "sorted_files" / "envi" / category_dir
+                dest_dir = Path(destination_folder) / "sorted_files" / "envi" / category_dir
 
                 # Create destination path maintaining filename
                 dest_path = dest_dir / source_path.name
