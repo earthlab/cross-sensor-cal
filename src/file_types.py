@@ -34,13 +34,16 @@ class SensorType(str, Enum):
 class DataFile:
     """Base class for NEON data files."""
 
+    # ``path`` is the only required argument; every other metadata attribute is
+    # optional so callers (and dataclass-generated ``__init__`` methods) can
+    # supply whichever fields they have without tripping default-order rules.
     path: Path
     domain: str | None = None
-    site: str | None = None
-    date: str | None = None
-    time: str | None = None
+    site:   str | None = None
+    date:   str | None = None
+    time:   str | None = None
     product: str | None = None
-    sensor: str | None = None
+    sensor:  str | None = None
     masked: bool = False
     convolution: bool = False
     _CANON_RE: re.Pattern = field(
@@ -339,6 +342,7 @@ class NEONReflectanceENVIFile(DataFile):
         return out
 
 
+@dataclass
 class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"^NEON_(?P<domain>D\d+?)_(?P<site>[A-Z0-9]+?)_(?P<product>DP\d(?:\.\d{5}\.\d{3})?)_"
@@ -347,30 +351,19 @@ class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
         r"(?:_directional)?_reflectance_envi\.hdr$"
     )
 
-    def __init__(
-        self,
-        path: Path,
-        domain: str,
-        site: str,
-        product: Optional[str] = None,
-        date: str,
-        time: Optional[str] = None,
-        tile: Optional[str] = None,
-        directional: bool = False,
-    ):
-        super().__init__(
-            path=path,
-            domain=domain,
-            site=site,
-            date=date,
-            time=time,
-            product=product,
-        )
-        self.tile = tile
-        self.directional = directional
+    tile: str | None = None
+    directional: bool = False
 
-        stem = self.path.stem
-        if not self.product or self.product == "DP1":
+    def __post_init__(self) -> None:
+        provided_product = self.product
+        if provided_product:
+            self.product = _normalize_product_value(provided_product)
+        super().__post_init__()
+
+        if provided_product:
+            self.product = _normalize_product_value(provided_product)
+        else:
+            stem = self.path.stem
             if re.search(r"_reflectance_envi$", stem):
                 self.product = "reflectance_envi"
             else:
@@ -558,6 +551,7 @@ class NEONReflectanceAncillaryENVIHDRFile(MaskedFileMixin, DataFile):
 # Config JSON
 # ──────────────────────────────────────────────────────────────────────────────
 
+@dataclass
 class NEONReflectanceConfigFile(DataFile):
     pattern = re.compile(
         r"^NEON_(?P<domain>D\d+?)_(?P<site>[A-Z0-9]+?)_(?P<product>DP\d(?:\.\d{5}\.\d{3})?)_"
@@ -568,29 +562,14 @@ class NEONReflectanceConfigFile(DataFile):
         r"_reflectance_envi_config_envi\.json$"
     )
 
-    def __init__(
-        self,
-        path: Path,
-        domain: str,
-        site: str,
-        product: str,
-        date: str,
-        time: Optional[str],
-        tile: Optional[str] = None,
-        directional: bool = False,
-        suffix: Optional[str] = None,
-    ):
-        super().__init__(path)
-        self.domain = domain
-        self.site = site
-        self.product = product
-        self.date = date
-        self.time = time
-        self.tile = tile
-        self.directional = directional
-        if suffix is None and self.path.name.endswith("_config_envi.json"):
-            suffix = "envi"
-        self.suffix = suffix
+    tile: str | None = None
+    directional: bool = False
+    suffix: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.suffix is None and self.path.name.endswith("_config_envi.json"):
+            self.suffix = "envi"
 
     @classmethod
     def from_filename(cls, path: Path) -> "NEONReflectanceConfigFile":
@@ -955,6 +934,7 @@ class NEONReflectanceCoefficientsFile(DataFile):
 # Resampled outputs
 # ──────────────────────────────────────────────────────────────────────────────
 
+@dataclass
 class NEONReflectanceResampledENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"^NEON_(?P<domain>D\d+?)_(?P<site>[A-Z0-9]+?)_DP1"
@@ -965,41 +945,28 @@ class NEONReflectanceResampledENVIFile(MaskedFileMixin, DataFile):
         r"_resampled_(?P<sensor>.+?)_(?P<suffix>[a-z0-9_]+)\.img$"
     )
 
-    def __init__(
-        self,
-        path: Path,
-        domain: str,
-        site: str,
-        date: str,
-        product: Optional[str] = None,
-        time: Optional[str] = None,
-        sensor: Optional[str] = None,
-        suffix: str = "envi",
-        tile: Optional[str] = None,
-        directional: bool = False,
-    ):
-        norm_product = _normalize_product_value(product)
-        super().__init__(
-            path=path,
-            domain=domain,
-            site=site,
-            date=date,
-            time=time,
-            product=norm_product,
-            sensor=sensor,
-        )
-        self.suffix = suffix
-        self.tile = tile
-        self.directional = directional
-        self.masked = False
+    suffix: str = "envi"
+    tile: str | None = None
+    directional: bool = False
+
+    def __post_init__(self) -> None:
+        provided_product = self.product
+        if provided_product:
+            self.product = _normalize_product_value(provided_product)
+        super().__post_init__()
+
+        if provided_product:
+            self.product = _normalize_product_value(provided_product)
+        else:
+            if not self.product or self.product == "DP1":
+                self.product = "resampled"
 
         if not self.sensor:
             inferred = _sensor_from_stem(self.path)
             if inferred:
                 self.sensor = inferred
 
-        if not norm_product and (not self.product or self.product == "DP1"):
-            self.product = "resampled"
+        self.masked = False
 
     @classmethod
     def from_filename(cls, path: Path) -> "NEONReflectanceResampledENVIFile":
@@ -1138,6 +1105,7 @@ class NEONReflectanceResampledHDRFile(DataFile):
         ]
 
 
+@dataclass
 class NEONReflectanceResampledMaskENVIFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"^NEON_(?P<domain>D\d+?)_(?P<site>[A-Z0-9]+?)_DP1"
@@ -1148,41 +1116,28 @@ class NEONReflectanceResampledMaskENVIFile(MaskedFileMixin, DataFile):
         r"_resampled_mask_(?P<sensor>.+?)_(?P<suffix>[a-z0-9_]+)\.img$"
     )
 
-    def __init__(
-        self,
-        path: Path,
-        domain: str,
-        site: str,
-        date: str,
-        product: Optional[str] = None,
-        time: Optional[str] = None,
-        sensor: Optional[str] = None,
-        suffix: str = "envi",
-        tile: Optional[str] = None,
-        directional: bool = False,
-    ):
-        norm_product = _normalize_product_value(product)
-        super().__init__(
-            path=path,
-            domain=domain,
-            site=site,
-            date=date,
-            time=time,
-            product=norm_product,
-            sensor=sensor,
-        )
-        self.suffix = suffix
-        self.tile = tile
-        self.directional = directional
-        self.masked = True
+    suffix: str = "envi"
+    tile: str | None = None
+    directional: bool = False
+
+    def __post_init__(self) -> None:
+        provided_product = self.product
+        if provided_product:
+            self.product = _normalize_product_value(provided_product)
+        super().__post_init__()
+
+        if provided_product:
+            self.product = _normalize_product_value(provided_product)
+        else:
+            if not self.product or self.product == "DP1":
+                self.product = "resampled_mask"
 
         if not self.sensor:
             inferred = _sensor_from_stem(self.path)
             if inferred:
                 self.sensor = inferred
 
-        if not norm_product and (not self.product or self.product == "DP1"):
-            self.product = "resampled_mask"
+        self.masked = True
 
     @classmethod
     def from_filename(cls, path: Path) -> "NEONReflectanceResampledMaskENVIFile":
