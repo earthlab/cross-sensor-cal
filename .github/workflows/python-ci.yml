@@ -31,6 +31,7 @@ jobs:
           python -c "import shapely, importlib.metadata as md;print('shapely version:', md.version('shapely'))"
           python -c "import geopandas, importlib.metadata as md;print('geopandas version:', md.version('geopandas'))"
           python -c "import rasterio, importlib.metadata as md;print('rasterio version:', md.version('rasterio'))"
+          python -c "import pyarrow, importlib.metadata as md;print('pyarrow version:', md.version('pyarrow'))"
 
       - name: Install dev/test deps
         run: |

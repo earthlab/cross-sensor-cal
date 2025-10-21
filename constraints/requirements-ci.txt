@@ -6,3 +6,4 @@ shapely
 geopandas
 rasterio
 tqdm
+pyarrow>=15
