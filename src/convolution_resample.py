@@ -6,15 +6,17 @@ References:
     Claverie, M. et al. (2018). Harmonized Landsat and Sentinel-2 (HLS) framework.
 """
 
-from pathlib import Path
-import numpy as np
+from __future__ import annotations
+
 import json
 import math
-from typing import Dict, Iterable, Optional, Tuple
-from spectral import open_image
-from spectral.io import envi
-from scipy.stats import norm
 import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Dict, Iterable, Optional, Tuple
+
+import numpy as np
+from scipy.stats import norm
 
 from src.file_types import (
     NEONReflectanceResampledENVIFile,
@@ -25,6 +27,23 @@ from src.file_types import (
 _RAY_CONVOLUTION_WORKER = None
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
+
+
+@lru_cache(maxsize=1)
+def _require_spectral():
+    """Return spectral helpers, raising a clear error when unavailable."""
+
+    try:
+        from spectral import open_image  # type: ignore
+        from spectral.io import envi  # type: ignore
+    except Exception as exc:  # pragma: no cover - defensive
+        raise RuntimeError(
+            "Optional dependency 'spectral' is required for ENVI/HDR operations. "
+            "Install it (e.g., `pip install spectral`) or run tests in CSCAL_TEST_MODE="
+            "unit/lite which do not use spectral-dependent code."
+        ) from exc
+
+    return open_image, envi
 
 
 def _files_exist_and_nonempty(*paths: Path) -> bool:
@@ -332,6 +351,8 @@ def resample(
         else (bool(use_ray) if use_ray is not None else (num_cpus not in (None, 1)))
     )
 
+    open_image, envi = _require_spectral()
+
     ray_module = None
     ray_cpus = None
     ray_started_here = False
@@ -356,13 +377,13 @@ def resample(
 
             try:
                 print(f"📂 Opening: {hdr_file.file_path}")
-                img = open_image(hdr_file.file_path)
+                img = open_image(str(hdr_file.file_path))
                 hyperspectral_data = np.asarray(img.load()).astype(np.float32, copy=False)
             except Exception as e:
                 print(f"❌ ERROR: Could not load {hdr_file.file_path}: {e}")
                 continue
 
-            header = envi.read_envi_header(hdr_file.file_path)
+            header = envi.read_envi_header(str(hdr_file.file_path))
             wavelengths = _parse_wavelengths(header.get('wavelength'))
 
             if not wavelengths:
@@ -523,7 +544,12 @@ def resample(
                     'data ignore value': nodata_value,
                 }
 
-                envi.save_image(resampled_hdr_file.file_path, resampled_to_save, metadata=new_metadata, force=True)
+                envi.save_image(
+                    str(resampled_hdr_file.file_path),
+                    resampled_to_save,
+                    metadata=new_metadata,
+                    force=True,
+                )
                 print(f"✅ Resampled file saved: {resampled_hdr_file.file_path}")
     finally:
         if ray_started_here and ray_module is not None:
