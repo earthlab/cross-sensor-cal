@@ -1,10 +1,6 @@
 import pytest
 np = pytest.importorskip("numpy")
 
-from tests.conftest import require_mode
-
-pytestmark = require_mode("full")
-
 from src.convolution_resample import (
     _apply_convolution_with_renorm,
     _build_W_from_gaussians,
