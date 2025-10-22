@@ -1,8 +1,13 @@
 import unittest
+import pytest
+from tests.conftest import require_mode
+
+pytestmark = require_mode("full")
+
 import os
 import tempfile
 import shutil
-import pandas as pd
+pd = pytest.importorskip("pandas")
 import re
 from pathlib import Path
 from unittest.mock import Mock, patch

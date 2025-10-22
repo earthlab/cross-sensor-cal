@@ -1,6 +1,11 @@
+
 from pathlib import Path
 
 import pytest
+from tests.conftest import require_mode
+
+pytestmark = require_mode("full")
+
 
 pd = pytest.importorskip("pandas")
 np = pytest.importorskip("numpy")
@@ -10,7 +15,6 @@ Affine = pytest.importorskip("affine", minversion="2.4.0").Affine
 box = pytest.importorskip("shapely.geometry", minversion="2.0.0").box
 
 from src.roi_spectral_comparison import extract_roi_spectra
-
 
 def _write_test_raster(path: Path, data: np.ndarray, *, crs: str = "EPSG:32613") -> None:
     bands, height, width = data.shape
@@ -27,7 +31,6 @@ def _write_test_raster(path: Path, data: np.ndarray, *, crs: str = "EPSG:32613")
         transform=transform,
     ) as dataset:
         dataset.write(data)
-
 
 def test_extract_roi_spectra_mean(tmp_path):
     image_dir = Path(tmp_path)

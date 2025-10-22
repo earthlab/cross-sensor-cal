@@ -1,0 +1,25 @@
+name: CI
+on:
+  push: { branches: [ main ] }
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.10" }
+      - run: pip install -e .[tests]
+      - run: CSCAL_TEST_MODE=unit pytest -q -m "not lite and not full"
+
+  lite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.10" }
+      - run: |
+          pip install -e .[tests]
+          pip install rasterio scipy
+      - run: CSCAL_TEST_MODE=lite pytest -q -m "lite"

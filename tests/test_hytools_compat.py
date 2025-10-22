@@ -7,13 +7,16 @@ import os
 import sys
 
 import pytest
+from tests.conftest import require_mode
+
+pytestmark = require_mode("full")
+
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_ROOT = os.path.join(PROJECT_ROOT, "src")
 for path in (PROJECT_ROOT, SRC_ROOT):
     if path not in sys.path:
         sys.path.insert(0, path)
-
 
 @pytest.fixture()
 def hytools_package(tmp_path, monkeypatch):
@@ -72,7 +75,6 @@ def hytools_package(tmp_path, monkeypatch):
 
     return package_dir
 
-
 def test_get_hytools_class_discovers_nested_module(hytools_package):
     hytools_compat = importlib.reload(importlib.import_module("hytools_compat"))
 
@@ -83,7 +85,6 @@ def test_get_hytools_class_discovers_nested_module(hytools_package):
 
     assert instance.file_name == "example.h5"
     assert instance.get_header()["file type"] == "neon"
-
 
 def test_get_write_envi_discovers_nested_module(hytools_package):
     hytools_compat = importlib.reload(importlib.import_module("hytools_compat"))
@@ -97,7 +98,6 @@ def test_get_write_envi_discovers_nested_module(hytools_package):
 
     assert writer.file_path == "output.bsq"
     assert writer.header == {"data type": 4}
-
 
 def test_missing_hytools_error_includes_install_hint(monkeypatch):
     hytools_compat = importlib.reload(importlib.import_module("hytools_compat"))
