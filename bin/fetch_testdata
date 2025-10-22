@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "[info] No external data required. For 'full' mode, add your own fetch logic here."
+chmod +x bin/fetch_testdata

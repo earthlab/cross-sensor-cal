@@ -1,19 +1,25 @@
+
 import os
 import sys
 from pathlib import Path
 
 import pytest
+from tests.conftest import MODE, require_mode
+
+pytestmark = require_mode("full")
+
+if MODE != "full":
+    pytest.skip("CSCAL_TEST_MODE!='full'", allow_module_level=True)
+
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.file_types import NEONReflectanceENVIFile, SpectralDataParquetFile
 from src.polygon_extraction import _process_single_raster, process_raster_in_chunks
 
-
 class DummyDataFile:
     def __init__(self, path: Path):
         self.path = path
-
 
 def test_process_single_raster_skips_existing_output(tmp_path, monkeypatch):
     raster_folder = tmp_path / "raster" / "nested"
@@ -36,7 +42,6 @@ def test_process_single_raster_skips_existing_output(tmp_path, monkeypatch):
 
     _process_single_raster(raster_file, polygon_path=None)
 
-
 def test_process_raster_in_chunks_skips_when_output_exists(tmp_path, monkeypatch):
     raster_path = tmp_path / "dummy.img"
     output_path = tmp_path / "out.parquet"
@@ -53,7 +58,6 @@ def test_process_raster_in_chunks_skips_when_output_exists(tmp_path, monkeypatch
         polygon_path=None,
         output_parquet_file=DummyDataFile(output_path),
     )
-
 
 def test_process_raster_in_chunks_overwrite_removes_existing_output(tmp_path, monkeypatch):
     raster_path = tmp_path / "dummy.img"
