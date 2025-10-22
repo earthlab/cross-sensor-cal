@@ -4,21 +4,44 @@ Cross-Sensor Calibration provides a Python pipeline for processing NEON Airborne
 
 ![Pipeline diagram](docs/img/pipeline.png)
 
-## 5-minute Quickstart
+## Quickstart
+
+Install the lightweight base package:
 
 ```bash
-# 1. set up workspace
-mkdir -p data/SITE
-
-# 2. download a tiny flight line (placeholders shown)
-python -m bin.download --site SITE --flight FLIGHT_LINE
-
-# 3. run the full pipeline
-python -m bin.pipeline data/SITE/FLIGHT_LINE
-
-# 4. peek at resampled outputs
-ls data/SITE/FLIGHT_LINE/resampled
+pip install cross-sensor-cal
 ```
+
+Create a workspace and download a flight line:
+
+```bash
+mkdir -p data/SITE
+cscal-download SITE --year-month 2021-06 --flight FLIGHT_LINE --output data
+```
+
+Run the end-to-end processing pipeline (see `--help` for all options):
+
+```bash
+cscal-pipeline --help
+```
+
+If you need the full geospatial/hyperspectral toolchain (Rasterio, GeoPandas, Spectral, Ray, HDF5),
+install the optional extras:
+
+```bash
+pip install "cross-sensor-cal[full]"
+```
+
+Feature availability by install type:
+
+| Feature | Base | `[full]` |
+|---|---|---|
+| Core array ops (NumPy/Scipy) | ✅ | ✅ |
+| Raster I/O (rasterio) | ⚠️ (not included) | ✅ |
+| Vector I/O/ops (GeoPandas) | ⚠️ | ✅ |
+| ENVI/HDR (spectral) | ⚠️ | ✅ |
+| HDF5 (h5py) | ⚠️ | ✅ |
+| Ray parallelism | ⚠️ | ✅ |
 
 Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line identifier.
 

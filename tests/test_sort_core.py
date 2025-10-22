@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pytest
-from src.sort_core import classify_name
+from cross_sensor_cal.sort_core import classify_name
 
 @pytest.mark.parametrize("fname,expected", [
     ("", "Generic"),

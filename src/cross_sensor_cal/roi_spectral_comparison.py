@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from ._optional import require_geopandas, require_rasterio, require_spectral
+
 
 def _require_shapely_box():
     """Return ``shapely.geometry.box`` while deferring the import until needed."""
@@ -17,51 +19,31 @@ def _require_shapely_box():
         from shapely.geometry import box
     except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
         raise ModuleNotFoundError(
-            "The 'shapely' package is required for ROI spectral comparison functions.\n"
-            "Install it with: pip install shapely"
+            "Optional dependency 'shapely' is required for ROI spectral comparison."
+            " Install it via `pip install cross-sensor-cal[full]`."
         ) from exc
 
     return box
 
 
 def _require_geopandas():
-    """Return the ``geopandas`` module while deferring the import until needed."""
-
-    try:
-        import geopandas as gpd
-    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
-        raise ModuleNotFoundError(
-            "The 'geopandas' package is required for ROI spectral comparison functions.\n"
-            "Install it with: pip install geopandas"
-        ) from exc
-
-    return gpd
+    return require_geopandas()
 
 
 def _require_rasterio():
-    """Return the ``rasterio`` module while deferring the import until needed."""
-
-    try:
-        import rasterio
-    except ModuleNotFoundError as exc:  # pragma: no cover - exercised when dependency missing.
-        raise ModuleNotFoundError(
-            "The 'rasterio' package is required for ROI spectral comparison functions.\n"
-            "Install it with: pip install rasterio"
-        ) from exc
-
-    return rasterio
+    return require_rasterio()
 
 
 def _require_rasterio_mask():
     """Return :func:`rasterio.mask.mask` while deferring the import until needed."""
 
-    rasterio = _require_rasterio()
+    rasterio = require_rasterio()
     try:
         from rasterio.mask import mask as rasterio_mask
     except ModuleNotFoundError as exc:  # pragma: no cover - mask is part of rasterio install.
-        raise ModuleNotFoundError(
-            "The 'rasterio' package is required for ROI spectral comparison functions.\n"
-            "Install it with: pip install rasterio"
+        raise RuntimeError(
+            "Optional dependency 'rasterio' is required for ROI spectral comparison. "
+            "Install cross-sensor-cal with the 'full' extra."
         ) from exc
 
     return rasterio_mask
@@ -71,8 +53,8 @@ if TYPE_CHECKING:  # pragma: no cover - imports for type checking only.
     import geopandas as gpd
 
 try:  # ``spectral`` is an optional dependency used for ENVI headers.
-    from spectral.io import envi
-except ImportError:  # pragma: no cover - spectral is present in production envs.
+    envi = require_spectral().io.envi
+except RuntimeError:  # pragma: no cover - spectral missing in lite environments.
     envi = None  # type: ignore[assignment]
 
 

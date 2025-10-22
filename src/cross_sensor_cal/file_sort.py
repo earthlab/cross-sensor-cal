@@ -5,7 +5,7 @@ from typing import List, Optional, Type
 
 import pandas as pd
 
-from src.file_types import (
+from .file_types import (
     DataFile,
     NEONReflectanceFile,
     NEONReflectanceENVIFile,

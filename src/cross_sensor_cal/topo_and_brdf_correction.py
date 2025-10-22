@@ -4,11 +4,6 @@ from pathlib import Path
 from typing import Iterable, Optional
 import glob
 import os
-
-try:  # pragma: no cover - optional dependency guard
-    import ray
-except ModuleNotFoundError:  # pragma: no cover - handled in callers
-    ray = None  # type: ignore[assignment]
 import numpy as np
 
 # HyTools is an optional dependency. Import lazily so that other utilities in this module
@@ -20,9 +15,10 @@ calc_brdf_coeffs = None  # type: ignore[assignment]
 set_glint_parameters = None  # type: ignore[assignment]
 mask_create = None  # type: ignore[assignment]
 
-from src.hytools_compat import get_write_envi
+from ._optional import require_ray, require_rasterio
+from .hytools_compat import get_write_envi
 
-from src.file_types import (
+from .file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceConfigFile,
     NEONReflectanceCoefficientsFile,
@@ -31,7 +27,7 @@ from src.file_types import (
     NEONReflectanceBRDFMaskENVIFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile,  # imported in case you later need HDR
 )
-from src.ray_utils import init_ray
+from .ray_utils import init_ray
 
 warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
@@ -93,10 +89,7 @@ def topo_and_brdf_correction(config_file: str):
 
     _import_hytools()
 
-    if ray is None:
-        raise ModuleNotFoundError(
-            "ray is required for BRDF/TOPO correction workflows. Install it with `pip install ray`."
-        )
+    ray = require_ray()
 
     images = config_dict["input_files"]
     if len(images) != 1:
@@ -227,7 +220,7 @@ def apply_offset_to_envi(
         Number of ENVI images modified.
     """
 
-    import rasterio
+    rasterio = require_rasterio()
 
     input_dir = Path(input_dir)
     changed = 0

@@ -7,12 +7,10 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from rasterio.features import rasterize
-import rasterio
-import geopandas as gpd
 from tqdm import tqdm
 import numpy as np
-from rasterio.crs import CRS
+
+from ._optional import require_geopandas, require_rasterio
 
 
 def _require_pyarrow():
@@ -35,7 +33,7 @@ def _require_pyarrow_parquet():
     pa = _require_pyarrow()
     return pa.parquet
 
-from src.file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, \
+from .file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, \
     NEONReflectanceResampledENVIFile, SpectralDataParquetFile
 
 
@@ -566,7 +564,8 @@ def get_crs_from_hdr(hdr_path):
                 if proj_str:
                     wkt = proj_str.group(1).strip()
                     if wkt:
-                        return CRS.from_wkt(wkt)  # Convert WKT to CRS
+                        rasterio = require_rasterio()
+                        return rasterio.crs.CRS.from_wkt(wkt)  # Convert WKT to CRS
 
             elif "map info" in lower_line:
                 map_info = re.search(r'map info = {(.*?)}', line, re.IGNORECASE)
@@ -579,7 +578,12 @@ def get_crs_from_hdr(hdr_path):
                     hemisphere = values[8].strip().lower()
                     datum = values[9].strip() if len(values) > 9 else ""
                     if datum == "WGS-84":
-                        return CRS.from_epsg(32600 + utm_zone) if hemisphere == "north" else CRS.from_epsg(32700 + utm_zone)
+                        rasterio = require_rasterio()
+                        return (
+                            rasterio.crs.CRS.from_epsg(32600 + utm_zone)
+                            if hemisphere == "north"
+                            else rasterio.crs.CRS.from_epsg(32700 + utm_zone)
+                        )
 
         return None  # Return None if no CRS is found
 
@@ -616,6 +620,8 @@ def process_raster_in_chunks(
             return
     hdr_path = raster_path.with_suffix(".hdr")
 
+    rasterio = require_rasterio()
+
     with rasterio.open(raster_path) as src:
         crs_from_hdr = None
         if hdr_path.exists():
@@ -630,6 +636,7 @@ def process_raster_in_chunks(
         polygon_attributes = None
 
         if polygon_path is not None:
+            gpd = require_geopandas()
             polygons = gpd.read_file(polygon_path)
 
             if polygons.crs is None:
@@ -639,7 +646,7 @@ def process_raster_in_chunks(
             if dataset_crs is not None and polygons.crs != dataset_crs:
                 polygons = polygons.to_crs(dataset_crs)
 
-            polygon_values = rasterize(
+            polygon_values = rasterio.features.rasterize(
                 [(geom, idx + 1) for idx, geom in enumerate(polygons.geometry)],
                 out_shape=(src.height, src.width),
                 transform=src.transform,

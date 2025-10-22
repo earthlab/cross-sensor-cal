@@ -2,15 +2,12 @@ import os
 import glob
 from typing import Union
 
-import matplotlib.pyplot as plt
-import rasterio
-import geopandas as gpd
 import numpy as np
-from rasterio.crs import CRS
 from shapely.geometry import box
-from rasterio.features import rasterize
 
-from src.file_types import NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceResampledENVIFile
+from ._optional import require_geopandas, require_matplotlib_pyplot, require_rasterio
+
+from .file_types import NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceResampledENVIFile
 
 
 def mask_raster_with_polygons(
@@ -60,6 +57,9 @@ def mask_raster_with_polygons(
         """
         Loads the ENVI raster and GeoJSON polygons.
         """
+        rasterio = require_rasterio()
+        gpd = require_geopandas()
+
         if not os.path.exists(envi_path):
             raise FileNotFoundError(f"ENVI raster file not found at: {envi_path}")
         if not os.path.exists(geojson_path):
@@ -77,7 +77,7 @@ def mask_raster_with_polygons(
         # Handle raster CRS
         if raster.crs is None:
             if raster_crs_override is not None:
-                raster_crs = CRS.from_string(raster_crs_override)
+                raster_crs = require_rasterio().crs.CRS.from_string(raster_crs_override)
                 print(f"Assigned CRS {raster_crs_override} to raster.")
             else:
                 raise ValueError("Raster CRS is undefined and no override provided.")
@@ -115,6 +115,8 @@ def mask_raster_with_polygons(
         """
         Clips polygons to raster bounds.
         """
+        gpd = require_geopandas()
+
         print("Clipping polygons to raster bounds...")
         raster_bounds_geom = gpd.GeoDataFrame({'geometry': [box(*raster.bounds)]}, crs=raster.crs)
         clipped_polygons = gpd.overlay(polygons_aligned, raster_bounds_geom, how='intersection')
@@ -130,7 +132,8 @@ def mask_raster_with_polygons(
         Creates a mask where pixels inside polygons are True and outside are False.
         """
         print("Creating mask from polygons...")
-        mask = rasterize(
+        rasterio = require_rasterio()
+        mask = rasterio.features.rasterize(
             [(geom, 1) for geom in polygons.geometry],
             out_shape=(raster.height, raster.width),
             transform=raster.transform,
@@ -194,6 +197,7 @@ def mask_raster_with_polygons(
         """
         print(f"Masked data stats: Min={masked_data.min()}, Max={masked_data.max()}, Unique={np.unique(masked_data)}")
 
+        plt = require_matplotlib_pyplot()
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
 
         # Original Raster
@@ -279,7 +283,7 @@ def mask_raster_with_polygons(
             # Display the plot
             plt.show()
         else:
-            plt.close()
+            plt.close(fig)
 
     if envi_file.masked_path.exists():
         print(f'Masked ')
