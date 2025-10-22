@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 import json
-from src.topo_and_brdf_correction import topo_and_brdf_correction
+from cross_sensor_cal.topo_and_brdf_correction import topo_and_brdf_correction
 
 if __name__ == "__main__":
     parser = ArgumentParser()

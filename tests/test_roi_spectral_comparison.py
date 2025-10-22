@@ -14,7 +14,7 @@ rasterio = pytest.importorskip("rasterio")
 Affine = pytest.importorskip("affine", minversion="2.4.0").Affine
 box = pytest.importorskip("shapely.geometry", minversion="2.0.0").box
 
-from src.roi_spectral_comparison import extract_roi_spectra
+from cross_sensor_cal.roi_spectral_comparison import extract_roi_spectra
 
 def _write_test_raster(path: Path, data: np.ndarray, *, crs: str = "EPSG:32613") -> None:
     bands, height, width = data.shape

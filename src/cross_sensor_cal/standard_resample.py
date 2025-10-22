@@ -3,12 +3,13 @@ import argparse
 from pathlib import Path
 
 import numpy as np
-import spectral
 import json
 import matplotlib.pyplot as plt
 import sys
 from scipy.interpolate import interp1d
 import glob
+
+from ._optional import require_spectral
 
 try:  # pragma: no cover - optional dependency
     from hytools.transform.resampling import calc_resample_coeffs
@@ -92,7 +93,7 @@ except ModuleNotFoundError:  # pragma: no cover - executed when hytools is absen
 
         return coeffs.astype(np.float32, copy=False)
 
-from src.file_types import NEONReflectanceBRDFCorrectedENVIHDRFile, NEONReflectanceResampledHDRFile, \
+from .file_types import NEONReflectanceBRDFCorrectedENVIHDRFile, NEONReflectanceResampledHDRFile, \
     NEONReflectanceBRDFCorrectedENVIFile
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -199,6 +200,7 @@ class resampler_hy_obj:
             If the wavelength information is not found in the header file, the method raises a ValueError, indicating the absence of this crucial data. This method is essential for processing spectral data as it provides the fundamental wavelength values needed for various analytical processes, such as resampling.
         """
         
+        spectral = require_spectral()
         header = spectral.envi.read_envi_header(hdr_path)
 
         # Extract wavelength information
@@ -235,6 +237,7 @@ class resampler_hy_obj:
         :return: dict
             Dictionary containing header information for the ENVI file, including CRS.
         """
+        spectral = require_spectral()
         header = spectral.envi.read_envi_header(hdr_path)
     
         # Extract the number of lines and samples
@@ -278,6 +281,7 @@ class resampler_hy_obj:
             :param header_info: Header information for the data.
             :param output_filename: The filename for the saved data.
         """
+        spectral = require_spectral()
         spectral.envi.save_image(output_filename, data, metadata=header_info, force=True)
 
 def load_envi_data(filename):
@@ -290,6 +294,7 @@ def load_envi_data(filename):
         # Add .hdr extension to get the header file
         hdr_filename = filename + '.hdr'
         # Read the ENVI data
+        spectral = require_spectral()
         img = spectral.open_image(hdr_filename)
         # Load the data into memory (optional, depends on the data size and memory capacity)
         data = img.load()

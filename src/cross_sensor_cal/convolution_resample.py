@@ -18,7 +18,8 @@ from typing import Dict, Iterable, Optional, Tuple
 import numpy as np
 from scipy.stats import norm
 
-from src.file_types import (
+from ._optional import require_ray, require_spectral
+from .file_types import (
     NEONReflectanceResampledENVIFile,
     NEONReflectanceResampledHDRFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile
@@ -33,17 +34,8 @@ PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 def _require_spectral():
     """Return spectral helpers, raising a clear error when unavailable."""
 
-    try:
-        from spectral import open_image  # type: ignore
-        from spectral.io import envi  # type: ignore
-    except Exception as exc:  # pragma: no cover - defensive
-        raise RuntimeError(
-            "Optional dependency 'spectral' is required for ENVI/HDR operations. "
-            "Install it (e.g., `pip install spectral`) or run tests in CSCAL_TEST_MODE="
-            "unit/lite which do not use spectral-dependent code."
-        ) from exc
-
-    return open_image, envi
+    spectral = require_spectral()
+    return spectral.open_image, spectral.io.envi
 
 
 def _files_exist_and_nonempty(*paths: Path) -> bool:
@@ -271,7 +263,7 @@ def _apply_convolution_with_renorm_ray(
 ) -> np.ndarray:
     """Parallel spectral convolution using Ray workers."""
 
-    import ray
+    ray = require_ray()
 
     global _RAY_CONVOLUTION_WORKER
 
@@ -358,10 +350,8 @@ def resample(
     ray_started_here = False
 
     if use_ray:
-        from src.ray_utils import init_ray
-        import ray as _ray
-
-        ray_module = _ray
+        from .ray_utils import init_ray
+        ray_module = require_ray()
         ray_cpus = init_ray(num_cpus)
         ray_started_here = True
         print(f"🧠 Ray initialised with {ray_cpus} CPUs for convolution resampling.")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from src.types_protocol import categorize_file
+from cross_sensor_cal.types_protocol import categorize_file
 
 @dataclass
 class Fake:

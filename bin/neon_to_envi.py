@@ -12,12 +12,8 @@ try:  # pragma: no cover - optional dependency guard
 except ModuleNotFoundError:  # pragma: no cover - handled at runtime
     ray = None  # type: ignore[assignment]
 
-# Add the repo root and src to sys.path
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root / "src"))
-
-from hytools_compat import get_hytools_class
-from neon_to_envi import neon_to_envi_task, export_anc
+from cross_sensor_cal.hytools_compat import get_hytools_class
+from cross_sensor_cal.neon_to_envi import neon_to_envi_task, export_anc
 from neon_file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceAncillaryENVIFile,

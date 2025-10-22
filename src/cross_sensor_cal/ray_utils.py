@@ -12,14 +12,11 @@ import os
 import math
 from typing import Any
 
+from ._optional import require_ray
+
 # Ray inspects this environment variable during initialisation; set it eagerly so
 # the warning is suppressed even if ``ray`` is imported before :func:`init_ray`.
 os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
-
-try:  # pragma: no cover - exercised via integration paths
-    import ray
-except ModuleNotFoundError:  # pragma: no cover - handled gracefully below
-    ray = None  # type: ignore[assignment]
 
 
 _ENV_CPU_KEYS = (
@@ -162,10 +159,7 @@ def init_ray(
         The CPU count actually passed to ``ray.init``.
     """
 
-    if ray is None:
-        raise ModuleNotFoundError(
-            "ray is required for parallel processing. Install it with ``pip install ray``"
-        )
+    ray = require_ray()
 
     if "num_cpus" in ray_kwargs:
         raise TypeError("Pass num_cpus via the positional argument, not kwargs.")

@@ -1,7 +1,10 @@
 import os.path
 
 import requests
+import os
 import subprocess
+
+import requests
 
 
 def list_neon_products():

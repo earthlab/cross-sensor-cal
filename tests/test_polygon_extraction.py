@@ -14,8 +14,8 @@ if MODE != "full":
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.file_types import NEONReflectanceENVIFile, SpectralDataParquetFile
-from src.polygon_extraction import _process_single_raster, process_raster_in_chunks
+from cross_sensor_cal.file_types import NEONReflectanceENVIFile, SpectralDataParquetFile
+from cross_sensor_cal.polygon_extraction import _process_single_raster, process_raster_in_chunks
 
 class DummyDataFile:
     def __init__(self, path: Path):
@@ -38,7 +38,7 @@ def test_process_single_raster_skips_existing_output(tmp_path, monkeypatch):
     def fail(*args, **kwargs):  # pragma: no cover - should not run
         raise AssertionError("Extraction should have been skipped")
 
-    monkeypatch.setattr("src.polygon_extraction.process_raster_in_chunks", fail)
+    monkeypatch.setattr("cross_sensor_cal.polygon_extraction.process_raster_in_chunks", fail)
 
     _process_single_raster(raster_file, polygon_path=None)
 
@@ -51,7 +51,7 @@ def test_process_raster_in_chunks_skips_when_output_exists(tmp_path, monkeypatch
     def fail_open(*args, **kwargs):  # pragma: no cover - should not run
         raise AssertionError("Raster should not be opened when skipping")
 
-    monkeypatch.setattr("src.polygon_extraction.rasterio.open", fail_open)
+    monkeypatch.setattr("cross_sensor_cal.polygon_extraction.rasterio.open", fail_open)
 
     process_raster_in_chunks(
         DummyDataFile(raster_path),
@@ -73,7 +73,7 @@ def test_process_raster_in_chunks_overwrite_removes_existing_output(tmp_path, mo
             return False
 
     monkeypatch.setattr(
-        "src.polygon_extraction.rasterio.open",
+        "cross_sensor_cal.polygon_extraction.rasterio.open",
         lambda *args, **kwargs: ExplodingDataset(),
     )
 

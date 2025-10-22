@@ -10,6 +10,7 @@ import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
+from typing import Sequence
 
 # --- Silence Ray’s stderr warnings BEFORE any potential imports of ray ---
 # Send Ray logs to files (not stderr), reduce backend log level, disable usage pings.
@@ -207,20 +208,20 @@ def _silence_noise(enabled: bool):
         except Exception:  # pragma: no cover - flush best effort
             pass
 
-from src.envi_download import download_neon_flight_lines
-from src.file_types import NEONReflectanceConfigFile, \
+from ..envi_download import download_neon_flight_lines
+from ..file_types import NEONReflectanceConfigFile, \
     NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceENVIFile, NEONReflectanceResampledENVIFile
-from src.neon_to_envi import neon_to_envi
-from src.topo_and_brdf_correction import (
+from ..neon_to_envi import neon_to_envi
+from ..topo_and_brdf_correction import (
     generate_config_json,
     topo_and_brdf_correction,
     apply_offset_to_envi,
 )
-from src.convolution_resample import resample as convolution_resample
-from src.standard_resample import translate_to_other_sensors
-from src.mask_raster import mask_raster_with_polygons
-from src.polygon_extraction import control_function_for_extraction
-from src.file_sort import generate_file_move_list
+from ..convolution_resample import resample as convolution_resample
+from ..standard_resample import translate_to_other_sensors
+from ..mask_raster import mask_raster_with_polygons
+from ..polygon_extraction import control_function_for_extraction
+from ..file_sort import generate_file_move_list
 
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -688,7 +689,7 @@ def jefe(
     print(
         "Jefe finished. Please check for the _with_mask_and_all_spectra.csv for your  hyperspectral data from NEON flight lines extracted to match your provided polygons")
 
-def parse_args():
+def parse_args(argv: Sequence[str] | None = None):
     parser = argparse.ArgumentParser(
         description="Run the JEFE pipeline for processing NEON hyperspectral data with polygon extraction."
     )
@@ -726,15 +727,15 @@ def parse_args():
         help="Emit detailed per-step logs instead of compact progress bars.",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.reflectance_offset and float(args.reflectance_offset) != 0.0:
         args.brightness_offset = float(args.reflectance_offset)
         print("⚠️  --reflectance-offset is deprecated; using --brightness-offset instead.")
     return args
 
 
-def main():
-    args = parse_args()
+def run_pipeline(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
 
     flight_lines_list = [fl.strip() for fl in args.flight_lines.split(",") if fl.strip()]
 
@@ -757,4 +758,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_pipeline()

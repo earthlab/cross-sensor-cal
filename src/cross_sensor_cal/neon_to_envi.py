@@ -1,28 +1,29 @@
 import os
 import argparse
-import h5py
 import shutil
-from h5py import Dataset
 
 # Suppress Ray's /dev/shm fallback warning to keep conversion logs clean.
 os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
 
 import numpy as np
 from pathlib import Path
-from src.hytools_compat import get_write_envi, get_hytools_class
 import re
 from functools import partial
-from src.file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
-from src.ray_utils import init_ray
+from typing import TYPE_CHECKING
 
-try:  # pragma: no cover - import guard for optional dependency
-    import ray
-except ModuleNotFoundError:  # pragma: no cover - handled in neon_to_envi
-    ray = None  # type: ignore[assignment]
+from ._optional import require_h5py, require_ray
+from .hytools_compat import get_write_envi, get_hytools_class
+from .file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
+from .ray_utils import init_ray
+
+if TYPE_CHECKING:  # pragma: no cover - only for static typing
+    import h5py
 
 # --- Utility functions ---
 def get_all_keys(group):
-    if isinstance(group, Dataset):
+    h5py = require_h5py()
+
+    if isinstance(group, h5py.Dataset):
         return [group.name]
     all_keys = []
     for key in group.keys():
@@ -128,6 +129,8 @@ def find_reflectance_metadata_group(h5_file):
 def export_anc(hy_obj, output_dir):
     WriteENVI = get_write_envi()
     neon_file = NEONReflectanceFile.from_filename(Path(hy_obj.file_name))
+    h5py = require_h5py()
+
     with h5py.File(hy_obj.file_name, 'r') as h5_file:
         try:
             base_path = find_reflectance_metadata_group(h5_file) + "/"
@@ -188,10 +191,7 @@ def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata
     if not images:
         raise ValueError("No input images provided to neon_to_envi().")
 
-    if ray is None:
-        raise ModuleNotFoundError(
-            "ray is required for parallel NEON conversion. Install it with `pip install ray`."
-        )
+    ray = require_ray()
 
     num_cpus = init_ray(len(images))
     print(f"🚀 Using {num_cpus} CPUs for conversion.")

@@ -5,21 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
+
+from ._optional import require_matplotlib_pyplot, require_spectral
 
 
 def _require_spectral():
     """Return :func:`spectral.open_image`, importing ``spectral`` lazily."""
 
-    try:
-        from spectral import open_image  # type: ignore import-error
-    except ModuleNotFoundError as exc:  # pragma: no cover - defensive guard
-        raise ModuleNotFoundError(
-            "The 'spectral' package is required for ENVI visualization functions.\n"
-            "Install it with: pip install spectral"
-        ) from exc
-    return open_image
+    spectral = require_spectral()
+    return spectral.open_image
 
 
 def _resolve_hdr_path(img_path: Path | str) -> Path:
@@ -65,6 +60,7 @@ def plot_envi_band(img_path: Path | str, band_index: int = 0, cmap: str = "gray"
 
     data = np.asarray(img[:, :, band_index], dtype=float)
 
+    plt = require_matplotlib_pyplot()
     plt.figure(figsize=(8, 8))
     plt.imshow(data, cmap=cmap)
     plt.title(f"ENVI Band {band_index}")
@@ -104,6 +100,7 @@ def plot_envi_rgb(
     rgb = (rgb - p_low) / (p_high - p_low)
     rgb = np.clip(rgb, 0, 1)
 
+    plt = require_matplotlib_pyplot()
     plt.figure(figsize=(8, 8))
     plt.imshow(rgb)
     plt.title(f"RGB Composite (bands {band_indices})")
