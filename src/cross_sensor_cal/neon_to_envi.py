@@ -187,14 +187,22 @@ def export_anc(hy_obj, output_dir):
         print(f"📦 Ancillary data saved: {ancillary_file.file_path}")
 
 # --- Main driver ---
-def neon_to_envi(images: list[str], output_dir: str, anc: bool = False, metadata_override: dict = None):
+def neon_to_envi(
+    images: list[str],
+    output_dir: str,
+    anc: bool = False,
+    metadata_override: dict | None = None,
+    *,
+    num_cpus: int | None = None,
+):
     if not images:
         raise ValueError("No input images provided to neon_to_envi().")
 
     ray = require_ray()
 
-    num_cpus = init_ray(len(images))
-    print(f"🚀 Using {num_cpus} CPUs for conversion.")
+    cpu_request = num_cpus if num_cpus is not None else max(len(images), 8)
+    resolved_cpus = init_ray(cpu_request)
+    print(f"🚀 Using {resolved_cpus} CPUs for conversion.")
 
     HyTools = get_hytools_class()
     hytool = ray.remote(HyTools)
