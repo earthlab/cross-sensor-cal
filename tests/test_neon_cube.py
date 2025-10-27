@@ -48,7 +48,8 @@ def _create_fake_neon_file(path: Path) -> None:
             "Map_Info", data=np.array(map_info, dtype="S")
         )
         coordinate_group.create_dataset(
-            "Coordinate_System_String", data=np.string_("FAKE PROJECTION WKT")
+            "Coordinate_System_String",
+            data=np.array("FAKE PROJECTION WKT", dtype="S"),
         )
 
 
