@@ -6,6 +6,8 @@ Cross-Sensor Calibration provides a Python pipeline for processing NEON Airborne
 
 ## Quickstart
 
+> As of v2.0, cross-sensor-cal no longer depends on HyTools. All NEON handling is internal and GPL-compatible.
+
 Install the lightweight base package:
 
 ```bash
@@ -23,6 +25,14 @@ Run the end-to-end processing pipeline (see `--help` for all options):
 
 ```bash
 cscal-pipeline --help
+```
+
+Programmatic invocation is equally simple:
+
+```python
+from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+
+go_forth_and_multiply(input_dir="path/to/neon_h5s", output_dir="out_dir")
 ```
 
 If you need the full geospatial/hyperspectral toolchain (Rasterio, GeoPandas, Spectral, Ray, HDF5),
@@ -47,28 +57,12 @@ Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line ident
 
 ## Install
 
-Cross-Sensor Calibration depends on GDAL, PROJ, Ray, and HyTools. We recommend the Conda workflow below because it installs the required native libraries automatically. If you prefer a pure `pip` workflow, install system packages for GDAL/PROJ first (e.g., `brew install gdal` on macOS or `apt-get install gdal-bin libgdal-dev proj-bin` on Debian/Ubuntu).
-
-### HyTools install (choose ONE)
-
-**PyPI (recommended for CI and most dev):**
-```bash
-python -m pip install -U "pip<25" "setuptools<75" wheel
-pip install "hy-tools==1.6.0"
-```
-
-**Conda (if you need GDAL/PROJ prebuilt):**
-```bash
-conda create -n cscal python=3.10 gdal proj hytools -c conda-forge
-conda activate cscal
-```
-
-> Don’t mix conda `hytools` with PyPI `hy-tools`. In CI we pin PyPI `hy-tools==1.6.0`.
+Cross-Sensor Calibration depends on GDAL, PROJ, Ray, h5py, and optional geospatial stacks such as Rasterio and GeoPandas. We recommend the Conda workflow below because it installs the required native libraries automatically. If you prefer a pure `pip` workflow, install system packages for GDAL/PROJ first (e.g., `brew install gdal` on macOS or `apt-get install gdal-bin libgdal-dev proj-bin` on Debian/Ubuntu).
 
 ### Conda
 
 ```bash
-conda create -n cscal python=3.10 gdal proj hytools
+conda create -n cscal python=3.10 gdal proj
 conda activate cscal
 pip install -e .
 ```
@@ -79,7 +73,6 @@ pip install -e .
 uv venv
 source .venv/bin/activate
 uv pip install -e .
-pip install "hy-tools==1.6.0"
 ```
 
 If GDAL wheels are unavailable for your platform, install it from Conda-forge and then point `pip` at the Conda environment by exporting `CPLUS_INCLUDE_PATH` and `C_INCLUDE_PATH`.
@@ -103,9 +96,9 @@ Key entry points:
 
 ## Support Matrix
 
-| Python | OS            | GDAL | HyTools | Ray |
-|--------|---------------|------|--------|-----|
-| 3.10+  | Linux, macOS  | 3.4+ | 1.0+   | 2.0+ |
+| Python | OS            | GDAL | Ray |
+|--------|---------------|------|-----|
+| 3.10+  | Linux, macOS  | 3.4+ | 2.0+ |
 
 ## How to cite
 
