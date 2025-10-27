@@ -318,11 +318,7 @@ def go_forth_and_multiply(
 
     flight_lines = kwargs.get("flight_lines") or []
     bars: dict[str, tqdm] = {}
-    totals = {fl: 0 for fl in flight_lines}
-    for fl in flight_lines:
-        totals[fl] += 1  # download slot
-        if not _line_outputs_present(base_path, fl):
-            totals[fl] += 1  # conversion slot
+    totals = {fl: 1 for fl in flight_lines}  # download slot always tracked
 
     if not verbose and tqdm is not None and flight_lines:
         bar_fmt = "{desc:<14} {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} steps"
@@ -339,49 +335,57 @@ def go_forth_and_multiply(
     elif not verbose and tqdm is None:
         print("⚠️  tqdm not installed; progress bars disabled.")
 
-    def _add_total(line: str, amount: int) -> None:
-        key = _pretty_line(line)
-        if bars and key in bars and amount:
+    def _key_for_hint(line_hint: str | None) -> str | None:
+        if not line_hint or not bars:
+            return None
+        key = _pretty_line(line_hint)
+        return key if key in bars else None
+
+    def _plan_step_for_line(line_hint: str | None, amount: int = 1) -> None:
+        key = _key_for_hint(line_hint)
+        if key and amount:
             bars[key].total += amount
             bars[key].refresh()
 
-    def _add_total_for_path(path_obj: Path, amount: int = 1) -> None:
-        if not bars:
-            return
-        for line in flight_lines:
-            if _belongs_to(line, path_obj):
-                _add_total(line, amount)
-                break
+    def _complete_step_for_line(line_hint: str | None, amount: int = 1) -> None:
+        key = _key_for_hint(line_hint)
+        if key and amount:
+            # Ensure total never lags behind completion when planning happens late
+            progress = bars[key]
+            if progress.total < progress.n + amount:
+                progress.total = progress.n + amount
+                progress.refresh()
+            progress.update(amount)
 
-    def _tick_for_path(path_obj: Path) -> None:
-        if not bars:
-            return
-        for line in flight_lines:
-            if _belongs_to(line, path_obj):
-                key = _pretty_line(line)
-                if key in bars:
-                    bars[key].update(1)
-                break
+    def _plan_step_for_path(path_obj: Path, amount: int = 1) -> None:
+        candidate = _pretty_line(str(path_obj))
+        if candidate in bars:
+            _plan_step_for_line(candidate, amount)
+
+    def _complete_step_for_path(path_obj: Path, amount: int = 1) -> None:
+        candidate = _pretty_line(str(path_obj))
+        if candidate in bars:
+            _complete_step_for_line(candidate, amount)
 
     for fl in flight_lines:
-        _tick_download_slot(base_path, fl, _tick_for_path)
+        _tick_download_slot(base_path, fl, lambda path, line=fl: _complete_step_for_line(line))
 
     if verbose:
         print("📦 Step 2/5 Converting H5 files to ENVI format...")
     for fl in flight_lines:
+        _plan_step_for_line(fl)
         if _line_outputs_present(base_path, fl):
             _warn_skip_exists(
                 "H5→ENVI (main+ancillary)", [fl], verbose, bars, scope=_pretty_line(fl)
             )
-            _add_total_for_path(base_path / fl / "_envi")
-            _tick_for_path(base_path / fl / "_envi")
+            _complete_step_for_line(fl)
             continue
 
         h5s_for_line = [h5 for h5 in base_path.rglob("*.h5") if _belongs_to(fl, h5)]
         if not h5s_for_line:
             if verbose:
                 logging.warning("No .h5 files found for line: %s", fl)
-            _tick_for_path(base_path / fl / "missing.h5")
+            _complete_step_for_line(fl)
             continue
         try:
             _emit(
@@ -391,7 +395,7 @@ def go_forth_and_multiply(
             )
             with _silence_noise(enabled=not verbose):
                 neon_to_envi(images=[str(p) for p in h5s_for_line], output_dir=str(base_path), anc=True)
-            _tick_for_path(h5s_for_line[0])
+            _complete_step_for_line(fl)
         except TypeError:
             for h5 in h5s_for_line:
                 try:
@@ -399,7 +403,7 @@ def go_forth_and_multiply(
                         neon_to_envi(images=[str(h5)], output_dir=str(base_path), anc=True)
                 except Exception as exc:
                     raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
-            _tick_for_path(h5s_for_line[0])
+            _complete_step_for_line(fl)
         except Exception as exc:
             raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
 
@@ -415,15 +419,15 @@ def go_forth_and_multiply(
     if not force_config and existing_cfgs:
         _warn_skip_exists("generate_config_json", existing_cfgs, verbose, bars)
         for cfg in existing_cfgs:
-            _add_total_for_path(Path(cfg))
-            _tick_for_path(Path(cfg))
+            _plan_step_for_path(Path(cfg))
+            _complete_step_for_path(Path(cfg))
     else:
         try:
             generate_config_json(base_path)
             new_cfgs = list(NEONReflectanceConfigFile.find_in_directory(base_path))
             for cfg in new_cfgs:
-                _add_total_for_path(Path(cfg.file_path))
-                _tick_for_path(Path(cfg.file_path))
+                _plan_step_for_line(cfg.tile or str(cfg.file_path))
+                _complete_step_for_line(cfg.tile or str(cfg.file_path))
         except Exception as exc:
             raise RuntimeError(str(exc) + _stale_hint("generate_config_json")) from exc
 
@@ -440,7 +444,7 @@ def go_forth_and_multiply(
             existing_corrected = list(corrected_dir.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
                 corrected_dir.glob("*brdfandtopo_corrected_envi*.img")
             )
-            _add_total_for_path(Path(cfg.file_path))
+            _plan_step_for_line(cfg.tile or str(cfg.file_path))
             if existing_corrected:
                 _warn_skip_exists(
                     "topo_and_brdf_correction",
@@ -449,11 +453,11 @@ def go_forth_and_multiply(
                     bars,
                     scope=_pretty_line(cfg.tile or cfg.file_path.name),
                 )
-                _tick_for_path(Path(cfg.file_path))
+                _complete_step_for_line(cfg.tile or str(cfg.file_path))
                 continue
             try:
                 topo_and_brdf_correction(str(cfg.file_path))
-                _tick_for_path(Path(cfg.file_path))
+                _complete_step_for_line(cfg.tile or str(cfg.file_path))
             except Exception as exc:
                 errors += 1
                 logging.error(
@@ -484,7 +488,7 @@ def go_forth_and_multiply(
             if verbose:
                 print(f"📂 Found {len(corrected_files)} BRDF-corrected files to process.")
             for corrected_file in corrected_files:
-                _add_total_for_path(corrected_file.path)
+                _plan_step_for_line(corrected_file.tile or str(corrected_file.path))
                 existing_resampled = [
                     resampled.path
                     for resampled in NEONReflectanceResampledENVIFile.find_in_directory(
@@ -499,7 +503,7 @@ def go_forth_and_multiply(
                         bars,
                         scope=corrected_file.path.name,
                     )
-                    _tick_for_path(corrected_file.path)
+                    _complete_step_for_line(corrected_file.tile or str(corrected_file.path))
                     continue
                 try:
                     # Prefer new signature with method=...; fall back if not available
@@ -515,7 +519,7 @@ def go_forth_and_multiply(
                         exc,
                         _stale_hint("resample"),
                     )
-                _tick_for_path(corrected_file.path)
+                _complete_step_for_line(corrected_file.tile or str(corrected_file.path))
         if verbose:
             print(f"✅ Resampling complete ({method_norm}).")
     else:
@@ -545,8 +549,8 @@ def go_forth_and_multiply(
                 only_if_name_contains=names_to_match,
             )
             for path in candidates:
-                _add_total_for_path(path)
-                _tick_for_path(path)
+                _plan_step_for_path(path)
+                _complete_step_for_path(path)
             if verbose:
                 print(f"✅ Offset applied to {changed} ENVI file(s).")
         except Exception as exc:
