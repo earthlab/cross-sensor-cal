@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import logging
 import os
 import re
@@ -11,6 +12,8 @@ import sys
 from io import StringIO
 from pathlib import Path
 from typing import Sequence
+
+import numpy as np
 
 # --- Silence Ray’s stderr warnings BEFORE any potential imports of ray ---
 # Send Ray logs to files (not stderr), reduce backend log level, disable usage pings.
@@ -208,16 +211,24 @@ def _silence_noise(enabled: bool):
         except Exception:  # pragma: no cover - flush best effort
             pass
 
-from ..envi_download import download_neon_flight_lines
-from ..file_types import NEONReflectanceConfigFile, \
-    NEONReflectanceBRDFCorrectedENVIFile, NEONReflectanceENVIFile, NEONReflectanceResampledENVIFile
-from ..neon_to_envi import neon_to_envi
-from ..topo_and_brdf_correction import (
-    generate_config_json,
-    topo_and_brdf_correction,
-    apply_offset_to_envi,
+from cross_sensor_cal.corrections import (
+    apply_brdf_correct,
+    apply_topo_correct,
 )
-from ..convolution_resample import resample as convolution_resample
+from cross_sensor_cal.envi_writer import EnviWriter
+from cross_sensor_cal.neon_cube import NeonCube
+from cross_sensor_cal.resample import resample_chunk_to_sensor
+
+from ..envi_download import download_neon_flight_lines
+from ..file_types import (
+    NEONReflectanceBRDFCorrectedENVIFile,
+    NEONReflectanceCoefficientsFile,
+    NEONReflectanceENVIFile,
+    NEONReflectanceFile,
+    NEONReflectanceResampledENVIFile,
+)
+from ..neon_to_envi import neon_to_envi
+from ..topo_and_brdf_correction import apply_offset_to_envi
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
@@ -413,119 +424,400 @@ def go_forth_and_multiply(
     elif verbose:
         print(f"✅ ENVI conversion complete. {len(hdrs)} HDR files present.")
 
-    if verbose:
-        print("📝 Step 3/5 Generating configuration JSON...")
-    existing_cfgs = list(base_path.rglob("*reflectance_envi_config_envi.json"))
-    if not force_config and existing_cfgs:
-        _warn_skip_exists("generate_config_json", existing_cfgs, verbose, bars)
-        for cfg in existing_cfgs:
-            _plan_step_for_path(Path(cfg))
-            _complete_step_for_path(Path(cfg))
-    else:
-        try:
-            generate_config_json(base_path)
-            new_cfgs = list(NEONReflectanceConfigFile.find_in_directory(base_path))
-            for cfg in new_cfgs:
-                _plan_step_for_line(cfg.tile or str(cfg.file_path))
-                _complete_step_for_line(cfg.tile or str(cfg.file_path))
-        except Exception as exc:
-            raise RuntimeError(str(exc) + _stale_hint("generate_config_json")) from exc
+    overwrite_corrected = bool(kwargs.get("overwrite_corrected", False))
+    overwrite_resampled = bool(kwargs.get("overwrite_resampled", False))
 
-    config_files = NEONReflectanceConfigFile.find_in_directory(base_path)
-    if verbose:
-        print(f"✅ Config JSON step complete. Found {len(config_files)} configs.")
+    method_norm = (resample_method or "convolution").lower()
+    inline_resample = method_norm in {"convolution", "gaussian", "straight"}
+    legacy_resample = method_norm in {"legacy", "resample"}
 
-    if verbose:
-        print("⛰️ Step 4/5 Applying topographic and BRDF corrections...")
-    if config_files:
-        errors = 0
-        for cfg in config_files:
-            corrected_dir = cfg.file_path.parent
-            existing_corrected = list(corrected_dir.glob("*brdfandtopo_corrected_envi*.hdr")) + list(
-                corrected_dir.glob("*brdfandtopo_corrected_envi*.img")
+    def _normalize_product_code(value: str | None) -> str:
+        if not value:
+            return "30006.001"
+        trimmed = value.strip()
+        upper = trimmed.upper()
+        if upper.startswith("DP1."):
+            trimmed = trimmed[4:]
+        elif upper.startswith("DP1"):
+            trimmed = trimmed[3:]
+            if trimmed.startswith("."):
+                trimmed = trimmed[1:]
+        trimmed = trimmed.strip("._")
+        return trimmed or "30006.001"
+
+    def _attach_brdf_coefficients(cube: NeonCube, refl_file: NEONReflectanceFile) -> None:
+        candidates = NEONReflectanceCoefficientsFile.find_in_directory(
+            refl_file.directory,
+            correction="brdfandtopo",
+            suffix="envi",
+        )
+        if not candidates:
+            candidates = NEONReflectanceCoefficientsFile.find_in_directory(
+                refl_file.directory,
+                correction="brdf",
             )
-            _plan_step_for_line(cfg.tile or str(cfg.file_path))
-            if existing_corrected:
+
+        coeff_data = None
+        for cand in candidates:
+            try:
+                with cand.file_path.open("r", encoding="utf-8") as coeff_file:
+                    coeff_data = json.load(coeff_file)
+                    break
+            except Exception as exc:  # pragma: no cover - defensive guard against corrupt JSON
+                logging.warning(
+                    "⚠️  Could not read BRDF coefficient file %s: %s",
+                    cand.file_path,
+                    exc,
+                )
+
+        if coeff_data is None:
+            logging.warning(
+                "⚠️  No BRDF coefficient file found for %s; using neutral coefficients.",
+                refl_file.path.name,
+            )
+            bands = cube.bands
+            cube.brdf_coefficients = {
+                "iso": np.ones(bands, dtype=np.float32),
+                "vol": np.zeros(bands, dtype=np.float32),
+                "geo": np.zeros(bands, dtype=np.float32),
+                "volume_kernel": "RossThick",
+                "geom_kernel": "LiSparseReciprocal",
+            }
+            return
+
+        iso = np.asarray(coeff_data.get("iso"), dtype=np.float32)
+        vol = np.asarray(coeff_data.get("vol"), dtype=np.float32)
+        geo = np.asarray(coeff_data.get("geo"), dtype=np.float32)
+
+        expected = cube.bands
+        if iso.size != expected or vol.size != expected or geo.size != expected:
+            logging.warning(
+                "⚠️  BRDF coefficient size mismatch for %s (expected %d bands); using neutral coefficients.",
+                refl_file.path.name,
+                expected,
+            )
+            cube.brdf_coefficients = {
+                "iso": np.ones(expected, dtype=np.float32),
+                "vol": np.zeros(expected, dtype=np.float32),
+                "geo": np.zeros(expected, dtype=np.float32),
+                "volume_kernel": "RossThick",
+                "geom_kernel": "LiSparseReciprocal",
+            }
+            return
+
+        cube.brdf_coefficients = {
+            "iso": iso,
+            "vol": vol,
+            "geo": geo,
+            "volume_kernel": coeff_data.get("volume_kernel", "RossThick"),
+            "geom_kernel": coeff_data.get("geom_kernel", "LiSparseReciprocal"),
+        }
+
+    def _build_sensor_srfs(
+        wavelengths: np.ndarray,
+        centers: Sequence[float],
+        fwhm: Sequence[float],
+    ) -> dict[str, np.ndarray]:
+        srfs: dict[str, np.ndarray] = {}
+        wl = np.asarray(wavelengths, dtype=np.float32)
+        if wl.ndim != 1 or wl.size == 0:
+            return srfs
+        centers_arr = np.asarray(centers, dtype=np.float32)
+        fwhm_arr = np.asarray(fwhm, dtype=np.float32) if len(fwhm) else np.array([], dtype=np.float32)
+        for idx, center in enumerate(centers_arr):
+            band_key = f"band_{idx + 1:02d}"
+            if method_norm == "straight" or (idx < fwhm_arr.size and fwhm_arr[idx] <= 0):
+                srf = np.zeros_like(wl)
+                srf[int(np.abs(wl - center).argmin())] = 1.0
+            else:
+                width = float(fwhm_arr[idx]) if idx < fwhm_arr.size else float(fwhm_arr[-1]) if fwhm_arr.size else 0.0
+                if width <= 0:
+                    srf = np.zeros_like(wl)
+                    srf[int(np.abs(wl - center).argmin())] = 1.0
+                else:
+                    sigma = width / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+                    srf = np.exp(-0.5 * ((wl - center) / sigma) ** 2)
+            srfs[band_key] = np.asarray(srf, dtype=np.float32)
+        return srfs
+
+    def _prepare_sensor_writers(
+        cube: NeonCube,
+        corrected_file: NEONReflectanceBRDFCorrectedENVIFile,
+        refl_file: NEONReflectanceFile,
+        base_header: dict,
+    ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, EnviWriter], list[Path], list[Path]]:
+        sensor_srfs: dict[str, dict[str, np.ndarray]] = {}
+        sensor_writers: dict[str, EnviWriter] = {}
+        skipped: list[Path] = []
+        created: list[Path] = []
+        for sensor_name, params in sensor_library.items():
+            centers = params.get("wavelengths", [])
+            fwhm = params.get("fwhms", [])
+            if not centers:
+                continue
+            srfs = _build_sensor_srfs(cube.wavelengths, centers, fwhm)
+            if not srfs:
+                continue
+            sensor_srfs[sensor_name] = srfs
+            dir_prefix = f"{method_norm.capitalize()}_Reflectance_Resample"
+            sensor_dir = corrected_file.directory / f"{dir_prefix}_{sensor_name.replace(' ', '_')}"
+            sensor_dir.mkdir(parents=True, exist_ok=True)
+            resampled_file = NEONReflectanceResampledENVIFile.from_components(
+                domain=corrected_file.domain or refl_file.domain or "D00",
+                site=corrected_file.site or refl_file.site or "SITE",
+                date=corrected_file.date or refl_file.date or "00000000",
+                sensor=sensor_name,
+                suffix=corrected_file.suffix or "envi",
+                folder=sensor_dir,
+                time=corrected_file.time or refl_file.time,
+                tile=corrected_file.tile or refl_file.tile,
+                directional=corrected_file.directional,
+                product=_normalize_product_code(refl_file.product),
+            )
+            resampled_img_path = resampled_file.path
+            resampled_hdr_path = resampled_img_path.with_suffix(".hdr")
+            if resampled_img_path.exists() and resampled_hdr_path.exists() and not overwrite_resampled:
+                skipped.append(resampled_img_path)
+                continue
+            if overwrite_resampled:
+                for existing in (resampled_img_path, resampled_hdr_path):
+                    if existing.exists():
+                        try:
+                            existing.unlink()
+                        except OSError as exc:
+                            logging.warning(
+                                "⚠️  Could not remove %s before resampling: %s",
+                                existing,
+                                exc,
+                            )
+            resampled_header = dict(base_header)
+            resampled_header["bands"] = len(srfs)
+            resampled_header["wavelength"] = list(map(float, centers))
+            resampled_header["fwhm"] = list(map(float, fwhm))
+            resampled_header["description"] = (
+                f"{sensor_name} simulated reflectance ({method_norm}) based on BRDF + topographic corrected data"
+            )
+            resampled_header.setdefault("data type", 4)
+            resampled_header.setdefault("byte order", base_header.get("byte order", 0))
+            writer = EnviWriter(resampled_img_path.parent / resampled_img_path.stem, resampled_header)
+            sensor_writers[sensor_name] = writer
+            created.append(resampled_img_path)
+        return sensor_srfs, sensor_writers, skipped, created
+
+    sensor_library: dict[str, dict[str, list[float]]] = {}
+    if inline_resample:
+        bands_path = Path(PROJ_DIR) / "data" / "landsat_band_parameters.json"
+        try:
+            with bands_path.open("r", encoding="utf-8") as f:
+                raw_library = json.load(f)
+            if isinstance(raw_library, dict):
+                sensor_library = {k: v for k, v in raw_library.items() if isinstance(v, dict)}
+            else:
+                logging.error("❌ Unexpected SRF library format in %s. Inline resampling disabled.", bands_path)
+                inline_resample = False
+        except FileNotFoundError:
+            logging.error("❌ Sensor response library not found at %s. Inline resampling disabled.", bands_path)
+            inline_resample = False
+        except json.JSONDecodeError as exc:
+            logging.error("❌ Could not parse %s (%s). Inline resampling disabled.", bands_path, exc)
+            inline_resample = False
+
+    reflectance_h5: list[NEONReflectanceFile] = []
+    for h5_path in sorted(base_path.rglob("*.h5")):
+        try:
+            refl_file = NEONReflectanceFile.from_filename(h5_path)
+        except ValueError:
+            continue
+        if flight_lines and not any(_belongs_to(fl, h5_path) for fl in flight_lines):
+            continue
+        reflectance_h5.append(refl_file)
+
+    if verbose:
+        print("⛰️ Step 3/5 Applying topographic and BRDF corrections with NeonCube...")
+
+    errors = 0
+    corrected_files: list[NEONReflectanceBRDFCorrectedENVIFile] = []
+    resampled_outputs_all: list[Path] = []
+    offset_applied_during_processing = False
+
+    for refl_file in reflectance_h5:
+        line_hint = refl_file.tile or refl_file.name
+        _plan_step_for_line(line_hint)
+
+        try:
+            cube = NeonCube(h5_path=refl_file.file_path)
+        except ValueError as exc:
+            errors += 1
+            logging.error(
+                "⚠️  Skipping %s due to missing ancillary data: %s",
+                refl_file.path.name,
+                exc,
+            )
+            _complete_step_for_line(line_hint)
+            continue
+        except Exception as exc:
+            errors += 1
+            logging.error(
+                "⚠️  Failed to initialise NeonCube for %s: %s",
+                refl_file.path.name,
+                exc,
+            )
+            _complete_step_for_line(line_hint)
+            continue
+
+        corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_components(
+            domain=refl_file.domain or "D00",
+            site=refl_file.site or "SITE",
+            date=refl_file.date or "00000000",
+            time=refl_file.time,
+            suffix="envi",
+            folder=refl_file.directory,
+            tile=refl_file.tile,
+            directional=getattr(refl_file, "directional", False),
+            product=_normalize_product_code(refl_file.product),
+        )
+        out_img_path = corrected_file.path
+        out_hdr_path = out_img_path.with_suffix(".hdr")
+
+        if out_img_path.exists() and out_hdr_path.exists() and not overwrite_corrected:
+            _warn_skip_exists(
+                "topo_and_brdf_correction",
+                [out_img_path, out_hdr_path],
+                verbose,
+                bars,
+                scope=_pretty_line(line_hint),
+            )
+            _complete_step_for_line(line_hint)
+            corrected_files.append(corrected_file)
+            continue
+
+        if overwrite_corrected:
+            for existing in (out_img_path, out_hdr_path):
+                if existing.exists():
+                    try:
+                        existing.unlink()
+                    except OSError as exc:
+                        logging.warning(
+                            "⚠️  Could not remove %s before rewriting: %s",
+                            existing,
+                            exc,
+                        )
+
+        header = cube.build_envi_header()
+        header["description"] = (
+            "BRDF + topographic corrected reflectance (float32); generated by cross-sensor-cal pipeline"
+        )
+        header.setdefault("data type", 4)
+        header.setdefault("byte order", 0)
+        if hasattr(cube, "no_data"):
+            header.setdefault("data ignore value", float(getattr(cube, "no_data")))
+
+        try:
+            _attach_brdf_coefficients(cube, refl_file)
+        except Exception as exc:  # pragma: no cover - unexpected coefficient failure
+            errors += 1
+            logging.error(
+                "⚠️  Failed to prepare BRDF coefficients for %s: %s",
+                refl_file.path.name,
+                exc,
+            )
+            _complete_step_for_line(line_hint)
+            continue
+
+        writer = EnviWriter(out_img_path.parent / out_img_path.stem, header)
+
+        sensor_srfs: dict[str, dict[str, np.ndarray]] = {}
+        sensor_writers: dict[str, EnviWriter] = {}
+        skipped_sensor_paths: list[Path] = []
+        new_sensor_paths: list[Path] = []
+        if inline_resample and sensor_library:
+            sensor_srfs, sensor_writers, skipped_sensor_paths, new_sensor_paths = _prepare_sensor_writers(
+                cube,
+                corrected_file,
+                refl_file,
+                header,
+            )
+            if skipped_sensor_paths:
                 _warn_skip_exists(
-                    "topo_and_brdf_correction",
-                    existing_corrected,
+                    "resample",
+                    skipped_sensor_paths,
                     verbose,
                     bars,
-                    scope=_pretty_line(cfg.tile or cfg.file_path.name),
+                    scope=_pretty_line(line_hint),
                 )
-                _complete_step_for_line(cfg.tile or str(cfg.file_path))
-                continue
+
+        _emit(f"Processing flightline {cube.base_key} ...", bars, verbose=verbose)
+
+        offset_value: np.float32 | None = None
+        if brightness_offset and float(brightness_offset) != 0.0:
+            offset_value = np.float32(float(brightness_offset))
+
+        try:
+            for ys, ye, xs, xe, raw_chunk in cube.iter_chunks():
+                chunk = np.asarray(raw_chunk, dtype=np.float32)
+                corrected_chunk = apply_topo_correct(cube, chunk, ys, ye, xs, xe)
+                corrected_chunk = apply_brdf_correct(cube, corrected_chunk, ys, ye, xs, xe)
+                if offset_value is not None:
+                    corrected_chunk = corrected_chunk + offset_value
+                    offset_applied_during_processing = True
+                corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
+                writer.write_chunk(corrected_chunk, ys, xs)
+                if sensor_writers:
+                    mask = cube.mask_no_data[ys:ye, xs:xe] if hasattr(cube, "mask_no_data") else None
+                    no_data_value = np.float32(getattr(cube, "no_data", np.nan))
+                    for sensor_name, srfs in sensor_srfs.items():
+                        sensor_chunk = resample_chunk_to_sensor(corrected_chunk, cube.wavelengths, srfs)
+                        if mask is not None:
+                            sensor_chunk = np.where(mask[..., np.newaxis], sensor_chunk, no_data_value)
+                        sensor_writers[sensor_name].write_chunk(sensor_chunk.astype(np.float32, copy=False), ys, xs)
+        except Exception as exc:
+            errors += 1
+            logging.error(
+                "⚠️  Correction failed for %s: %r%s",
+                refl_file.path.name,
+                exc,
+                _stale_hint("topo_and_brdf_correction"),
+            )
+        finally:
             try:
-                topo_and_brdf_correction(str(cfg.file_path))
-                _complete_step_for_line(cfg.tile or str(cfg.file_path))
-            except Exception as exc:
-                errors += 1
-                logging.error(
-                    "⚠️  Correction failed for %s: %r%s",
-                    cfg.file_path.name,
-                    exc,
-                    _stale_hint("topo_and_brdf_correction"),
-                )
-        corrected = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
-        if verbose:
-            print(f"✅ Corrections done. Corrected files found: {len(corrected)}. Errors: {errors}.")
-    else:
-        logging.warning("❌ No configuration JSON files found. Skipping corrections.")
-
-    # --- Step 5/5: Resampling/harmonization ---
-    method_norm = (resample_method or "convolution").lower()
-    if method_norm in {"resample", "legacy"}:
-        if verbose:
-            print("🔁 Step 5/5 Resampling (legacy translate_to_other_sensors)...")
-        resample_translation_to_other_sensors(base_path)
-    elif method_norm in {"convolution", "gaussian", "straight"}:
-        if verbose:
-            print(f"🔁 Step 5/5 Resampling data ({method_norm})...")
-        corrected_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
-        if not corrected_files:
-            logging.warning("❌ No BRDF-corrected ENVI files found for resampling. Check naming or previous steps.")
-        else:
-            if verbose:
-                print(f"📂 Found {len(corrected_files)} BRDF-corrected files to process.")
-            for corrected_file in corrected_files:
-                _plan_step_for_line(corrected_file.tile or str(corrected_file.path))
-                existing_resampled = [
-                    resampled.path
-                    for resampled in NEONReflectanceResampledENVIFile.find_in_directory(
-                        corrected_file.directory
-                    )
-                ]
-                if existing_resampled:
-                    _warn_skip_exists(
-                        "resample",
-                        existing_resampled,
-                        verbose,
-                        bars,
-                        scope=corrected_file.path.name,
-                    )
-                    _complete_step_for_line(corrected_file.tile or str(corrected_file.path))
-                    continue
+                writer.close()
+            except Exception as exc:  # pragma: no cover - close should rarely fail
+                logging.error("⚠️  Failed to close writer for %s: %s", refl_file.path.name, exc)
+            for sensor_writer in sensor_writers.values():
                 try:
-                    # Prefer new signature with method=...; fall back if not available
-                    try:
-                        convolution_resample(corrected_file.directory, method=method_norm)
-                    except TypeError:
-                        # Older resampler without 'method' kwarg—call as before
-                        convolution_resample(corrected_file.directory)
-                except Exception as exc:
+                    sensor_writer.close()
+                except Exception as exc:  # pragma: no cover - close should rarely fail
                     logging.error(
-                        "⚠️  Resample failed for %s: %r%s",
-                        corrected_file.name,
+                        "⚠️  Failed to close resampled writer for %s (%s): %s",
+                        refl_file.path.name,
+                        sensor_writer.out_stem,
                         exc,
-                        _stale_hint("resample"),
                     )
-                _complete_step_for_line(corrected_file.tile or str(corrected_file.path))
-        if verbose:
-            print(f"✅ Resampling complete ({method_norm}).")
-    else:
-        logging.warning("Unknown resample_method=%s (skipping Step 5).", resample_method)
 
-    if brightness_offset and float(brightness_offset) != 0.0:
+        _emit(
+            f"Wrote corrected ENVI for {cube.base_key} to {out_img_path}",
+            bars,
+            verbose=verbose,
+        )
+
+        corrected_files.append(corrected_file)
+        resampled_outputs_all.extend(new_sensor_paths)
+        _complete_step_for_line(line_hint)
+
+    if verbose:
+        print(
+            f"✅ Corrections done. Corrected files found: {len(corrected_files)}. Errors: {errors}."
+        )
+
+    if legacy_resample:
+        if verbose:
+            print("🔁 Step 4/5 Resampling (legacy translate_to_other_sensors)...")
+        resample_translation_to_other_sensors(base_path)
+    elif inline_resample and not sensor_library:
+        logging.warning("⚠️  Inline resampling requested but no sensor library was available.")
+
+    offset_requested = brightness_offset and float(brightness_offset) != 0.0
+    if offset_requested and not offset_applied_during_processing:
         if verbose:
             print(f"🧮 Applying brightness offset: {float(brightness_offset):+g}")
         try:
@@ -555,6 +847,8 @@ def go_forth_and_multiply(
                 print(f"✅ Offset applied to {changed} ENVI file(s).")
         except Exception as exc:
             logging.error("⚠️  Offset application failed: %r%s", exc, _stale_hint("brightness_offset"))
+    elif offset_requested and offset_applied_during_processing and verbose:
+        print("🧮 Brightness offset already applied during chunk processing; skipping post-hoc offset.")
 
     if bars:
         for progress in bars.values():
