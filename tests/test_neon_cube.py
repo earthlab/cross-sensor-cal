@@ -98,7 +98,15 @@ def test_neon_cube_iter_chunks(tmp_path):
     assert "projection" in header
     assert "wavelength" in header
     assert "fwhm" in header
+    assert "wavelength units" in header
 
     assert isinstance(header["map info"], (list, tuple))
     assert len(header["map info"]) >= 6
+    assert isinstance(header["wavelength"], list)
+    assert isinstance(header["fwhm"], list)
+    assert len(header["wavelength"]) == cube.bands
+    assert len(header["fwhm"]) == cube.bands
+    assert all(isinstance(v, float) for v in header["wavelength"])
+    assert all(isinstance(v, float) for v in header["fwhm"])
+    assert header["wavelength units"].lower() == "nanometers"
 

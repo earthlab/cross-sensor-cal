@@ -254,54 +254,85 @@ def _coerce_scalar(value: str):
 
 
 def _parse_envi_header(hdr_path: Path) -> dict:
-    header: dict[str, object] = {}
     if not hdr_path.exists():
         raise FileNotFoundError(hdr_path)
+
+    raw_entries: dict[str, str] = {}
     collecting_key: str | None = None
     collecting_value: list[str] = []
-    with hdr_path.open("r", encoding="utf-8") as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if not line or line.upper() == "ENVI":
+
+    with hdr_path.open("r", encoding="utf-8") as fp:
+        for raw_line in fp:
+            stripped = raw_line.strip()
+            if not stripped or stripped.upper() == "ENVI":
                 continue
+
             if collecting_key is not None:
-                collecting_value.append(line)
-                if line.endswith("}"):
-                    joined = " ".join(collecting_value)
-                    header[collecting_key] = joined
+                collecting_value.append(stripped)
+                if "}" in stripped:
+                    value = " ".join(collecting_value)
+                    raw_entries[collecting_key] = value
                     collecting_key = None
                     collecting_value = []
                 continue
-            if "=" not in line:
+
+            if "=" not in stripped:
                 continue
-            key, value = line.split("=", 1)
-            key = key.strip().lower()
-            value = value.strip()
-            if value.startswith("{") and not value.endswith("}"):
+
+            key_part, value_part = stripped.split("=", 1)
+            key = key_part.strip().lower()
+            value = value_part.strip()
+
+            if value.startswith("{") and "}" not in value:
                 collecting_key = key
                 collecting_value = [value]
                 continue
-            header[key] = value
+
+            raw_entries[key] = value
+
+    def _split_block(value: str) -> list[str]:
+        inner = value.strip()
+        if inner.startswith("{"):
+            inner = inner[1:]
+        if inner.endswith("}"):
+            inner = inner[:-1]
+        # Replace newlines with spaces before splitting.
+        inner = inner.replace("\n", " ")
+        # Avoid empty tokens from double commas.
+        return [token.strip() for token in inner.split(",") if token.strip()]
+
+    list_float_keys = {"wavelength", "fwhm"}
+    list_string_keys = {"map info", "band names"}
+    int_scalar_keys = {"samples", "lines", "bands", "data type", "byte order"}
 
     processed: dict[str, object] = {}
-    for key, raw_value in header.items():
-        if isinstance(raw_value, str) and raw_value.startswith("{") and raw_value.endswith("}"):
-            inner = raw_value[1:-1].strip()
-            if not inner:
-                processed[key] = []
-                continue
-            tokens = [tok.strip() for tok in inner.replace("\n", " ").split(",")]
-            values = [_coerce_scalar(tok) for tok in tokens if tok]
-            if key in {"wavelength", "fwhm"}:
-                processed[key] = [float(v) for v in values if isinstance(v, (int, float))]
+    for key, raw_value in raw_entries.items():
+        if raw_value.startswith("{") and raw_value.endswith("}"):
+            tokens = _split_block(raw_value)
+            if key in list_float_keys:
+                try:
+                    processed[key] = [float(token) for token in tokens]
+                except ValueError as exc:
+                    raise RuntimeError(
+                        f"Could not parse numeric list for '{key}' from ENVI header"
+                    ) from exc
+            elif key in list_string_keys:
+                processed[key] = [token.strip('"').strip("'") for token in tokens]
             else:
-                processed[key] = values
+                processed[key] = [
+                    _coerce_scalar(token.strip('"').strip("'")) for token in tokens
+                ]
             continue
-        if isinstance(raw_value, str):
-            coerced = _coerce_scalar(raw_value)
-        else:
-            coerced = raw_value
-        processed[key] = coerced
+
+        cleaned = raw_value.strip().strip('"').strip("'")
+        if key in int_scalar_keys:
+            try:
+                processed[key] = int(cleaned)
+            except ValueError as exc:  # pragma: no cover - malformed headers unexpected
+                raise RuntimeError(f"Header value for '{key}' is not an integer") from exc
+            continue
+
+        processed[key] = _coerce_scalar(cleaned)
 
     return processed
 
@@ -340,7 +371,6 @@ def convolve_resample_product(
     corrected_hdr_path: Path,
     sensor_srf: dict[str, np.ndarray],
     out_stem_resampled: Path,
-    wavelengths: np.ndarray,
     tile_y: int = 100,
     tile_x: int = 100,
 ) -> None:
@@ -356,10 +386,15 @@ def convolve_resample_product(
     if interleave != "bsq":
         raise RuntimeError("convolve_resample_product only supports BSQ interleave")
 
-    wavelengths_arr = np.asarray(wavelengths, dtype=np.float32)
-    if wavelengths_arr.ndim != 1 or wavelengths_arr.size != bands:
+    if "wavelength" not in src_header:
+        raise RuntimeError("ENVI header is missing 'wavelength' metadata required for resampling")
+
+    wavelengths_arr = np.asarray(src_header["wavelength"], dtype=np.float32)
+    if wavelengths_arr.ndim != 1 or wavelengths_arr.size == 0:
+        raise RuntimeError("ENVI header contains an empty wavelength list")
+    if wavelengths_arr.size != bands:
         raise RuntimeError(
-            "Provided wavelengths must be 1D and match the number of hyperspectral bands"
+            "Wavelength metadata length does not match the number of hyperspectral bands"
         )
 
     sensor_band_names = list(sensor_srf.keys())
@@ -1041,43 +1076,25 @@ def go_forth_and_multiply(
                 logging.error("⚠️  Failed to close writer for %s: %s", refl_file.path.name, exc)
 
         if not correction_failed and sensor_srfs:
-            try:
-                parsed_header = _parse_envi_header(out_hdr_path)
-                wavelengths_values = parsed_header.get("wavelength", [])
-                wavelengths_array = np.asarray(wavelengths_values, dtype=np.float32)
-                expected_bands = int(parsed_header.get("bands", wavelengths_array.size))
-                if wavelengths_array.ndim != 1 or wavelengths_array.size != expected_bands:
-                    raise RuntimeError(
-                        "Corrected header wavelengths are missing or do not match band count"
+            for sensor_name, srfs in sensor_srfs.items():
+                out_stem = sensor_out_stems.get(sensor_name)
+                if out_stem is None:
+                    continue
+                try:
+                    convolve_resample_product(
+                        corrected_hdr_path=out_hdr_path,
+                        sensor_srf=srfs,
+                        out_stem_resampled=out_stem,
                     )
-            except Exception as exc:
-                errors += 1
-                logging.error(
-                    "⚠️  Failed to prepare wavelengths for resampling %s: %s",
-                    refl_file.path.name,
-                    exc,
-                )
-            else:
-                for sensor_name, srfs in sensor_srfs.items():
-                    out_stem = sensor_out_stems.get(sensor_name)
-                    if out_stem is None:
-                        continue
-                    try:
-                        convolve_resample_product(
-                            corrected_hdr_path=out_hdr_path,
-                            sensor_srf=srfs,
-                            out_stem_resampled=out_stem,
-                            wavelengths=wavelengths_array,
-                        )
-                    except Exception as exc:  # pragma: no cover - unexpected resample failure
-                        errors += 1
-                        logging.error(
-                            "⚠️  Resample failed for %s (%s): %s",
-                            refl_file.path.name,
-                            sensor_name,
-                            exc,
-                        )
-                        continue
+                except Exception as exc:  # pragma: no cover - unexpected resample failure
+                    errors += 1
+                    logging.error(
+                        "⚠️  Resample failed for %s (%s): %s",
+                        refl_file.path.name,
+                        sensor_name,
+                        exc,
+                    )
+                    continue
 
         _emit(
             f"Wrote corrected ENVI for {cube.base_key} to {out_img_path}",
