@@ -18,6 +18,7 @@ from .file_types import (
 )
 from .pipelines.pipeline import convolve_resample_product, _parse_envi_header
 from .utils import get_package_data_path
+from .utils_checks import is_valid_envi_pair
 
 
 logger = logging.getLogger(__name__)
@@ -86,10 +87,11 @@ def convolve_all_sensors(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    if not corrected_img_path.exists():
-        raise FileNotFoundError(f"Missing corrected ENVI IMG: {corrected_img_path}")
-    if not corrected_hdr_path.exists():
-        raise FileNotFoundError(f"Missing corrected ENVI HDR: {corrected_hdr_path}")
+    if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+        raise FileNotFoundError(
+            "Corrected ENVI missing or invalid: "
+            f"{corrected_img_path}, {corrected_hdr_path}"
+        )
 
     try:
         hdr = NEONReflectanceBRDFCorrectedENVIHDRFile.from_filename(corrected_hdr_path)
@@ -164,11 +166,10 @@ def convolve_all_sensors(
 
         out_stem = resampled_img.path.with_suffix("")
 
-        if resampled_img.path.exists() and resampled_hdr.path.exists():
+        if is_valid_envi_pair(resampled_img.path, resampled_hdr.path):
             logger.info(
-                "⏭️  Skipping existing resampled product for %s: %s",
+                "✅ Convolution for %s already complete, skipping",
                 sensor_name,
-                resampled_img.path,
             )
             continue
 
@@ -178,21 +179,19 @@ def convolve_all_sensors(
                 sensor_srf=srfs,
                 out_stem_resampled=out_stem,
             )
-        except Exception as exc:  # pragma: no cover - error logging path
+        except Exception:  # pragma: no cover - error logging path
             logger.error(
-                "⚠️  Resample failed for %s (%s): %s",
+                "⚠️  Resample failed for %s (%s)",
                 corrected_img_path.name,
                 sensor_name,
-                corrected_hdr_path,
                 exc_info=True,
             )
-            continue
+            raise
 
-        if not resampled_img.path.exists() or not resampled_hdr.path.exists():
-            logger.error(
-                "⚠️  Expected resampled outputs missing for %s in %s",
-                sensor_name,
-                sensor_dir,
+        if not is_valid_envi_pair(resampled_img.path, resampled_hdr.path):
+            raise RuntimeError(
+                "Resampled outputs missing or invalid for "
+                f"{sensor_name}: {resampled_img.path}"
             )
 
 
