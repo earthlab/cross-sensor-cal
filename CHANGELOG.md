@@ -1,33 +1,37 @@
-## [Unreleased] – Pipeline Refactor and Idempotent Execution (October 2025)
+## [Unreleased] – Pipeline refactor for idempotent, ordered execution (October 2025)
+
 ### Added
-- New stage-level skipping logic for all major pipeline steps (ENVI export, correction JSON, BRDF/topo correction, convolution).
-  Each step now checks if outputs already exist and are valid before recomputing.
-  This makes the pipeline fully **idempotent** and restart-safe.
-- Validation utilities:
-  - `_nonempty_file(p)`
-  - `is_valid_envi_pair(img, hdr)`
-  - `is_valid_json(json_path)`
-  These prevent reprocessing incomplete or corrupted outputs.
-- Structured per-flightline orchestration (`process_one_flightline`) with explicit step order.
-- Detailed logging at every step, including "✅ already complete, skipping" messages and improved error reporting.
+- New restart-safe pipeline stages with per-stage validation and skip logic:
+  - ENVI export
+  - BRDF/topo correction parameter JSON
+  - BRDF + topographic correction
+  - Sensor convolution/resampling
+- Centralized path resolver `get_flightline_products()` that defines all expected file locations
+  (raw ENVI, correction JSON, corrected ENVI, and per-sensor products).
+- Logging now surfaces "✅ ... skipping" when a stage is already complete and valid.
+- Automatic recovery from partial runs: if a previous run was interrupted mid-stage,
+  the pipeline will re-run *just that* stage to repair missing/corrupt outputs.
 
 ### Changed
-- **go_forth_and_multiply()** now orchestrates the full four-stage workflow:
-  1. ENVI export  
-  2. Correction JSON creation  
-  3. BRDF + topographic correction  
-  4. Convolution/resampling
-  This replaces the previous inline logic where convolution could run before correction finished.
-- Convolution now runs **only** on the corrected ENVI (suffix `_brdfandtopo_corrected_envi`) instead of on raw `.h5` or uncorrected ENVI files.
-- Stage outputs and logs are standardized: corrected products use the canonical suffix
-  `_brdfandtopo_corrected_envi.img/.hdr/.json`.
+- The pipeline no longer guesses filenames on the fly. All stage logic now pulls canonical
+  paths from `get_flightline_products()` instead of hand-building names.
+- Convolution/resampling now ALWAYS uses the BRDF+topo corrected ENVI product
+  (`*_brdfandtopo_corrected_envi.img/.hdr`). It can no longer run "too early"
+  on uncorrected reflectance or raw `.h5`.
+- The correction JSON (`*_brdfandtopo_corrected_envi.json`) is now explicitly
+  generated before the BRDF/topo correction step. The correction step reads it.
 
 ### Fixed
-- Bug where convolution sometimes began before corrected ENVI files were fully written.
-- Misleading log messages referencing the `.h5` file during resampling.
-- Partial run corruption: incomplete files from interrupted runs are now detected and recomputed.
+- Removed a race/ordering bug where convolution could be attempted before BRDF+topo
+  correction finished writing its outputs.
+- Removed repeated large (~20+ GB) ENVI exports on reruns. If a valid export already
+  exists, the pipeline skips re-exporting and will not blow up the kernel.
+- Clearer, more specific error messages when expected outputs are missing or invalid,
+  including guidance to align `get_flightline_products()` with actual on-disk filenames.
 
 ### Developer Notes
-- The pipeline is now resumable: you can rerun `go_forth_and_multiply()` safely without overwriting valid data.
-- Each stage validates its outputs before skipping, ensuring reproducibility and stability for long runs.
-- Downstream sorting and file discovery continue to rely on the `_brdfandtopo_corrected_envi` suffix; this remains unchanged.
+- `process_one_flightline()` is now the canonical workflow for a single flight line.
+- `go_forth_and_multiply()` coordinates multiple flight lines and passes through
+  options like `brightness_offset` and resampling mode.
+- `get_flightline_products()` is now considered authoritative for naming and layout.
+  If filenames change, update that function instead of editing every stage.
