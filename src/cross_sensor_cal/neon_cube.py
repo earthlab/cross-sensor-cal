@@ -349,21 +349,39 @@ class NeonCube:
         Zhiwei Ye, Philip Townsend. GPLv3).
         """
 
+        wavelengths = [float(value) for value in np.asarray(self.wavelengths).ravel().tolist()]
+        if len(wavelengths) != self.bands:
+            raise RuntimeError(
+                "Spectral wavelength metadata length does not match hyperspectral band count."
+            )
+
+        fwhm: list[float]
+        if self.fwhm is None:
+            fwhm = []
+        else:
+            fwhm = [float(value) for value in np.asarray(self.fwhm).ravel().tolist()]
+            if len(fwhm) != len(wavelengths):
+                raise RuntimeError(
+                    "Spectral FWHM metadata length does not match wavelength list length."
+                )
+
+        wavelength_units = str(self.wavelength_units) if self.wavelength_units is not None else ""
+
         return {
-            "samples": self.columns,
-            "lines": self.lines,
-            "bands": self.bands,
+            "samples": int(self.columns),
+            "lines": int(self.lines),
+            "bands": int(self.bands),
             "interleave": "bsq",
             "data type": 4,
             "byte order": 0,
-            "wavelength": list(map(float, self.wavelengths)),
-            "fwhm": list(map(float, self.fwhm)),
-            "wavelength units": self.wavelength_units,
-            "map info": self.map_info_list,
+            "wavelength": wavelengths,
+            "fwhm": fwhm,
+            "wavelength units": wavelength_units,
+            "map info": list(self.map_info_list),
             "projection": self.projection_wkt,
-            "transform": self.transform,
-            "ulx": self.ulx,
-            "uly": self.uly,
+            "transform": tuple(self.transform),
+            "ulx": float(self.ulx),
+            "uly": float(self.uly),
         }
 
 
