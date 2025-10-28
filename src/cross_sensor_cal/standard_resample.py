@@ -10,6 +10,7 @@ from scipy.interpolate import interp1d
 import glob
 
 from ._optional import require_spectral
+from .utils import get_package_data_path
 
 try:  # pragma: no cover - optional dependency
     from hytools.transform.resampling import calc_resample_coeffs
@@ -96,7 +97,6 @@ except ModuleNotFoundError:  # pragma: no cover - executed when hytools is absen
 from .file_types import NEONReflectanceBRDFCorrectedENVIHDRFile, NEONReflectanceResampledHDRFile, \
     NEONReflectanceBRDFCorrectedENVIFile
 
-PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
 def apply_resampler(hy_obj, data):
@@ -330,7 +330,7 @@ def translate_to_other_sensors(brdf_corrected_img_file: NEONReflectanceBRDFCorre
         'MicaSense-to-match OLI and OLI-2'
     ]
 
-    json_file = os.path.join(PROJ_DIR, 'data', 'landsat_band_parameters.json')
+    json_file = str(get_package_data_path('landsat_band_parameters.json'))
 
     brdf_corrected_header_file = NEONReflectanceBRDFCorrectedENVIHDRFile.from_components(
         brdf_corrected_img_file.domain,

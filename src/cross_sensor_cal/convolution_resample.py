@@ -24,10 +24,10 @@ from .file_types import (
     NEONReflectanceResampledHDRFile,
     NEONReflectanceBRDFCorrectedENVIHDRFile
 )
+from .utils import get_package_data_path
 
 _RAY_CONVOLUTION_WORKER = None
 
-PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
 @lru_cache(maxsize=1)
@@ -377,8 +377,13 @@ def resample(
             wavelengths = _parse_wavelengths(header.get('wavelength'))
 
             if not wavelengths:
-                with open(os.path.join(PROJ_DIR, 'data', 'hyperspectral_bands.json'), 'r') as f:
-                    wavelengths = _parse_wavelengths(json.load(f).get('bands'))
+                try:
+                    bands_file = get_package_data_path('hyperspectral_bands.json')
+                except FileNotFoundError:
+                    wavelengths = []
+                else:
+                    with bands_file.open('r', encoding='utf-8') as f:
+                        wavelengths = _parse_wavelengths(json.load(f).get('bands'))
 
             if not wavelengths:
                 print("❌ ERROR: No wavelengths found.")
@@ -412,7 +417,12 @@ def resample(
                     hyperspectral_data,
                 )
 
-            with open(os.path.join(PROJ_DIR, 'data', 'landsat_band_parameters.json'), 'r') as f:
+            try:
+                sensor_params_file = get_package_data_path('landsat_band_parameters.json')
+            except FileNotFoundError:
+                print('❌ ERROR: Sensor response parameters are not bundled with the package.')
+                continue
+            with sensor_params_file.open('r', encoding='utf-8') as f:
                 all_sensor_params = json.load(f)
 
             for sensor_name, sensor_params in all_sensor_params.items():
@@ -486,9 +496,12 @@ def resample(
 
                 else:  # convolution
                     srfs_filename = sensor_name.replace(' ', '_').lower() + '_srfs.json'
-                    srfs_path = os.path.join(PROJ_DIR, 'data', srfs_filename)
-                    if os.path.exists(srfs_path):
-                        with open(srfs_path, 'r') as srfs_file:
+                    try:
+                        srfs_path = get_package_data_path(srfs_filename)
+                    except FileNotFoundError:
+                        srfs_path = None
+                    if srfs_path is not None:
+                        with srfs_path.open('r', encoding='utf-8') as srfs_file:
                             srfs_dict: Dict[str, Dict[str, Iterable[float]]] = json.load(srfs_file)
                         weights = _build_W_from_tabulated_srfs(wl_nm, srfs_dict)
                     else:
