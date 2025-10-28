@@ -43,6 +43,22 @@ from typing import Sequence
 
 import numpy as np
 
+# ---------------------------------------------------------------------
+# Logging setup (safe even if module imported multiple times)
+# ---------------------------------------------------------------------
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+# ---------------------------------------------------------------------
+
 # --- Silence Ray’s stderr warnings BEFORE any potential imports of ray ---
 # Send Ray logs to files (not stderr), reduce backend log level, disable usage pings.
 os.environ.setdefault("RAY_LOG_TO_STDERR", "0")
