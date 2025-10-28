@@ -211,26 +211,21 @@ def _silence_noise(enabled: bool):
         except Exception:  # pragma: no cover - flush best effort
             pass
 
-from cross_sensor_cal.corrections import (
-    apply_brdf_correct,
-    apply_topo_correct,
-    fit_and_save_brdf_model,
+from cross_sensor_cal.brdf_topo import (
+    apply_brdf_topo_correction,
+    build_and_write_correction_json,
 )
-from cross_sensor_cal.envi_writer import EnviWriter
-from cross_sensor_cal.neon_cube import NeonCube
 from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.utils import get_package_data_path
+from cross_sensor_cal.utils_checks import _nonempty_file, is_valid_envi_pair, is_valid_json
 
-from ..envi_download import download_neon_flight_lines
 from ..file_types import (
     NEONReflectanceBRDFCorrectedENVIFile,
-    NEONReflectanceCoefficientsFile,
     NEONReflectanceENVIFile,
     NEONReflectanceFile,
     NEONReflectanceResampledENVIFile,
 )
 from ..neon_to_envi import neon_to_envi_no_hytools
-from ..topo_and_brdf_correction import apply_offset_to_envi
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
@@ -497,6 +492,434 @@ def convolve_resample_product(
     out_hdr_path.write_text(hdr_text, encoding="utf-8")
 
 
+def _normalize_product_code(value: str | None) -> str:
+    """Return the numeric component of a DP1 product code."""
+
+    if not value:
+        return "30006.001"
+
+    trimmed = value.strip()
+    if not trimmed:
+        return "30006.001"
+
+    upper = trimmed.upper()
+    if upper.startswith("DP1."):
+        trimmed = trimmed[4:]
+    elif upper.startswith("DP1"):
+        trimmed = trimmed[3:]
+        if trimmed.startswith("."):
+            trimmed = trimmed[1:]
+
+    trimmed = trimmed.strip("._")
+    return trimmed or "30006.001"
+
+
+def _find_h5_for_flightline(base_folder: Path, flight_stem: str) -> Path:
+    """Locate the NEON HDF5 file corresponding to *flight_stem*."""
+
+    base_folder = Path(base_folder)
+    direct_path = base_folder / f"{flight_stem}.h5"
+    if direct_path.exists():
+        return direct_path
+
+    normalized = flight_stem.lower()
+    candidates: list[Path] = []
+    for path in sorted(base_folder.rglob("*.h5")):
+        stem = path.stem.lower()
+        if stem == normalized:
+            return path
+        if normalized in stem or normalized.replace(".", "_") in stem.replace(".", "_"):
+            candidates.append(path)
+
+    if not candidates:
+        raise FileNotFoundError(
+            f"Could not find HDF5 source for flightline '{flight_stem}' in {base_folder}"
+        )
+
+    if len(candidates) > 1:
+        logger.info(
+            "⚠️  Multiple HDF5 matches for %s; using %s",
+            flight_stem,
+            candidates[0].name,
+        )
+
+    return candidates[0]
+
+
+def _load_sensor_library() -> dict[str, dict[str, list[float]]]:
+    """Load the spectral response functions used for convolution."""
+
+    try:
+        bands_path = get_package_data_path("landsat_band_parameters.json")
+    except FileNotFoundError:
+        logger.error(
+            "❌ Sensor response library not found in package data. Inline resampling disabled."
+        )
+        return {}
+
+    try:
+        with bands_path.open("r", encoding="utf-8") as f:
+            raw_library = json.load(f)
+    except json.JSONDecodeError as exc:
+        logger.error("❌ Could not parse %s (%s). Inline resampling disabled.", bands_path, exc)
+        return {}
+
+    if isinstance(raw_library, dict):
+        return {k: v for k, v in raw_library.items() if isinstance(v, dict)}
+
+    logger.error(
+        "❌ Unexpected SRF library format in %s. Inline resampling disabled.", bands_path
+    )
+    return {}
+
+
+def _build_sensor_srfs(
+    wavelengths: np.ndarray,
+    centers: Sequence[float],
+    fwhm: Sequence[float],
+    method: str,
+) -> dict[str, np.ndarray]:
+    srfs: dict[str, np.ndarray] = {}
+    wl = np.asarray(wavelengths, dtype=np.float32)
+    if wl.ndim != 1 or wl.size == 0:
+        return srfs
+
+    centers_arr = np.asarray(list(centers), dtype=np.float32)
+    fwhm_arr = np.asarray(list(fwhm), dtype=np.float32) if fwhm else np.array([], dtype=np.float32)
+
+    for idx, center in enumerate(centers_arr):
+        band_key = f"band_{idx + 1:02d}"
+        if method == "straight":
+            srf = np.zeros_like(wl)
+            srf[int(np.abs(wl - center).argmin())] = 1.0
+        else:
+            width = float(fwhm_arr[idx]) if idx < fwhm_arr.size else (
+                float(fwhm_arr[-1]) if fwhm_arr.size else 0.0
+            )
+            if method == "straight" or width <= 0:
+                srf = np.zeros_like(wl)
+                srf[int(np.abs(wl - center).argmin())] = 1.0
+            else:
+                sigma = width / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+                srf = np.exp(-0.5 * ((wl - center) / sigma) ** 2)
+        srfs[band_key] = np.asarray(srf, dtype=np.float32)
+
+    return srfs
+
+
+def _prepare_sensor_targets(
+    *,
+    corrected_file: NEONReflectanceBRDFCorrectedENVIFile,
+    corrected_hdr_path: Path,
+    resample_method: str,
+    product_code: str,
+) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, Path]]:
+    method_norm = (resample_method or "convolution").lower()
+    inline_resample = method_norm in {"convolution", "gaussian", "straight"}
+    if not inline_resample:
+        logger.info(
+            "⚠️  Resample method '%s' is not handled inline; skipping convolution stage.",
+            resample_method,
+        )
+        return {}, {}
+
+    header = _parse_envi_header(corrected_hdr_path)
+    wavelengths = header.get("wavelength")
+    if not isinstance(wavelengths, list) or not wavelengths:
+        logger.error(
+            "❌ ENVI header %s missing wavelength metadata required for resampling.",
+            corrected_hdr_path,
+        )
+        return {}, {}
+
+    sensor_library = _load_sensor_library()
+    if not sensor_library:
+        return {}, {}
+
+    srfs_by_sensor: dict[str, dict[str, np.ndarray]] = {}
+    stems_by_sensor: dict[str, Path] = {}
+
+    suffix = corrected_file.suffix or "envi"
+    raw_product = corrected_file.product or product_code
+    if raw_product and not str(raw_product).upper().startswith("DP"):
+        raw_product = product_code
+    normalized_product = _normalize_product_code(raw_product)
+
+    for sensor_name, params in sensor_library.items():
+        centers = params.get("wavelengths", [])
+        if not centers:
+            continue
+        fwhm = params.get("fwhms", [])
+        srfs = _build_sensor_srfs(np.asarray(wavelengths, dtype=np.float32), centers, fwhm, method_norm)
+        if not srfs:
+            continue
+
+        dir_prefix = f"{method_norm.capitalize()}_Reflectance_Resample"
+        sensor_dir = corrected_file.directory / f"{dir_prefix}_{sensor_name.replace(' ', '_')}"
+        sensor_dir.mkdir(parents=True, exist_ok=True)
+
+        resampled_file = NEONReflectanceResampledENVIFile.from_components(
+            domain=corrected_file.domain or "D00",
+            site=corrected_file.site or "SITE",
+            date=corrected_file.date or "00000000",
+            sensor=sensor_name,
+            suffix=suffix,
+            folder=sensor_dir,
+            time=corrected_file.time,
+            tile=corrected_file.tile,
+            directional=corrected_file.directional,
+            product=normalized_product,
+        )
+
+        srfs_by_sensor[sensor_name] = srfs
+        stems_by_sensor[sensor_name] = resampled_file.path.with_suffix("")
+
+    return srfs_by_sensor, stems_by_sensor
+
+
+def stage_export_envi_from_h5(
+    *,
+    base_folder: Path,
+    product_code: str,
+    flight_stem: str,
+    brightness_offset: float | None = None,
+) -> tuple[Path, Path]:
+    """Ensure the raw ENVI export exists for *flight_stem*."""
+
+    base_folder = Path(base_folder)
+    h5_path = _find_h5_for_flightline(base_folder, flight_stem)
+    refl_file = NEONReflectanceFile.from_filename(h5_path)
+
+    product_value = _normalize_product_code(refl_file.product or product_code)
+    product_token = f"DP1.{product_value}"
+
+    if not refl_file.tile:
+        raise RuntimeError(
+            "Unable to determine NEON tile identifier from HDF5 filename; "
+            "expected standard NEON naming convention."
+        )
+
+    raw_envi = NEONReflectanceENVIFile.from_components(
+        domain=refl_file.domain or "D00",
+        site=refl_file.site or "SITE",
+        product=product_token,
+        tile=refl_file.tile,
+        date=refl_file.date or "00000000",
+        time=refl_file.time,
+        directional=getattr(refl_file, "directional", False),
+        folder=base_folder,
+    )
+
+    raw_img_path = raw_envi.path
+    raw_hdr_path = raw_img_path.with_suffix(".hdr")
+
+    if is_valid_envi_pair(raw_img_path, raw_hdr_path):
+        logger.info("✅ ENVI export already complete for %s, skipping", flight_stem)
+        return raw_img_path, raw_hdr_path
+
+    logger.info("📦 Exporting ENVI for %s", flight_stem)
+    neon_to_envi_no_hytools(
+        images=[str(h5_path)],
+        output_dir=str(base_folder),
+        brightness_offset=brightness_offset,
+    )
+
+    if not is_valid_envi_pair(raw_img_path, raw_hdr_path):
+        raise RuntimeError(f"ENVI export failed for {flight_stem}")
+
+    logger.info("✅ ENVI export completed for %s", flight_stem)
+    return raw_img_path, raw_hdr_path
+
+
+def stage_build_and_write_correction_json(
+    *,
+    base_folder: Path,
+    product_code: str,
+    flight_stem: str,
+    raw_img_path: Path,
+    raw_hdr_path: Path,
+) -> Path:
+    """Generate the correction JSON required for BRDF/topo processing."""
+
+    base_folder = Path(base_folder)
+    h5_path = _find_h5_for_flightline(base_folder, flight_stem)
+    correction_json_path = build_and_write_correction_json(
+        h5_path=h5_path,
+        raw_img_path=raw_img_path,
+        raw_hdr_path=raw_hdr_path,
+        out_dir=base_folder,
+    )
+
+    if not is_valid_json(correction_json_path):
+        raise RuntimeError(
+            f"Failed to prepare correction JSON for {flight_stem}: {correction_json_path}"
+        )
+
+    return correction_json_path
+
+
+def stage_apply_brdf_topo_correction(
+    *,
+    base_folder: Path,
+    product_code: str,
+    flight_stem: str,
+    raw_img_path: Path,
+    raw_hdr_path: Path,
+    correction_json_path: Path,
+) -> tuple[Path, Path]:
+    """Apply BRDF + topographic correction using the precomputed JSON."""
+
+    corrected_img_path, corrected_hdr_path = apply_brdf_topo_correction(
+        raw_img_path=raw_img_path,
+        raw_hdr_path=raw_hdr_path,
+        correction_json_path=correction_json_path,
+        out_dir=base_folder,
+    )
+
+    if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+        raise RuntimeError(
+            f"Corrected ENVI invalid for {flight_stem}: {corrected_img_path}"
+        )
+
+    return corrected_img_path, corrected_hdr_path
+
+
+def stage_convolve_all_sensors(
+    *,
+    base_folder: Path,
+    product_code: str,
+    flight_stem: str,
+    corrected_img_path: Path,
+    corrected_hdr_path: Path,
+    resample_method: str = "convolution",
+):
+    """Convolve the corrected ENVI cube to the library of target sensors."""
+
+    if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+        raise FileNotFoundError(
+            f"Corrected ENVI missing or invalid for {flight_stem}: {corrected_img_path}"
+        )
+
+    try:
+        corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_filename(corrected_img_path)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Could not parse corrected ENVI filename for {flight_stem}: {corrected_img_path.name}"
+        ) from exc
+
+    srfs_by_sensor, stems_by_sensor = _prepare_sensor_targets(
+        corrected_file=corrected_file,
+        corrected_hdr_path=corrected_hdr_path,
+        resample_method=resample_method,
+        product_code=product_code,
+    )
+
+    if not srfs_by_sensor:
+        return
+
+    for sensor_name, srfs in srfs_by_sensor.items():
+        out_stem = stems_by_sensor.get(sensor_name)
+        if out_stem is None:
+            continue
+
+        out_img_path = out_stem.with_suffix(".img")
+        out_hdr_path = out_stem.with_suffix(".hdr")
+
+        if is_valid_envi_pair(out_img_path, out_hdr_path):
+            logger.info(
+                "✅ %s convolution already complete for %s, skipping",
+                sensor_name,
+                flight_stem,
+            )
+            continue
+
+        try:
+            convolve_resample_product(
+                corrected_hdr_path=corrected_hdr_path,
+                sensor_srf=srfs,
+                out_stem_resampled=out_stem,
+            )
+        except Exception:
+            logger.error(
+                "⚠️  Resample failed for %s (%s)",
+                corrected_img_path.name,
+                sensor_name,
+                exc_info=True,
+            )
+            continue
+
+        if not is_valid_envi_pair(out_img_path, out_hdr_path):
+            raise RuntimeError(
+                f"{sensor_name} resample produced invalid output for {flight_stem}: {out_img_path}"
+            )
+
+        logger.info(
+            "✅ Resampled %s for %s → %s",
+            sensor_name,
+            flight_stem,
+            out_img_path,
+        )
+
+
+def process_one_flightline(
+    *,
+    base_folder: Path,
+    product_code: str,
+    flight_stem: str,
+    resample_method: str = "convolution",
+    brightness_offset: float | None = None,
+):
+    """Canonical per-flightline workflow with skip-aware stages."""
+
+    logger.info("🚀 Processing %s ...", flight_stem)
+
+    raw_img_path, raw_hdr_path = stage_export_envi_from_h5(
+        base_folder=base_folder,
+        product_code=product_code,
+        flight_stem=flight_stem,
+        brightness_offset=brightness_offset,
+    )
+
+    correction_json_path = stage_build_and_write_correction_json(
+        base_folder=base_folder,
+        product_code=product_code,
+        flight_stem=flight_stem,
+        raw_img_path=raw_img_path,
+        raw_hdr_path=raw_hdr_path,
+    )
+
+    if not is_valid_json(correction_json_path):
+        raise RuntimeError(
+            f"Correction JSON invalid for {flight_stem}: {correction_json_path}"
+        )
+
+    corrected_img_path, corrected_hdr_path = stage_apply_brdf_topo_correction(
+        base_folder=base_folder,
+        product_code=product_code,
+        flight_stem=flight_stem,
+        raw_img_path=raw_img_path,
+        raw_hdr_path=raw_hdr_path,
+        correction_json_path=correction_json_path,
+    )
+
+    if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+        raise RuntimeError(
+            f"Corrected ENVI invalid for {flight_stem}: {corrected_img_path}"
+        )
+
+    logger.info("🎯 Convolving corrected reflectance for %s", flight_stem)
+    stage_convolve_all_sensors(
+        base_folder=base_folder,
+        product_code=product_code,
+        flight_stem=flight_stem,
+        corrected_img_path=corrected_img_path,
+        corrected_hdr_path=corrected_hdr_path,
+        resample_method=resample_method,
+    )
+
+    logger.info("🎉 Finished pipeline for %s", flight_stem)
+
+
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
     """
     Generate file sorting list and optionally sync files to iRODS using gocmd.
@@ -561,602 +984,40 @@ def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: b
 
 
 def go_forth_and_multiply(
-    base_folder="output",
+    base_folder: Path,
+    site_code: str,
+    year_month: str,
+    flight_lines: list[str],
+    *,
+    product_code: str = "DP1.30006.001",
     resample_method: str = "convolution",
-    max_workers: int = 1,
-    skip_download_if_present: bool = True,
-    force_config: bool = False,
-    brightness_offset: float = 0.0,
-    verbose: bool = False,
-    **kwargs,
-):
+    brightness_offset: float | None = None,
+) -> None:
+    """Top-level driver that orchestrates the four pipeline stages per flightline."""
+
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
-    if verbose:
-        print("\n📥 Downloading NEON flight lines...")
-    existing_h5 = list(base_path.rglob("*.h5"))
-    if skip_download_if_present and existing_h5:
-        _warn_skip_exists("download", existing_h5, verbose)
-    else:
-        try:
-            _emit("⬇️  Fetching flight line HDF5...", bars=None, verbose=verbose)
-            with _silence_noise(enabled=not verbose):
-                download_neon_flight_lines(out_dir=base_path, **kwargs)
-        except Exception as exc:
-            raise RuntimeError(str(exc) + _stale_hint("download")) from exc
-    if verbose:
-        print("✅ Download step complete.")
 
-    flight_lines = kwargs.get("flight_lines") or []
-    bars: dict[str, tqdm] = {}
-    totals = {fl: 1 for fl in flight_lines}  # download slot always tracked
-
-    if not verbose and tqdm is not None and flight_lines:
-        bar_fmt = "{desc:<14} {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} steps"
-        for fl in flight_lines:
-            pretty = _pretty_line(fl)
-            bars[pretty] = tqdm(
-                total=_safe_total(totals[fl]),
-                unit="steps",
-                desc=pretty,
-                bar_format=bar_fmt,
-                dynamic_ncols=True,
-                leave=True,
-            )
-    elif not verbose and tqdm is None:
-        print("⚠️  tqdm not installed; progress bars disabled.")
-
-    def _key_for_hint(line_hint: str | None) -> str | None:
-        if not line_hint or not bars:
-            return None
-        key = _pretty_line(line_hint)
-        return key if key in bars else None
-
-    def _plan_step_for_line(line_hint: str | None, amount: int = 1) -> None:
-        key = _key_for_hint(line_hint)
-        if key and amount:
-            bars[key].total += amount
-            bars[key].refresh()
-
-    def _complete_step_for_line(line_hint: str | None, amount: int = 1) -> None:
-        key = _key_for_hint(line_hint)
-        if key and amount:
-            # Ensure total never lags behind completion when planning happens late
-            progress = bars[key]
-            if progress.total < progress.n + amount:
-                progress.total = progress.n + amount
-                progress.refresh()
-            progress.update(amount)
-
-    def _plan_step_for_path(path_obj: Path, amount: int = 1) -> None:
-        candidate = _pretty_line(str(path_obj))
-        if candidate in bars:
-            _plan_step_for_line(candidate, amount)
-
-    def _complete_step_for_path(path_obj: Path, amount: int = 1) -> None:
-        candidate = _pretty_line(str(path_obj))
-        if candidate in bars:
-            _complete_step_for_line(candidate, amount)
-
-    for fl in flight_lines:
-        _tick_download_slot(base_path, fl, lambda path, line=fl: _complete_step_for_line(line))
-
-    if verbose:
-        print("📦 Step 2/5 Converting H5 files to ENVI format...")
-    for fl in flight_lines:
-        _plan_step_for_line(fl)
-        if _line_outputs_present(base_path, fl):
-            _warn_skip_exists(
-                "H5→ENVI (no HyTools)", [fl], verbose, bars, scope=_pretty_line(fl)
-            )
-            _complete_step_for_line(fl)
-            continue
-
-        h5s_for_line = [h5 for h5 in base_path.rglob("*.h5") if _belongs_to(fl, h5)]
-        if not h5s_for_line:
-            if verbose:
-                logging.warning("No .h5 files found for line: %s", fl)
-            _complete_step_for_line(fl)
-            continue
-        try:
-            _emit(
-                f"📦 Exporting ENVI (no HyTools) [{_pretty_line(fl)}]...",
-                bars,
-                verbose=verbose,
-            )
-            with _silence_noise(enabled=not verbose):
-                neon_to_envi_no_hytools(
-                    images=[str(p) for p in h5s_for_line],
-                    output_dir=str(base_path),
-                    brightness_offset=brightness_offset,
-                )
-            _complete_step_for_line(fl)
-        except Exception as exc:
-            raise RuntimeError(str(exc) + _stale_hint("H5→ENVI (no HyTools)")) from exc
-
-    hdrs = list(base_path.rglob("*.hdr"))
-    if not hdrs:
-        logging.error("❌ No ENVI HDR files found after conversion. Investigate.")
-    elif verbose:
-        print(f"✅ ENVI conversion complete. {len(hdrs)} HDR files present.")
-
-    overwrite_corrected = bool(kwargs.get("overwrite_corrected", False))
-    overwrite_resampled = bool(kwargs.get("overwrite_resampled", False))
+    if not flight_lines:
+        logger.info("No flightlines provided. Nothing to process.")
+        return
 
     method_norm = (resample_method or "convolution").lower()
-    inline_resample = method_norm in {"convolution", "gaussian", "straight"}
-    legacy_resample = method_norm in {"legacy", "resample"}
 
-    def _normalize_product_code(value: str | None) -> str:
-        if not value:
-            return "30006.001"
-        trimmed = value.strip()
-        upper = trimmed.upper()
-        if upper.startswith("DP1."):
-            trimmed = trimmed[4:]
-        elif upper.startswith("DP1"):
-            trimmed = trimmed[3:]
-            if trimmed.startswith("."):
-                trimmed = trimmed[1:]
-        trimmed = trimmed.strip("._")
-        return trimmed or "30006.001"
-
-    def _attach_brdf_coefficients(cube: NeonCube, refl_file: NEONReflectanceFile) -> None:
-        coeff_data = None
-        saved_model_path = refl_file.directory / f"{cube.base_key}_brdf_model.json"
-        if saved_model_path.exists():
-            try:
-                with saved_model_path.open("r", encoding="utf-8") as coeff_file:
-                    coeff_data = json.load(coeff_file)
-            except Exception as exc:  # pragma: no cover - defensive guard
-                logging.warning(
-                    "⚠️  Could not read persisted BRDF model %s: %s",
-                    saved_model_path,
-                    exc,
-                )
-
-        if coeff_data is None:
-            candidates = NEONReflectanceCoefficientsFile.find_in_directory(
-                refl_file.directory,
-                correction="brdfandtopo",
-                suffix="envi",
-            )
-            if not candidates:
-                candidates = NEONReflectanceCoefficientsFile.find_in_directory(
-                    refl_file.directory,
-                    correction="brdf",
-                )
-
-            for cand in candidates:
-                try:
-                    with cand.file_path.open("r", encoding="utf-8") as coeff_file:
-                        coeff_data = json.load(coeff_file)
-                        break
-                except Exception as exc:  # pragma: no cover - defensive guard against corrupt JSON
-                    logging.warning(
-                        "⚠️  Could not read BRDF coefficient file %s: %s",
-                        cand.file_path,
-                        exc,
-                    )
-
-        if coeff_data is None:
-            logging.warning(
-                "⚠️  No BRDF coefficient file found for %s; using neutral coefficients.",
-                refl_file.path.name,
-            )
-            bands = cube.bands
-            cube.brdf_coefficients = {
-                "iso": np.ones(bands, dtype=np.float32),
-                "vol": np.zeros(bands, dtype=np.float32),
-                "geo": np.zeros(bands, dtype=np.float32),
-                "volume_kernel": "RossThick",
-                "geom_kernel": "LiSparseReciprocal",
-            }
-            return
-
-        iso = np.asarray(coeff_data.get("iso"), dtype=np.float32)
-        vol = np.asarray(coeff_data.get("vol"), dtype=np.float32)
-        geo = np.asarray(coeff_data.get("geo"), dtype=np.float32)
-
-        expected = cube.bands
-        if iso.size != expected or vol.size != expected or geo.size != expected:
-            logging.warning(
-                "⚠️  BRDF coefficient size mismatch for %s (expected %d bands); using neutral coefficients.",
-                refl_file.path.name,
-                expected,
-            )
-            cube.brdf_coefficients = {
-                "iso": np.ones(expected, dtype=np.float32),
-                "vol": np.zeros(expected, dtype=np.float32),
-                "geo": np.zeros(expected, dtype=np.float32),
-                "volume_kernel": "RossThick",
-                "geom_kernel": "LiSparseReciprocal",
-            }
-            return
-
-        cube.brdf_coefficients = {
-            "iso": iso,
-            "vol": vol,
-            "geo": geo,
-            "volume_kernel": coeff_data.get("volume_kernel", "RossThick"),
-            "geom_kernel": coeff_data.get("geom_kernel", "LiSparseReciprocal"),
-        }
-
-    def _build_sensor_srfs(
-        wavelengths: np.ndarray,
-        centers: Sequence[float],
-        fwhm: Sequence[float],
-    ) -> dict[str, np.ndarray]:
-        srfs: dict[str, np.ndarray] = {}
-        wl = np.asarray(wavelengths, dtype=np.float32)
-        if wl.ndim != 1 or wl.size == 0:
-            return srfs
-        centers_arr = np.asarray(centers, dtype=np.float32)
-        fwhm_arr = np.asarray(fwhm, dtype=np.float32) if len(fwhm) else np.array([], dtype=np.float32)
-        for idx, center in enumerate(centers_arr):
-            band_key = f"band_{idx + 1:02d}"
-            if method_norm == "straight" or (idx < fwhm_arr.size and fwhm_arr[idx] <= 0):
-                srf = np.zeros_like(wl)
-                srf[int(np.abs(wl - center).argmin())] = 1.0
-            else:
-                width = float(fwhm_arr[idx]) if idx < fwhm_arr.size else float(fwhm_arr[-1]) if fwhm_arr.size else 0.0
-                if width <= 0:
-                    srf = np.zeros_like(wl)
-                    srf[int(np.abs(wl - center).argmin())] = 1.0
-                else:
-                    sigma = width / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-                    srf = np.exp(-0.5 * ((wl - center) / sigma) ** 2)
-            srfs[band_key] = np.asarray(srf, dtype=np.float32)
-        return srfs
-
-    def _prepare_sensor_resample_targets(
-        cube: NeonCube,
-        corrected_file: NEONReflectanceBRDFCorrectedENVIFile,
-        refl_file: NEONReflectanceFile,
-        base_header: dict,
-    ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, Path], list[Path], list[Path]]:
-        sensor_srfs: dict[str, dict[str, np.ndarray]] = {}
-        sensor_out_stems: dict[str, Path] = {}
-        skipped: list[Path] = []
-        created: list[Path] = []
-        for sensor_name, params in sensor_library.items():
-            centers = params.get("wavelengths", [])
-            fwhm = params.get("fwhms", [])
-            if not centers:
-                continue
-            srfs = _build_sensor_srfs(cube.wavelengths, centers, fwhm)
-            if not srfs:
-                continue
-            dir_prefix = f"{method_norm.capitalize()}_Reflectance_Resample"
-            sensor_dir = corrected_file.directory / f"{dir_prefix}_{sensor_name.replace(' ', '_')}"
-            sensor_dir.mkdir(parents=True, exist_ok=True)
-            resampled_file = NEONReflectanceResampledENVIFile.from_components(
-                domain=corrected_file.domain or refl_file.domain or "D00",
-                site=corrected_file.site or refl_file.site or "SITE",
-                date=corrected_file.date or refl_file.date or "00000000",
-                sensor=sensor_name,
-                suffix=corrected_file.suffix or "envi",
-                folder=sensor_dir,
-                time=corrected_file.time or refl_file.time,
-                tile=corrected_file.tile or refl_file.tile,
-                directional=corrected_file.directional,
-                product=_normalize_product_code(refl_file.product),
-            )
-            resampled_img_path = resampled_file.path
-            resampled_hdr_path = resampled_img_path.with_suffix(".hdr")
-            if resampled_img_path.exists() and resampled_hdr_path.exists() and not overwrite_resampled:
-                skipped.append(resampled_img_path)
-                continue
-            if overwrite_resampled:
-                for existing in (resampled_img_path, resampled_hdr_path):
-                    if existing.exists():
-                        try:
-                            existing.unlink()
-                        except OSError as exc:
-                            logging.warning(
-                                "⚠️  Could not remove %s before resampling: %s",
-                                existing,
-                                exc,
-                            )
-            sensor_srfs[sensor_name] = srfs
-            sensor_out_stems[sensor_name] = resampled_img_path.with_suffix("")
-            created.append(resampled_img_path)
-        return sensor_srfs, sensor_out_stems, skipped, created
-
-    sensor_library: dict[str, dict[str, list[float]]] = {}
-    if inline_resample:
-        try:
-            bands_path = get_package_data_path("landsat_band_parameters.json")
-        except FileNotFoundError:
-            logging.error(
-                "❌ Sensor response library not found in package data. Inline resampling disabled."
-            )
-            inline_resample = False
-        else:
-            try:
-                with bands_path.open("r", encoding="utf-8") as f:
-                    raw_library = json.load(f)
-                if isinstance(raw_library, dict):
-                    sensor_library = {
-                        k: v for k, v in raw_library.items() if isinstance(v, dict)
-                    }
-                else:
-                    logging.error(
-                        "❌ Unexpected SRF library format in %s. Inline resampling disabled.",
-                        bands_path,
-                    )
-                    inline_resample = False
-            except json.JSONDecodeError as exc:
-                logging.error(
-                    "❌ Could not parse %s (%s). Inline resampling disabled.",
-                    bands_path,
-                    exc,
-                )
-                inline_resample = False
-
-    reflectance_h5: list[NEONReflectanceFile] = []
-    for h5_path in sorted(base_path.rglob("*.h5")):
-        try:
-            refl_file = NEONReflectanceFile.from_filename(h5_path)
-        except ValueError:
-            continue
-        if flight_lines and not any(_belongs_to(fl, h5_path) for fl in flight_lines):
-            continue
-        reflectance_h5.append(refl_file)
-
-    if verbose:
-        print("⛰️ Step 3/5 Applying topographic and BRDF corrections with NeonCube...")
-
-    errors = 0
-    corrected_files: list[NEONReflectanceBRDFCorrectedENVIFile] = []
-    resampled_outputs_all: list[Path] = []
-    offset_applied_during_processing = False
-
-    for refl_file in reflectance_h5:
-        line_hint = refl_file.tile or refl_file.name
-        _plan_step_for_line(line_hint)
-
-        try:
-            cube = NeonCube(h5_path=refl_file.file_path)
-        except ValueError as exc:
-            errors += 1
-            logging.error(
-                "⚠️  Skipping %s due to missing ancillary data: %s",
-                refl_file.path.name,
-                exc,
-            )
-            _complete_step_for_line(line_hint)
-            continue
-        except Exception as exc:
-            errors += 1
-            logging.error(
-                "⚠️  Failed to initialise NeonCube for %s: %s",
-                refl_file.path.name,
-                exc,
-            )
-            _complete_step_for_line(line_hint)
-            continue
-
-        try:
-            brdf_coeff_path = fit_and_save_brdf_model(cube, refl_file.directory)
-        except Exception as exc:
-            errors += 1
-            logging.error(
-                "⚠️  Failed to fit BRDF model for %s: %s",
-                refl_file.path.name,
-                exc,
-            )
-            _complete_step_for_line(line_hint)
-            continue
-
-        corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_components(
-            domain=refl_file.domain or "D00",
-            site=refl_file.site or "SITE",
-            date=refl_file.date or "00000000",
-            time=refl_file.time,
-            suffix="envi",
-            folder=refl_file.directory,
-            tile=refl_file.tile,
-            directional=getattr(refl_file, "directional", False),
-            product=_normalize_product_code(refl_file.product),
-        )
-        out_img_path = corrected_file.path
-        out_hdr_path = out_img_path.with_suffix(".hdr")
-
-        if out_img_path.exists() and out_hdr_path.exists() and not overwrite_corrected:
-            _warn_skip_exists(
-                "topo_and_brdf_correction",
-                [out_img_path, out_hdr_path],
-                verbose,
-                bars,
-                scope=_pretty_line(line_hint),
-            )
-            _complete_step_for_line(line_hint)
-            corrected_files.append(corrected_file)
-            continue
-
-        if overwrite_corrected:
-            for existing in (out_img_path, out_hdr_path):
-                if existing.exists():
-                    try:
-                        existing.unlink()
-                    except OSError as exc:
-                        logging.warning(
-                            "⚠️  Could not remove %s before rewriting: %s",
-                            existing,
-                            exc,
-                        )
-
-        header = cube.build_envi_header()
-        header["description"] = (
-            "BRDF + topographic corrected reflectance (float32); generated by cross-sensor-cal pipeline"
-        )
-        header.setdefault("data type", 4)
-        header.setdefault("byte order", 0)
-        if hasattr(cube, "no_data"):
-            header.setdefault("data ignore value", float(getattr(cube, "no_data")))
-
-        try:
-            _attach_brdf_coefficients(cube, refl_file)
-        except Exception as exc:  # pragma: no cover - unexpected coefficient failure
-            errors += 1
-            logging.error(
-                "⚠️  Failed to prepare BRDF coefficients for %s: %s",
-                refl_file.path.name,
-                exc,
-            )
-            _complete_step_for_line(line_hint)
-            continue
-
-        writer = EnviWriter(out_img_path.parent / out_img_path.stem, header)
-
-        sensor_srfs: dict[str, dict[str, np.ndarray]] = {}
-        sensor_out_stems: dict[str, Path] = {}
-        skipped_sensor_paths: list[Path] = []
-        new_sensor_paths: list[Path] = []
-        if inline_resample and sensor_library:
-            (
-                sensor_srfs,
-                sensor_out_stems,
-                skipped_sensor_paths,
-                new_sensor_paths,
-            ) = _prepare_sensor_resample_targets(
-                cube,
-                corrected_file,
-                refl_file,
-                header,
-            )
-            if skipped_sensor_paths:
-                _warn_skip_exists(
-                    "resample",
-                    skipped_sensor_paths,
-                    verbose,
-                    bars,
-                    scope=_pretty_line(line_hint),
-                )
-
-        _emit(f"Processing flightline {cube.base_key} ...", bars, verbose=verbose)
-
-        offset_value: np.float32 | None = None
-        if brightness_offset and float(brightness_offset) != 0.0:
-            offset_value = np.float32(float(brightness_offset))
-
-        correction_failed = False
-        try:
-            for ys, ye, xs, xe, raw_chunk in cube.iter_chunks():
-                chunk = np.asarray(raw_chunk, dtype=np.float32)
-                corrected_chunk = apply_topo_correct(cube, chunk, ys, ye, xs, xe)
-                corrected_chunk = apply_brdf_correct(
-                    cube,
-                    corrected_chunk,
-                    ys,
-                    ye,
-                    xs,
-                    xe,
-                    coeff_path=brdf_coeff_path,
-                )
-                if offset_value is not None:
-                    corrected_chunk = corrected_chunk + offset_value
-                    offset_applied_during_processing = True
-                corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
-                writer.write_chunk(corrected_chunk, ys, xs)
-        except Exception as exc:
-            errors += 1
-            correction_failed = True
-            logging.error(
-                "⚠️  Correction failed for %s: %r%s",
-                refl_file.path.name,
-                exc,
-                _stale_hint("topo_and_brdf_correction"),
-            )
-        finally:
-            try:
-                writer.close()
-            except Exception as exc:  # pragma: no cover - close should rarely fail
-                logging.error("⚠️  Failed to close writer for %s: %s", refl_file.path.name, exc)
-
-        if not correction_failed and sensor_srfs:
-            for sensor_name, srfs in sensor_srfs.items():
-                out_stem = sensor_out_stems.get(sensor_name)
-                if out_stem is None:
-                    continue
-                try:
-                    convolve_resample_product(
-                        corrected_hdr_path=out_hdr_path,
-                        sensor_srf=srfs,
-                        out_stem_resampled=out_stem,
-                    )
-                except Exception as exc:  # pragma: no cover - unexpected resample failure
-                    errors += 1
-                    logging.error(
-                        "⚠️  Resample failed for %s (%s): %s",
-                        refl_file.path.name,
-                        sensor_name,
-                        exc,
-                    )
-                    continue
-
-        _emit(
-            f"Wrote corrected ENVI for {cube.base_key} to {out_img_path}",
-            bars,
-            verbose=verbose,
+    for flight_stem in flight_lines:
+        process_one_flightline(
+            base_folder=base_path,
+            product_code=product_code,
+            flight_stem=flight_stem,
+            resample_method=resample_method,
+            brightness_offset=brightness_offset,
         )
 
-        corrected_files.append(corrected_file)
-        resampled_outputs_all.extend(new_sensor_paths)
-        _complete_step_for_line(line_hint)
-
-    if verbose:
-        print(
-            f"✅ Corrections done. Corrected files found: {len(corrected_files)}. Errors: {errors}."
-        )
-
-    if legacy_resample:
-        if verbose:
-            print("🔁 Step 4/5 Resampling (legacy translate_to_other_sensors)...")
+    if method_norm in {"legacy", "resample"}:
+        logger.info("🔁 Legacy resampling requested; translating corrected products.")
         resample_translation_to_other_sensors(base_path)
-    elif inline_resample and not sensor_library:
-        logging.warning("⚠️  Inline resampling requested but no sensor library was available.")
 
-    offset_requested = brightness_offset and float(brightness_offset) != 0.0
-    if offset_requested and not offset_applied_during_processing:
-        if verbose:
-            print(f"🧮 Applying brightness offset: {float(brightness_offset):+g}")
-        try:
-            names_to_match = ["brdfandtopo_corrected_envi", "resampled_envi"]
-            candidates = [
-                path
-                for path in base_path.rglob("*.img")
-                if any(name in path.name for name in names_to_match)
-            ]
-            if not candidates:
-                _warn_skip_exists(
-                    "brightness_offset (no eligible targets)",
-                    candidates,
-                    verbose,
-                    bars,
-                )
-            changed = apply_offset_to_envi(
-                input_dir=base_path,
-                offset=float(brightness_offset),
-                clip_to_01=True,
-                only_if_name_contains=names_to_match,
-            )
-            for path in candidates:
-                _plan_step_for_path(path)
-                _complete_step_for_path(path)
-            if verbose:
-                print(f"✅ Offset applied to {changed} ENVI file(s).")
-        except Exception as exc:
-            logging.error("⚠️  Offset application failed: %r%s", exc, _stale_hint("brightness_offset"))
-    elif offset_requested and offset_applied_during_processing and verbose:
-        print("🧮 Brightness offset already applied during chunk processing; skipping post-hoc offset.")
-
-    if bars:
-        for progress in bars.values():
-            progress.close()
-
-    print("🎉 Pipeline complete!")
+    logger.info("✅ All requested flightlines processed.")
 
 def resample_translation_to_other_sensors(base_folder: Path):
     # List all subdirectories in the base folder
@@ -1257,11 +1118,7 @@ def jefe(
         year_month=year_month,
         flight_lines=flight_lines,
         resample_method=resample_method,
-        max_workers=max_workers,
-        skip_download_if_present=skip_download_if_present,
-        force_config=force_config,
         brightness_offset=brightness_offset,
-        verbose=verbose,
     )
 
     process_base_folder(
