@@ -45,7 +45,7 @@ Optional: If you already have an HDF5 flight line, copy it into `"$BASE"`. Other
 
 ### 3. Run the CLI Pipeline
 
-The `jefe.py` script orchestrates downloading, converting, correcting, and resampling. The following command processes a single flight line and skips remote syncing.
+The `jefe.py` script orchestrates downloading, converting, correcting, and resampling in the new four-stage order. The following command processes a single flight line and skips remote syncing.
 
 ```bash
 FLIGHT_LINE=NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
@@ -65,56 +65,41 @@ Key options:
 - `2023-08` – year and month of the flight.
 - `--no-sync` – generate results without uploading to iRODS.
 
-The script emits progress messages for each stage: download, HDF5→ENVI conversion, BRDF/topographic correction, and sensor resampling.
+The script now reports idempotent skips such as:
+
+```
+✅ ENVI export already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
+✅ Correction JSON already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
+✅ BRDF+topo correction already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
+✅ Landsat 8 OLI convolution already complete, skipping
+```
+
+These messages confirm that outputs passed validation and the stage moved on without recomputing.
 
 ---
 
 ### 4. Python API Equivalent
 
-The same workflow can be scripted in Python for additional customization.
+The same workflow can be scripted in Python for additional customization while preserving idempotent behaviour.
 
 ```python
 from pathlib import Path
 
-from src.envi_download import download_neon_flight_lines
-from src.neon_to_envi import flight_lines_to_envi
-from src.topo_and_brdf_correction import (
-    generate_config_json,
-    topo_and_brdf_correction,
-)
-from src.convolution_resample import resample
-from src.file_types import (
-    NEONReflectanceConfigFile,
-    NEONReflectanceBRDFCorrectedENVIFile,
-)
+from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
 
 base = Path("data/NIWO_2023-08")
 base.mkdir(parents=True, exist_ok=True)
 
-flight_lines = [
-    "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance",
-]
-
-download_neon_flight_lines(
-    out_dir=base,
+go_forth_and_multiply(
+    base_folder=base,
     site_code="NIWO",
-    product_code="DP1.30006.001",
     year_month="2023-08",
-    flight_lines=flight_lines,
+    flight_lines=[
+        "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance",
+    ],
 )
 
-flight_lines_to_envi(
-    input_dir=base,
-    output_dir=base,
-)
-
-generate_config_json(base)
-
-for cfg in NEONReflectanceConfigFile.find_in_directory(base, "envi"):
-    topo_and_brdf_correction(cfg.file_path)
-
-for hdr in NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base, "envi"):
-    resample(hdr.directory)
+# Rerunning the exact command is safe; completed stages log "skipping" and are validated automatically.
 ```
 
 ---
@@ -135,9 +120,11 @@ data/
 └── NIWO_2023-08/
     ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance.h5
     ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance/
-    │   ├── brdf_corrected/
-    │   ├── convolution/
-    │   └── diagnostic_plots/
+    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_brdfandtopo_corrected_envi.img
+    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_brdfandtopo_corrected_envi.hdr
+    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_brdfandtopo_corrected_envi.json
+    │   ├── Convolution_Reflectance_Resample_Landsat_8_OLI/
+    │   │   └── NEON_D13_NIWO_DP1_L019-1_20230815_resampled_Landsat_8_OLI.img/.hdr
     ├── envi_file_move_list.csv
     └── logs/
 ```
@@ -148,8 +135,8 @@ The actual directory names may differ slightly depending on optional steps (e.g.
 
 ### 6. Minimal Validation Checklist
 
-- BRDF‑corrected `.hdr` files exist in `brdf_corrected/`.
-- Resampled products appear under `convolution/`.
+- `_brdfandtopo_corrected_envi.img/.hdr/.json` exist for each processed flightline.
+- Resampled products appear under the corresponding `Convolution_Reflectance_Resample_*` directories.
 - `envi_file_move_list.csv` lists every generated raster.
 
 ---

@@ -10,10 +10,10 @@ These notes document the current cross-sensor-cal processing pipeline after remo
 2. **Convert HDF5 to ENVI without HyTools**  
    `neon_to_envi_no_hytools()` opens the HDF5 file with `NeonCube`, streams the cube out in spatial tiles, and writes a float32 BSQ ENVI dataset via `EnviWriter`. It simultaneously exports ancillary rasters (solar/sensor geometry, slope, aspect, etc.) needed for correction. The result is an uncorrected directional reflectance `.img/.hdr` pair for each flightline. HyTools and Ray are not invoked in this stage—the conversion logic is entirely internal.
 
-3. **Fit a BRDF model per flightline**  
-   `fit_and_save_brdf_model()` (in `corrections.py`) derives BRDF coefficients from the flightline’s solar and sensor geometry and writes them to `<flightline>_brdf_model.json` inside the flightline output folder. Each flightline is fitted once; reruns reuse the saved JSON.
+3. **Persist correction parameters**
+   `build_and_write_correction_json()` (in `brdf_topo.py`) inspects the flightline geometry, fits BRDF coefficients, and serialises the results as `<flightline>_brdfandtopo_corrected_envi.json`. The helper validates the JSON via `is_valid_json()` and reuses it on reruns when intact.
 
-4. **Topographic and BRDF correction**  
+4. **Topographic and BRDF correction**
    The pipeline allocates a new corrected cube and uses `EnviWriter` to persist it. For every spatial tile it:
    - Reads the tile from the uncorrected ENVI export.
    - Applies topographic correction using slope, aspect, and solar geometry rasters.
@@ -21,16 +21,18 @@ These notes document the current cross-sensor-cal processing pipeline after remo
    - Optionally adds a `brightness_offset` before writing.  
    The corrected output `<flightline>_brdfandtopo_corrected_envi.img/.hdr` carries full spatial metadata plus the wavelength list, FWHM list, and wavelength units required for spectral resampling.
 
-5. **Spectral convolution / sensor simulation**  
-   `convolve_resample_product()` opens the corrected cube as a BSQ memmap, reads spatial tiles, transposes them to `(y, x, bands)`, and multiplies each tile by sensor-specific spectral response functions (SRFs). SRFs are loaded from JSON files under `cross_sensor_cal/data/` via package-relative paths. Each simulated sensor produces its own float32 BSQ ENVI product and header. If required metadata (wavelengths, SRFs) cannot be found, the function raises clear errors.
+5. **Spectral convolution / sensor simulation**
+   `convolve_resample_product()` opens the corrected cube as a BSQ memmap, reads spatial tiles, transposes them to `(y, x, bands)`, and multiplies each tile by sensor-specific spectral response functions (SRFs). SRFs are loaded from JSON files under `cross_sensor_cal/data/` via package-relative paths. Each simulated sensor produces its own float32 BSQ ENVI product and header. Existing resampled outputs are validated with `is_valid_envi_pair()` and skipped when already complete.
 
-6. **Downstream consumers (optional)**  
+6. **Downstream consumers (optional)**
    Additional tooling can derive pixel stacks, polygon summaries, or parquet tables from the corrected and resampled rasters. These consumers still function but are documented separately and are not detailed here.
+
+Every step performs the same validation checks on reruns so the pipeline is safe to resume after interruptions or partial failures.
 
 7. **Recommended artifact retention**  
    Keep the following per flightline so downstream analyses and cross-sensor comparisons remain reproducible:
    - `<flightline>_directional_reflectance.img/.hdr`
-   - `<flightline>_brdf_model.json`
+   - `<flightline>_brdfandtopo_corrected_envi.json`
    - `<flightline>_brdfandtopo_corrected_envi.img/.hdr`
    - `<flightline>_resampled_<sensor>.img/.hdr`
 
