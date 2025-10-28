@@ -227,7 +227,7 @@ from ..file_types import (
     NEONReflectanceFile,
     NEONReflectanceResampledENVIFile,
 )
-from ..neon_to_envi import neon_to_envi
+from ..neon_to_envi import neon_to_envi_no_hytools
 from ..topo_and_brdf_correction import apply_offset_to_envi
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
@@ -611,7 +611,7 @@ def go_forth_and_multiply(
         _plan_step_for_line(fl)
         if _line_outputs_present(base_path, fl):
             _warn_skip_exists(
-                "H5→ENVI (main+ancillary)", [fl], verbose, bars, scope=_pretty_line(fl)
+                "H5→ENVI (no HyTools)", [fl], verbose, bars, scope=_pretty_line(fl)
             )
             _complete_step_for_line(fl)
             continue
@@ -624,23 +624,19 @@ def go_forth_and_multiply(
             continue
         try:
             _emit(
-                f"📦 Exporting ENVI (main + ancillary) [{_pretty_line(fl)}]...",
+                f"📦 Exporting ENVI (no HyTools) [{_pretty_line(fl)}]...",
                 bars,
                 verbose=verbose,
             )
             with _silence_noise(enabled=not verbose):
-                neon_to_envi(images=[str(p) for p in h5s_for_line], output_dir=str(base_path), anc=True)
-            _complete_step_for_line(fl)
-        except TypeError:
-            for h5 in h5s_for_line:
-                try:
-                    with _silence_noise(enabled=not verbose):
-                        neon_to_envi(images=[str(h5)], output_dir=str(base_path), anc=True)
-                except Exception as exc:
-                    raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
+                neon_to_envi_no_hytools(
+                    images=[str(p) for p in h5s_for_line],
+                    output_dir=str(base_path),
+                    brightness_offset=brightness_offset,
+                )
             _complete_step_for_line(fl)
         except Exception as exc:
-            raise RuntimeError(str(exc) + _stale_hint("H5→ENVI")) from exc
+            raise RuntimeError(str(exc) + _stale_hint("H5→ENVI (no HyTools)")) from exc
 
     hdrs = list(base_path.rglob("*.hdr"))
     if not hdrs:

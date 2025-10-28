@@ -15,6 +15,8 @@ from ._optional import require_h5py, require_ray
 from .hytools_compat import get_write_envi, get_hytools_class
 from .file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
 from .ray_utils import init_ray
+from .neon_cube import NeonCube
+from .envi_writer import EnviWriter
 
 if TYPE_CHECKING:  # pragma: no cover - only for static typing
     import h5py
@@ -235,6 +237,84 @@ def neon_to_envi(
 
     print("✅ All processing complete.")
     ray.shutdown()
+
+
+def neon_to_envi_no_hytools(
+    images: list[str],
+    output_dir: str,
+    brightness_offset: float | None = None,
+) -> list[dict]:
+    """
+    Convert one or more NEON .h5 reflectance products into ENVI BSQ rasters
+    using NeonCube + EnviWriter (no HyTools, no Ray).
+
+    For now only a single HDF5 input is supported. Mosaic support for multiple
+    tiles can be added later when required by downstream workflows.
+    """
+
+    if len(images) != 1:
+        raise NotImplementedError(
+            "neon_to_envi_no_hytools currently supports exactly one NEON HDF5 "
+            f"input; received {len(images)} files."
+        )
+
+    h5_path = Path(images[0])
+    if not h5_path.exists():
+        raise FileNotFoundError(f"NEON HDF5 file not found: {h5_path}")
+
+    output_dir_path = Path(output_dir)
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+
+    cube = NeonCube(h5_path=h5_path)
+
+    header = cube.build_envi_header()
+    header["description"] = (
+        "Uncorrected NEON reflectance (float32 BSQ) exported via NeonCube"
+    )
+
+    refl_file = NEONReflectanceFile.from_filename(h5_path)
+    if not refl_file.tile:
+        raise RuntimeError(
+            "Unable to determine NEON tile identifier from HDF5 filename; "
+            "expected standard NEON naming convention."
+        )
+
+    envi_file = NEONReflectanceENVIFile.from_components(
+        domain=refl_file.domain,
+        site=refl_file.site,
+        product=refl_file.product,
+        tile=refl_file.tile,
+        date=refl_file.date,
+        time=refl_file.time,
+        directional=getattr(refl_file, "directional", False),
+        folder=output_dir_path,
+    )
+
+    out_stem = envi_file.path.with_suffix("")
+    writer = EnviWriter(out_stem, header)
+
+    offset_value: np.float32 | None = None
+    if brightness_offset is not None:
+        offset_value = np.float32(brightness_offset)
+
+    try:
+        for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(chunk_y=100, chunk_x=100):
+            chunk = raw_chunk.astype("float32", copy=False)
+            if offset_value is not None:
+                chunk = chunk + offset_value
+            writer.write_chunk(chunk, ys, xs)
+    finally:
+        writer.close()
+
+    metadata = {
+        "hdr": str(out_stem.with_suffix(".hdr")),
+        "img": str(out_stem.with_suffix(".img")),
+        "lines": cube.lines,
+        "samples": cube.columns,
+        "bands": cube.bands,
+    }
+
+    return [metadata]
 
 # --- CLI runner (optional use) ---
 if __name__ == "__main__":
