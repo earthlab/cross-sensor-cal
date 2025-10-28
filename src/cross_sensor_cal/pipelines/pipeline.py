@@ -59,9 +59,10 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 from io import StringIO
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -743,17 +744,51 @@ def _prepare_sensor_targets(
     return srfs_by_sensor, stems_by_sensor
 
 
-def _resolve_sensor_entry(sensor_name: str, library: dict[str, dict[str, list[float]]]) -> tuple[str, dict[str, list[float]]]:
-    if sensor_name in library:
-        return sensor_name, library[sensor_name]
+def _safe_resolve_sensor_entry(
+    sensor_name: str,
+    sensor_library: dict[str, dict[str, Any]],
+) -> tuple[str | None, dict[str, Any] | None]:
+    """
+    Resolve ``sensor_name`` within ``sensor_library`` while tolerating unknown sensors.
 
-    target_key = sensor_name.lower().replace("_", " ")
-    for key, value in library.items():
-        if key.lower() == sensor_name.lower() or key.lower() == target_key:
-            return key, value
-        if key.replace(" ", "_").lower() == sensor_name.lower():
-            return key, value
-    raise KeyError(sensor_name)
+    Returns the matching (key, entry) if found, otherwise ``(None, None)``.
+    """
+
+    if not sensor_library:
+        return None, None
+
+    if sensor_name in sensor_library:
+        return sensor_name, sensor_library[sensor_name]
+
+    lowered = sensor_name.lower()
+
+    for key, entry in sensor_library.items():
+        key_lower = key.lower()
+        if lowered == key_lower:
+            return key, entry
+        if lowered == key_lower.replace(" ", "_"):
+            return key, entry
+        if lowered.replace("_", " ") == key_lower:
+            return key, entry
+
+    alias_map: dict[str, str] = {
+        "landsat_tm": "Landsat 5 TM",
+        "landsat_etm+": "Landsat 7 ETM+",
+        "landsat_etm_plus": "Landsat 7 ETM+",
+        "landsat_oli": "Landsat 8 OLI",
+        "landsat_oli2": "Landsat 9 OLI-2",
+        "landsat_oli-2": "Landsat 9 OLI-2",
+        "landsat_oli_2": "Landsat 9 OLI-2",
+        "micasense": "MicaSense",
+        "micasense_tm": "MicaSense-to-match TM and ETM+",
+        "micasense_oli": "MicaSense-to-match OLI and OLI-2",
+    }
+
+    alias_key = alias_map.get(lowered)
+    if alias_key and alias_key in sensor_library:
+        return alias_key, sensor_library[alias_key]
+
+    return None, None
 
 
 def resample_to_sensor_bands(
@@ -762,6 +797,9 @@ def resample_to_sensor_bands(
     corrected_hdr_path: Path,
     sensor_name: str,
     method: str,
+    sensor_entry: dict[str, Any] | None = None,
+    resolved_name: str | None = None,
+    sensor_library: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, np.ndarray]:
     method_norm = (method or "convolution").lower()
     if method_norm not in {"convolution", "gaussian", "straight"}:
@@ -774,11 +812,26 @@ def resample_to_sensor_bands(
             f"ENVI header {corrected_hdr_path} missing wavelength metadata required for resampling."
         )
 
-    sensor_library = _load_sensor_library()
-    if not sensor_library:
-        raise RuntimeError("Sensor response library unavailable; cannot convolve to target sensors")
+    entry = sensor_entry
+    resolved = resolved_name or sensor_name
 
-    resolved_name, entry = _resolve_sensor_entry(sensor_name, sensor_library)
+    library = sensor_library or {}
+    if entry is None:
+        library = sensor_library or _load_sensor_library()
+        if not library:
+            raise RuntimeError(
+                "Sensor response library unavailable; cannot convolve to target sensors"
+            )
+        resolved_lookup, entry_lookup = _safe_resolve_sensor_entry(sensor_name, library)
+        if resolved_lookup is None or entry_lookup is None:
+            raise KeyError(sensor_name)
+        entry = entry_lookup
+        resolved = resolved_lookup
+
+    if entry is None:
+        raise RuntimeError(f"Sensor entry missing for {sensor_name}")
+
+    resolved_name = resolved
 
     srfs = _build_sensor_srfs(
         np.asarray(wavelengths, dtype=np.float32),
@@ -1082,13 +1135,31 @@ def stage_convolve_all_sensors(
     """
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
+    corrected_img = Path(paths["corrected_img"])
+    corrected_hdr = Path(paths["corrected_hdr"])
+    corrected_img_arg = Path(corrected_img_path)
+    corrected_hdr_arg = Path(corrected_hdr_path)
+    if corrected_img_arg != corrected_img or corrected_hdr_arg != corrected_hdr:
+        corrected_img = corrected_img_arg
+        corrected_hdr = corrected_hdr_arg
     sensor_products = paths.get("sensor_products", {})
 
-    if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+    if not is_valid_envi_pair(corrected_img, corrected_hdr):
         raise FileNotFoundError(
             f"Corrected ENVI missing or invalid for {flight_stem}: "
-            f"{corrected_img_path}, {corrected_hdr_path}"
+            f"{corrected_img}, {corrected_hdr}"
         )
+
+    logger.info("🎯 Convolving corrected reflectance for %s", flight_stem)
+
+    sensor_library = _load_sensor_library()
+    if not sensor_library:
+        logger.error(
+            "❌ Sensor response library unavailable; skipping convolution stage for %s",
+            flight_stem,
+        )
+        logger.info("🎉 Finished pipeline for %s", flight_stem)
+        return
 
     method_norm = (resample_method or "convolution").lower()
 
@@ -1096,7 +1167,7 @@ def stage_convolve_all_sensors(
         out_path = Path(out_path)
         out_hdr_path = out_path.with_suffix(".hdr")
 
-        if _nonempty_file(out_path) and out_hdr_path.exists():
+        if _nonempty_file(out_path) and _nonempty_file(out_hdr_path):
             logger.info(
                 "✅ %s product already complete for %s -> %s (skipping)",
                 sensor_name,
@@ -1105,12 +1176,24 @@ def stage_convolve_all_sensors(
             )
             continue
 
+        resolved_name, sensor_entry = _safe_resolve_sensor_entry(sensor_name, sensor_library)
+        if resolved_name is None or sensor_entry is None:
+            logger.warning(
+                "⚠️  Sensor %s is not defined in sensor_library; skipping for %s",
+                sensor_name,
+                flight_stem,
+            )
+            continue
+
         try:
             srfs = resample_to_sensor_bands(
-                corrected_img_path=corrected_img_path,
-                corrected_hdr_path=corrected_hdr_path,
-                sensor_name=sensor_name,
+                corrected_img_path=corrected_img,
+                corrected_hdr_path=corrected_hdr,
+                sensor_name=resolved_name,
                 method=method_norm,
+                sensor_entry=sensor_entry,
+                resolved_name=resolved_name,
+                sensor_library=sensor_library,
             )
 
             write_resampled_product(
@@ -1118,7 +1201,7 @@ def stage_convolve_all_sensors(
                 out_path=out_path,
                 sensor_name=sensor_name,
                 flight_stem=flight_stem,
-                corrected_hdr_path=corrected_hdr_path,
+                corrected_hdr_path=corrected_hdr,
             )
 
             if not _nonempty_file(out_path):
@@ -1127,7 +1210,7 @@ def stage_convolve_all_sensors(
                 )
 
             logger.info(
-                "✅ %s product completed for %s -> %s",
+                "✅ Wrote %s product for %s -> %s",
                 sensor_name,
                 flight_stem,
                 out_path.name,
@@ -1135,12 +1218,14 @@ def stage_convolve_all_sensors(
 
         except Exception:
             logger.error(
-                "⚠️  Resample failed for %s (%s) -> expected %s",
-                corrected_img_path.name,
+                "⚠️  Resample failed for %s (%s) -> expected %s\n%s",
+                corrected_img.name,
                 sensor_name,
-                out_path.name,
-                exc_info=True,
+                out_path,
+                traceback.format_exc(),
             )
+
+    logger.info("🎉 Finished pipeline for %s", flight_stem)
 
 
 def process_one_flightline(
