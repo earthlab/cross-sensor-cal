@@ -1,71 +1,63 @@
-# Cross-Sensor-Cal Refactor Notes
+# Refactor Notes: HyTools-Free Pipeline
 
-## Overview
-The 2024 refactor eliminates the runtime dependency on HyTools while retaining required GPL attribution. The codebase now vendors the minimal NEON readers, correction utilities, and ENVI writers so production pipelines operate without external HyTools installations. Remaining GPL notices accompany the adapted modules.
+## Purpose
+These notes document the current cross-sensor-cal processing pipeline after removing the runtime dependency on HyTools. The steps below describe what the code does today so collaborators can reproduce results and audit intermediate products.
 
-Key updates include new in-repo loaders (`neon_cube.NeonCube`), correction utilities (`corrections`), ENVI export helpers (`envi_writer`), and sensor resampling (`resample`). The orchestration pipeline (`pipelines.pipeline`) was rewritten to consume these modules and expose a streamlined `go_forth_and_multiply` entry point. Associated tests now validate the new Neon cube abstraction.
+## End-to-End Pipeline
+1. **Acquire NEON reflectance flightlines**  
+   Download or copy the required NEON Airborne Observation Platform (AOP) reflectance HDF5 files to a local workspace before running the pipeline.
 
-By folding the HyTools functionality into maintained modules, developers avoid brittle environment pinning, dramatically shrink cold-start time when provisioning workers, and gain direct control over performance-critical code paths. Internal APIs are clearer, dependency graphs simpler, and profiling shows improved memory locality when iterating NEON chunks.
+2. **Convert HDF5 to ENVI without HyTools**  
+   `neon_to_envi_no_hytools()` opens the HDF5 file with `NeonCube`, streams the cube out in spatial tiles, and writes a float32 BSQ ENVI dataset via `EnviWriter`. It simultaneously exports ancillary rasters (solar/sensor geometry, slope, aspect, etc.) needed for correction. The result is an uncorrected directional reflectance `.img/.hdr` pair for each flightline. HyTools and Ray are not invoked in this stage—the conversion logic is entirely internal.
 
-## New Module Structure
-| Module | Purpose | Key Classes/Functions |
-|:--|:--|:--|
-| neon_cube.py | Loads NEON HDF5 reflectance into memory; handles chunk iteration and metadata | `NeonCube` |
-| corrections.py | Applies topographic and BRDF correction | `apply_topo_correct`, `apply_brdf_correct` |
-| envi_writer.py | Writes corrected ENVI BSQ cubes with headers | `EnviWriter`, `build_envi_header_text` |
-| resample.py | Convolves hyperspectral reflectance to other sensors | `resample_chunk_to_sensor` |
-| pipeline.py | Coordinates the full processing sequence | `go_forth_and_multiply` |
-| tests/test_neon_cube.py | Unit tests NeonCube | `pytest` fixtures |
+3. **Fit a BRDF model per flightline**  
+   `fit_and_save_brdf_model()` (in `corrections.py`) derives BRDF coefficients from the flightline’s solar and sensor geometry and writes them to `<flightline>_brdf_model.json` inside the flightline output folder. Each flightline is fitted once; reruns reuse the saved JSON.
+
+4. **Topographic and BRDF correction**  
+   The pipeline allocates a new corrected cube and uses `EnviWriter` to persist it. For every spatial tile it:
+   - Reads the tile from the uncorrected ENVI export.
+   - Applies topographic correction using slope, aspect, and solar geometry rasters.
+   - Applies BRDF correction using the saved coefficient JSON. When coefficients are missing, unreadable, or poorly conditioned, the code logs a warning and falls back to neutral BRDF terms so the tile still receives topographic correction.
+   - Optionally adds a `brightness_offset` before writing.  
+   The corrected output `<flightline>_brdfandtopo_corrected_envi.img/.hdr` carries full spatial metadata plus the wavelength list, FWHM list, and wavelength units required for spectral resampling.
+
+5. **Spectral convolution / sensor simulation**  
+   `convolve_resample_product()` opens the corrected cube as a BSQ memmap, reads spatial tiles, transposes them to `(y, x, bands)`, and multiplies each tile by sensor-specific spectral response functions (SRFs). SRFs are loaded from JSON files under `cross_sensor_cal/data/` via package-relative paths. Each simulated sensor produces its own float32 BSQ ENVI product and header. If required metadata (wavelengths, SRFs) cannot be found, the function raises clear errors.
+
+6. **Downstream consumers (optional)**  
+   Additional tooling can derive pixel stacks, polygon summaries, or parquet tables from the corrected and resampled rasters. These consumers still function but are documented separately and are not detailed here.
+
+7. **Recommended artifact retention**  
+   Keep the following per flightline so downstream analyses and cross-sensor comparisons remain reproducible:
+   - `<flightline>_directional_reflectance.img/.hdr`
+   - `<flightline>_brdf_model.json`
+   - `<flightline>_brdfandtopo_corrected_envi.img/.hdr`
+   - `<flightline>_resampled_<sensor>.img/.hdr`
+
+## Module Structure
+- `cross_sensor_cal/neon_cube.py`
+  - `NeonCube` class
+  - Opens NEON HDF5 reflectance, exposes dimensions, wavelengths, ancillary angles, etc.
+  - Iterates spatial tiles without requiring HyTools.
+- `cross_sensor_cal/envi_writer.py`
+  - `EnviWriter` class
+  - Writes BSQ float32 rasters (`.img/.hdr`).
+  - Used for uncorrected export, corrected cubes, and resampled products.
+- `cross_sensor_cal/corrections.py`
+  - `fit_and_save_brdf_model()`
+  - `apply_topo_correct()`
+  - `apply_brdf_correct()`
+  - Includes helpers to load and apply BRDF coefficients.
+- `cross_sensor_cal/resample.py`
+  - `resample_chunk_to_sensor()`
+  - SRF loading utilities
+  - Convolution-friendly helpers for chunk-wise processing.
+- `cross_sensor_cal/pipelines/pipeline.py`
+  - `go_forth_and_multiply()`
+  - Orchestrates downloads, H5→ENVI export (no HyTools), BRDF fitting, topographic+BRDF correction, and spectral convolution.
+- `cross_sensor_cal/data/`
+  - SRF JSON files for Landsat, Sentinel, etc.
+  - Accessed via package-relative paths at runtime.
 
 ## Licensing
-Portions of `neon_cube.py`, `corrections.py`, and `envi_writer.py` remain derived from HyTools and therefore continue to carry GPLv3 attribution. Each file embeds explicit credit to the HyTools authors and identifies the adapted functions to satisfy the license obligations while hosting the logic internally.
-
-## Developer Workflow
-1. Create or locate a NEON HDF5 reflectance file.
-2. Run the pipeline:
-   ```bash
-   python -m cross_sensor_cal.pipelines.pipeline --input neon_dir --output corrected_dir
-   ```
-3. Optional: run tests
-   ```bash
-   pytest -v tests/
-   ```
-4. Optional: resample to a sensor (Sentinel-2, Landsat, etc.)
-   ```python
-   from cross_sensor_cal.resample import resample_chunk_to_sensor
-   ```
-
-## Tests and Validation
-`tests/test_neon_cube.py` verifies the NeonCube loader constructs spectral metadata, enforces geometry assumptions, tiles reflectance chunks, and builds ENVI headers. Additional end-to-end validation is planned in `tests/test_pipeline_end_to_end.py` to cover pipeline orchestration and file-system side effects once realistic fixtures are finalised.
-
-## Deprecated Files
-The following files still reference HyTools-era logic and require follow-up cleanup or deletion:
-- src/cross_sensor_cal/standard_resample.py
-- src/cross_sensor_cal/topo_and_brdf_correction.py
-- src/cross_sensor_cal/hytools_compat.py
-- src/cross_sensor_cal/neon_to_envi.py
-- bin/neon_to_envi.py
-- tests/test_hytools_preflight.py
-- tests/test_hytools_compat.py
-- spectral_unmixing_tools_original.py
-- BRDF-Topo-HyTools/README.md
-- Raster_processing.ipynb
-- Untitled.ipynb
-- ty_notebooks/Macrosystem_polygon_extractions.ipynb
-- Macrosystem_polygon_extractions.ipynb
-- BRDF-Topo-HyTools (module contents)
-
-## Files to Review or Remove
-- src/cross_sensor_cal/standard_resample.py — imports HyTools resampling (fallback only partly rewritten)
-- src/cross_sensor_cal/topo_and_brdf_correction.py — legacy wrapper around HyTools correction workflow
-- src/cross_sensor_cal/hytools_compat.py — discovery shims for HyTools imports
-- src/cross_sensor_cal/neon_to_envi.py — depends on HyTools compatibility layer
-- bin/neon_to_envi.py — CLI invoking HyTools compatibility layer
-- tests/test_hytools_preflight.py — ensures HyTools installed
-- tests/test_hytools_compat.py — mocks HyTools namespace discovery
-- spectral_unmixing_tools_original.py — imports `hytools as ht`
-- BRDF-Topo-HyTools/README.md — documents HyTools requirements
-- Raster_processing.ipynb — clones HyTools and patches base.py
-- Untitled.ipynb — notebook cells referencing hytools
-- ty_notebooks/Macrosystem_polygon_extractions.ipynb — patches HyTools base.py
-- Macrosystem_polygon_extractions.ipynb — same HyTools patch instructions
+Several algorithms and data-handling conventions in `NeonCube`, the correction routines, and ENVI export logic were adapted from the HyTools project (GPLv3). Although the refactored pipeline no longer imports HyTools at runtime, we continue to credit the original HyTools authors and comply with GPLv3 obligations for the adapted code.
