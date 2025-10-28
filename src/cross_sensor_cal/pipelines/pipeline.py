@@ -218,6 +218,7 @@ from cross_sensor_cal.corrections import (
 from cross_sensor_cal.envi_writer import EnviWriter
 from cross_sensor_cal.neon_cube import NeonCube
 from cross_sensor_cal.resample import resample_chunk_to_sensor
+from cross_sensor_cal.utils import get_package_data_path
 
 from ..envi_download import download_neon_flight_lines
 from ..file_types import (
@@ -234,7 +235,6 @@ from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
 from ..file_sort import generate_file_move_list
 
-PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
 def _coerce_scalar(value: str):
@@ -816,21 +816,34 @@ def go_forth_and_multiply(
 
     sensor_library: dict[str, dict[str, list[float]]] = {}
     if inline_resample:
-        bands_path = Path(PROJ_DIR) / "data" / "landsat_band_parameters.json"
         try:
-            with bands_path.open("r", encoding="utf-8") as f:
-                raw_library = json.load(f)
-            if isinstance(raw_library, dict):
-                sensor_library = {k: v for k, v in raw_library.items() if isinstance(v, dict)}
-            else:
-                logging.error("❌ Unexpected SRF library format in %s. Inline resampling disabled.", bands_path)
-                inline_resample = False
+            bands_path = get_package_data_path("landsat_band_parameters.json")
         except FileNotFoundError:
-            logging.error("❌ Sensor response library not found at %s. Inline resampling disabled.", bands_path)
+            logging.error(
+                "❌ Sensor response library not found in package data. Inline resampling disabled."
+            )
             inline_resample = False
-        except json.JSONDecodeError as exc:
-            logging.error("❌ Could not parse %s (%s). Inline resampling disabled.", bands_path, exc)
-            inline_resample = False
+        else:
+            try:
+                with bands_path.open("r", encoding="utf-8") as f:
+                    raw_library = json.load(f)
+                if isinstance(raw_library, dict):
+                    sensor_library = {
+                        k: v for k, v in raw_library.items() if isinstance(v, dict)
+                    }
+                else:
+                    logging.error(
+                        "❌ Unexpected SRF library format in %s. Inline resampling disabled.",
+                        bands_path,
+                    )
+                    inline_resample = False
+            except json.JSONDecodeError as exc:
+                logging.error(
+                    "❌ Could not parse %s (%s). Inline resampling disabled.",
+                    bands_path,
+                    exc,
+                )
+                inline_resample = False
 
     reflectance_h5: list[NEONReflectanceFile] = []
     for h5_path in sorted(base_path.rglob("*.h5")):

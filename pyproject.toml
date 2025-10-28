@@ -53,5 +53,8 @@ Issues = "https://github.com/earthlab/cross-sensor-cal/issues"
 package-dir = {"" = "src"}
 include-package-data = true
 
+[tool.setuptools.package-data]
+cross_sensor_cal = ["data/*.json"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
