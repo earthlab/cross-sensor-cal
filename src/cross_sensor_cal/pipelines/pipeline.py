@@ -237,6 +237,230 @@ from ..file_sort import generate_file_move_list
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
+def _coerce_scalar(value: str):
+    token = value.strip().strip('"').strip("'")
+    if not token:
+        return ""
+    lowered = token.lower()
+    if lowered == "nan":
+        return float("nan")
+    for caster in (int, float):
+        try:
+            return caster(token)
+        except (TypeError, ValueError):
+            continue
+    return token
+
+
+def _parse_envi_header(hdr_path: Path) -> dict:
+    header: dict[str, object] = {}
+    if not hdr_path.exists():
+        raise FileNotFoundError(hdr_path)
+    collecting_key: str | None = None
+    collecting_value: list[str] = []
+    with hdr_path.open("r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.upper() == "ENVI":
+                continue
+            if collecting_key is not None:
+                collecting_value.append(line)
+                if line.endswith("}"):
+                    joined = " ".join(collecting_value)
+                    header[collecting_key] = joined
+                    collecting_key = None
+                    collecting_value = []
+                continue
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip().lower()
+            value = value.strip()
+            if value.startswith("{") and not value.endswith("}"):
+                collecting_key = key
+                collecting_value = [value]
+                continue
+            header[key] = value
+
+    processed: dict[str, object] = {}
+    for key, raw_value in header.items():
+        if isinstance(raw_value, str) and raw_value.startswith("{") and raw_value.endswith("}"):
+            inner = raw_value[1:-1].strip()
+            if not inner:
+                processed[key] = []
+                continue
+            tokens = [tok.strip() for tok in inner.replace("\n", " ").split(",")]
+            values = [_coerce_scalar(tok) for tok in tokens if tok]
+            if key in {"wavelength", "fwhm"}:
+                processed[key] = [float(v) for v in values if isinstance(v, (int, float))]
+            else:
+                processed[key] = values
+            continue
+        if isinstance(raw_value, str):
+            coerced = _coerce_scalar(raw_value)
+        else:
+            coerced = raw_value
+        processed[key] = coerced
+
+    return processed
+
+
+def _format_envi_scalar(value: object) -> str:
+    if isinstance(value, float):
+        return f"{value:g}"
+    if isinstance(value, (np.integer, int)):
+        return str(int(value))
+    return str(value)
+
+
+def _format_envi_value(value: object) -> str:
+    if isinstance(value, (list, tuple)):
+        joined = ", ".join(_format_envi_scalar(v) for v in value)
+        return f"{{ {joined} }}"
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            return stripped
+        if any(ch.isspace() for ch in stripped):
+            return f"{{ {stripped} }}"
+        return stripped
+    return _format_envi_scalar(value)
+
+
+def _build_resample_header_text(header: dict) -> str:
+    lines = ["ENVI"]
+    for key, value in header.items():
+        lines.append(f"{key} = {_format_envi_value(value)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def convolve_resample_product(
+    corrected_hdr_path: Path,
+    sensor_srf: dict[str, np.ndarray],
+    out_stem_resampled: Path,
+    wavelengths: np.ndarray,
+    tile_y: int = 100,
+    tile_x: int = 100,
+) -> None:
+    src_header = _parse_envi_header(corrected_hdr_path)
+    try:
+        samples = int(src_header["samples"])  # type: ignore[index]
+        lines = int(src_header["lines"])  # type: ignore[index]
+        bands = int(src_header["bands"])  # type: ignore[index]
+    except KeyError as exc:  # pragma: no cover - malformed headers unexpected
+        raise RuntimeError("Header missing required dimension keys") from exc
+
+    interleave = str(src_header.get("interleave", "")).lower()
+    if interleave != "bsq":
+        raise RuntimeError("convolve_resample_product only supports BSQ interleave")
+
+    wavelengths_arr = np.asarray(wavelengths, dtype=np.float32)
+    if wavelengths_arr.ndim != 1 or wavelengths_arr.size != bands:
+        raise RuntimeError(
+            "Provided wavelengths must be 1D and match the number of hyperspectral bands"
+        )
+
+    sensor_band_names = list(sensor_srf.keys())
+    out_bands = len(sensor_band_names)
+    if out_bands == 0:
+        raise RuntimeError("sensor_srf must contain at least one output band")
+
+    srfs_prepped: dict[str, np.ndarray] = {}
+    for band_name, weights in sensor_srf.items():
+        arr = np.asarray(weights, dtype=np.float32)
+        if arr.shape != (bands,):
+            raise RuntimeError(
+                f"SRF for band '{band_name}' must match hyperspectral band count ({bands})"
+            )
+        srfs_prepped[band_name] = arr
+
+    img_path = corrected_hdr_path.with_suffix(".img")
+    if not img_path.exists():
+        raise FileNotFoundError(img_path)
+
+    mm = np.memmap(img_path, dtype="float32", mode="r", shape=(bands, lines, samples))
+
+    out_img_path = out_stem_resampled.with_suffix(".img")
+    out_img_path.parent.mkdir(parents=True, exist_ok=True)
+    mm_out = np.memmap(out_img_path, dtype="float32", mode="w+", shape=(out_bands, lines, samples))
+
+    nodata_value = src_header.get("data ignore value")
+    nodata_float: float | None
+    if isinstance(nodata_value, (list, tuple)) and nodata_value:
+        try:
+            nodata_float = float(nodata_value[0])
+        except (TypeError, ValueError):
+            nodata_float = None
+    elif nodata_value is None:
+        nodata_float = None
+    else:
+        try:
+            nodata_float = float(nodata_value)
+        except (TypeError, ValueError):
+            nodata_float = None
+
+    first_tile = True
+    for ys in range(0, lines, tile_y):
+        ye = min(lines, ys + tile_y)
+        for xs in range(0, samples, tile_x):
+            xe = min(samples, xs + tile_x)
+            if first_tile:
+                print("Processing resample tiles: ", end="", flush=True)
+                first_tile = False
+            print("GR", end="", flush=True)
+
+            tile_bsq = mm[:, ys:ye, xs:xe]
+            tile_yxb = np.transpose(tile_bsq, (1, 2, 0)).astype(np.float32, copy=False)
+
+            sensor_tile = resample_chunk_to_sensor(
+                tile_yxb,
+                wavelengths_arr,
+                srfs_prepped,
+            )
+            sensor_tile = sensor_tile.astype(np.float32, copy=False)
+
+            if nodata_float is not None:
+                if np.isnan(nodata_float):
+                    invalid_mask = np.isnan(tile_yxb).all(axis=2)
+                else:
+                    invalid_mask = np.all(np.isclose(tile_yxb, nodata_float), axis=2)
+                if invalid_mask.any():
+                    sensor_tile[invalid_mask] = nodata_float
+
+            for band_index, band_name in enumerate(sensor_band_names):
+                mm_out[band_index, ys:ye, xs:xe] = sensor_tile[:, :, band_index]
+
+    if not first_tile:
+        print()
+
+    mm_out.flush()
+    del mm_out
+    del mm
+
+    out_header = {
+        "samples": samples,
+        "lines": lines,
+        "bands": out_bands,
+        "interleave": "bsq",
+        "data type": 4,
+        "byte order": 0,
+        "map info": src_header.get("map info"),
+        "projection": src_header.get("projection"),
+        "wavelength units": src_header.get("wavelength units"),
+        "wavelength": sensor_band_names,
+        "description": (
+            "Spectrally convolved product generated from BRDF+topo corrected hyperspectral cube"
+        ),
+    }
+
+    out_header = {k: v for k, v in out_header.items() if v is not None}
+
+    hdr_text = _build_resample_header_text(out_header)
+    out_hdr_path = out_stem_resampled.with_suffix(".hdr")
+    out_hdr_path.write_text(hdr_text, encoding="utf-8")
+
+
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
     """
     Generate file sorting list and optionally sync files to iRODS using gocmd.
@@ -540,14 +764,14 @@ def go_forth_and_multiply(
             srfs[band_key] = np.asarray(srf, dtype=np.float32)
         return srfs
 
-    def _prepare_sensor_writers(
+    def _prepare_sensor_resample_targets(
         cube: NeonCube,
         corrected_file: NEONReflectanceBRDFCorrectedENVIFile,
         refl_file: NEONReflectanceFile,
         base_header: dict,
-    ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, EnviWriter], list[Path], list[Path]]:
+    ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, Path], list[Path], list[Path]]:
         sensor_srfs: dict[str, dict[str, np.ndarray]] = {}
-        sensor_writers: dict[str, EnviWriter] = {}
+        sensor_out_stems: dict[str, Path] = {}
         skipped: list[Path] = []
         created: list[Path] = []
         for sensor_name, params in sensor_library.items():
@@ -558,7 +782,6 @@ def go_forth_and_multiply(
             srfs = _build_sensor_srfs(cube.wavelengths, centers, fwhm)
             if not srfs:
                 continue
-            sensor_srfs[sensor_name] = srfs
             dir_prefix = f"{method_norm.capitalize()}_Reflectance_Resample"
             sensor_dir = corrected_file.directory / f"{dir_prefix}_{sensor_name.replace(' ', '_')}"
             sensor_dir.mkdir(parents=True, exist_ok=True)
@@ -590,19 +813,10 @@ def go_forth_and_multiply(
                                 existing,
                                 exc,
                             )
-            resampled_header = dict(base_header)
-            resampled_header["bands"] = len(srfs)
-            resampled_header["wavelength"] = list(map(float, centers))
-            resampled_header["fwhm"] = list(map(float, fwhm))
-            resampled_header["description"] = (
-                f"{sensor_name} simulated reflectance ({method_norm}) based on BRDF + topographic corrected data"
-            )
-            resampled_header.setdefault("data type", 4)
-            resampled_header.setdefault("byte order", base_header.get("byte order", 0))
-            writer = EnviWriter(resampled_img_path.parent / resampled_img_path.stem, resampled_header)
-            sensor_writers[sensor_name] = writer
+            sensor_srfs[sensor_name] = srfs
+            sensor_out_stems[sensor_name] = resampled_img_path.with_suffix("")
             created.append(resampled_img_path)
-        return sensor_srfs, sensor_writers, skipped, created
+        return sensor_srfs, sensor_out_stems, skipped, created
 
     sensor_library: dict[str, dict[str, list[float]]] = {}
     if inline_resample:
@@ -727,11 +941,16 @@ def go_forth_and_multiply(
         writer = EnviWriter(out_img_path.parent / out_img_path.stem, header)
 
         sensor_srfs: dict[str, dict[str, np.ndarray]] = {}
-        sensor_writers: dict[str, EnviWriter] = {}
+        sensor_out_stems: dict[str, Path] = {}
         skipped_sensor_paths: list[Path] = []
         new_sensor_paths: list[Path] = []
         if inline_resample and sensor_library:
-            sensor_srfs, sensor_writers, skipped_sensor_paths, new_sensor_paths = _prepare_sensor_writers(
+            (
+                sensor_srfs,
+                sensor_out_stems,
+                skipped_sensor_paths,
+                new_sensor_paths,
+            ) = _prepare_sensor_resample_targets(
                 cube,
                 corrected_file,
                 refl_file,
@@ -752,6 +971,7 @@ def go_forth_and_multiply(
         if brightness_offset and float(brightness_offset) != 0.0:
             offset_value = np.float32(float(brightness_offset))
 
+        correction_failed = False
         try:
             for ys, ye, xs, xe, raw_chunk in cube.iter_chunks():
                 chunk = np.asarray(raw_chunk, dtype=np.float32)
@@ -762,16 +982,9 @@ def go_forth_and_multiply(
                     offset_applied_during_processing = True
                 corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
                 writer.write_chunk(corrected_chunk, ys, xs)
-                if sensor_writers:
-                    mask = cube.mask_no_data[ys:ye, xs:xe] if hasattr(cube, "mask_no_data") else None
-                    no_data_value = np.float32(getattr(cube, "no_data", np.nan))
-                    for sensor_name, srfs in sensor_srfs.items():
-                        sensor_chunk = resample_chunk_to_sensor(corrected_chunk, cube.wavelengths, srfs)
-                        if mask is not None:
-                            sensor_chunk = np.where(mask[..., np.newaxis], sensor_chunk, no_data_value)
-                        sensor_writers[sensor_name].write_chunk(sensor_chunk.astype(np.float32, copy=False), ys, xs)
         except Exception as exc:
             errors += 1
+            correction_failed = True
             logging.error(
                 "⚠️  Correction failed for %s: %r%s",
                 refl_file.path.name,
@@ -783,16 +996,45 @@ def go_forth_and_multiply(
                 writer.close()
             except Exception as exc:  # pragma: no cover - close should rarely fail
                 logging.error("⚠️  Failed to close writer for %s: %s", refl_file.path.name, exc)
-            for sensor_writer in sensor_writers.values():
-                try:
-                    sensor_writer.close()
-                except Exception as exc:  # pragma: no cover - close should rarely fail
-                    logging.error(
-                        "⚠️  Failed to close resampled writer for %s (%s): %s",
-                        refl_file.path.name,
-                        sensor_writer.out_stem,
-                        exc,
+
+        if not correction_failed and sensor_srfs:
+            try:
+                parsed_header = _parse_envi_header(out_hdr_path)
+                wavelengths_values = parsed_header.get("wavelength", [])
+                wavelengths_array = np.asarray(wavelengths_values, dtype=np.float32)
+                expected_bands = int(parsed_header.get("bands", wavelengths_array.size))
+                if wavelengths_array.ndim != 1 or wavelengths_array.size != expected_bands:
+                    raise RuntimeError(
+                        "Corrected header wavelengths are missing or do not match band count"
                     )
+            except Exception as exc:
+                errors += 1
+                logging.error(
+                    "⚠️  Failed to prepare wavelengths for resampling %s: %s",
+                    refl_file.path.name,
+                    exc,
+                )
+            else:
+                for sensor_name, srfs in sensor_srfs.items():
+                    out_stem = sensor_out_stems.get(sensor_name)
+                    if out_stem is None:
+                        continue
+                    try:
+                        convolve_resample_product(
+                            corrected_hdr_path=out_hdr_path,
+                            sensor_srf=srfs,
+                            out_stem_resampled=out_stem,
+                            wavelengths=wavelengths_array,
+                        )
+                    except Exception as exc:  # pragma: no cover - unexpected resample failure
+                        errors += 1
+                        logging.error(
+                            "⚠️  Resample failed for %s (%s): %s",
+                            refl_file.path.name,
+                            sensor_name,
+                            exc,
+                        )
+                        continue
 
         _emit(
             f"Wrote corrected ENVI for {cube.base_key} to {out_img_path}",
