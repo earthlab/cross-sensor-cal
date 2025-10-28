@@ -7,7 +7,10 @@ This adapted version is simplified for NEON-only use in cross-sensor-cal.
 
 from __future__ import annotations
 
-from typing import Tuple
+import json
+import logging
+from pathlib import Path
+from typing import Tuple, TYPE_CHECKING
 
 import numpy as np
 
@@ -15,10 +18,17 @@ __all__ = [
     "calc_cosine_i",
     "calc_volume_kernel",
     "calc_geom_kernel",
+    "fit_and_save_brdf_model",
     "apply_topo_correct",
     "apply_brdf_correct",
     "apply_glint_correct",
 ]
+
+if TYPE_CHECKING:  # pragma: no cover - only for type hints
+    from .neon_cube import NeonCube
+
+
+_BRDF_COEFF_CACHE: dict[Path, dict[str, np.ndarray | str]] = {}
 
 
 def _validate_angles(*arrays: np.ndarray) -> Tuple[np.ndarray, ...]:
@@ -245,45 +255,126 @@ def apply_topo_correct(
 
 
 def apply_brdf_correct(
-    cube,
+    cube: "NeonCube",
     chunk_array: np.ndarray,
     ys: int,
     ye: int,
     xs: int,
     xe: int,
+    coeff_path: Path | None = None,
 ) -> np.ndarray:
-    """Adapted from hytools.brdf.apply_brdf_correct (GPLv3; HyTools Authors:
-    Adam Chlus, Zhiwei Ye, Philip Townsend). Simplified for NEON use.
+    """Perform BRDF normalization on a hyperspectral chunk.
 
-    Perform BRDF normalization on a hyperspectral chunk.
+    Parameters
+    ----------
+    cube : NeonCube
+        The NEON cube providing ancillary angle rasters.
+    chunk_array : np.ndarray
+        Reflectance chunk (float32) to normalise.
+    ys, ye, xs, xe : int
+        Chunk boundaries within the full cube.
+    coeff_path : Path | None, optional
+        Path to a persisted BRDF coefficient JSON (as produced by
+        :func:`fit_and_save_brdf_model`).  When provided, the file is loaded
+        once and cached for subsequent calls.  If ``None`` or unavailable,
+        fall back to any coefficients already attached to ``cube``; otherwise
+        revert to neutral coefficients with a warning.
     """
 
     if chunk_array.dtype != np.float32:
         raise ValueError("Chunks passed to apply_brdf_correct must be float32 arrays.")
 
-    coeffs = getattr(cube, "brdf_coefficients", None)
-    if coeffs is None:
-        raise ValueError(
-            "NeonCube does not provide 'brdf_coefficients'. BRDF correction cannot proceed."
-        )
+    coeffs_dict: dict[str, np.ndarray | str] | None = None
+    coeff_path_resolved: Path | None = None
+    if coeff_path is not None:
+        coeff_path_resolved = Path(coeff_path).resolve()
+        if coeff_path_resolved.exists():
+            try:
+                coeffs_dict = _BRDF_COEFF_CACHE.get(coeff_path_resolved)
+                if coeffs_dict is None:
+                    with coeff_path_resolved.open("r", encoding="utf-8") as coeff_file:
+                        loaded = json.load(coeff_file)
+                    iso_arr = np.asarray(loaded.get("iso"), dtype=np.float32)
+                    vol_arr = np.asarray(loaded.get("vol"), dtype=np.float32)
+                    geo_arr = np.asarray(loaded.get("geo"), dtype=np.float32)
+                    coeffs_dict = {
+                        "iso": iso_arr,
+                        "vol": vol_arr,
+                        "geo": geo_arr,
+                        "volume_kernel": loaded.get("volume_kernel", "RossThick"),
+                        "geom_kernel": loaded.get("geom_kernel", "LiSparseReciprocal"),
+                    }
+                    _BRDF_COEFF_CACHE[coeff_path_resolved] = coeffs_dict
+            except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
+                logging.warning(
+                    "⚠️  Failed to load BRDF coefficients from %s (%s); falling back to cube/neutrals.",
+                    coeff_path_resolved,
+                    exc,
+                )
+                coeffs_dict = None
+        else:
+            logging.warning(
+                "⚠️  BRDF coefficient file %s not found; falling back to cube/neutrals.",
+                coeff_path_resolved,
+            )
 
-    try:
-        iso = np.asarray(coeffs["iso"], dtype=np.float32)
-        vol = np.asarray(coeffs["vol"], dtype=np.float32)
-        geo = np.asarray(coeffs["geo"], dtype=np.float32)
-    except KeyError as exc:  # pragma: no cover - defensive guard
-        raise ValueError("BRDF coefficients dictionary must include 'iso', 'vol', 'geo'.") from exc
+    if coeffs_dict is None:
+        coeffs_attr = getattr(cube, "brdf_coefficients", None)
+        if coeffs_attr is not None:
+            try:
+                iso_arr = np.asarray(coeffs_attr["iso"], dtype=np.float32)
+                vol_arr = np.asarray(coeffs_attr["vol"], dtype=np.float32)
+                geo_arr = np.asarray(coeffs_attr["geo"], dtype=np.float32)
+            except KeyError as exc:  # pragma: no cover - defensive guard
+                raise ValueError(
+                    "BRDF coefficients dictionary must include 'iso', 'vol', 'geo'."
+                ) from exc
+            coeffs_dict = {
+                "iso": iso_arr,
+                "vol": vol_arr,
+                "geo": geo_arr,
+                "volume_kernel": coeffs_attr.get("volume_kernel", "RossThick"),
+                "geom_kernel": coeffs_attr.get("geom_kernel", "LiSparseReciprocal"),
+            }
+
+    expected_bands = chunk_array.shape[-1]
+    if coeffs_dict is None:
+        logging.warning(
+            "⚠️  No BRDF coefficients available for %s; using neutral coefficients.",
+            getattr(cube, "base_key", "unknown"),
+        )
+        coeffs_dict = {
+            "iso": np.ones(expected_bands, dtype=np.float32),
+            "vol": np.zeros(expected_bands, dtype=np.float32),
+            "geo": np.zeros(expected_bands, dtype=np.float32),
+            "volume_kernel": "RossThick",
+            "geom_kernel": "LiSparseReciprocal",
+        }
+
+    iso = np.asarray(coeffs_dict["iso"], dtype=np.float32)
+    vol = np.asarray(coeffs_dict["vol"], dtype=np.float32)
+    geo = np.asarray(coeffs_dict["geo"], dtype=np.float32)
 
     if iso.ndim != 1 or vol.shape != iso.shape or geo.shape != iso.shape:
         raise ValueError("BRDF coefficient arrays must be one-dimensional with matching shapes.")
+
+    if iso.size != expected_bands:
+        logging.warning(
+            "⚠️  BRDF coefficient size mismatch (%d vs %d); falling back to neutral coefficients.",
+            iso.size,
+            expected_bands,
+        )
+        iso = np.ones(expected_bands, dtype=np.float32)
+        vol = np.zeros(expected_bands, dtype=np.float32)
+        geo = np.zeros(expected_bands, dtype=np.float32)
+
+    kernel_type_vol = str(coeffs_dict.get("volume_kernel", "RossThick"))
+    kernel_type_geo = str(coeffs_dict.get("geom_kernel", "LiSparseReciprocal"))
 
     solar_zn = cube.get_ancillary("solar_zn", radians=True)[ys:ye, xs:xe]
     solar_az = cube.get_ancillary("solar_az", radians=True)[ys:ye, xs:xe]
     sensor_zn = cube.get_ancillary("sensor_zn", radians=True)[ys:ye, xs:xe]
     sensor_az = cube.get_ancillary("sensor_az", radians=True)[ys:ye, xs:xe]
-
-    kernel_type_vol = coeffs.get("volume_kernel", "RossThick")
-    kernel_type_geo = coeffs.get("geom_kernel", "LiSparseReciprocal")
 
     volume_kernel = calc_volume_kernel(
         solar_az,
@@ -327,3 +418,104 @@ def apply_glint_correct(*args, **kwargs):
     """
 
     raise NotImplementedError("Glint correction is not implemented in cross-sensor-cal.")
+
+
+def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
+    """Estimate and persist BRDF coefficients for a NEON flightline.
+
+    Parameters
+    ----------
+    cube : NeonCube
+        Loaded NEON hyperspectral cube providing reflectance and ancillary angles.
+    out_dir : Path
+        Directory where the fitted BRDF coefficient JSON should be stored.
+
+    Returns
+    -------
+    Path
+        Path to the JSON file containing the BRDF model coefficients.
+    """
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    coeff_path = out_dir / f"{cube.base_key}_brdf_model.json"
+    if coeff_path.exists():
+        return coeff_path
+
+    solar_zn = cube.get_ancillary("solar_zn", radians=True)
+    solar_az = cube.get_ancillary("solar_az", radians=True)
+    sensor_zn = cube.get_ancillary("sensor_zn", radians=True)
+    sensor_az = cube.get_ancillary("sensor_az", radians=True)
+
+    volume_kernel = calc_volume_kernel(
+        solar_az, solar_zn, sensor_az, sensor_zn, kernel_type="RossThick"
+    )
+    geom_kernel = calc_geom_kernel(
+        solar_az,
+        solar_zn,
+        sensor_az,
+        sensor_zn,
+        kernel_type="LiSparseReciprocal",
+    )
+
+    mask = getattr(cube, "mask_no_data", None)
+    if mask is None:
+        mask = np.ones_like(volume_kernel, dtype=bool)
+    valid = mask.astype(bool)
+    valid &= np.isfinite(volume_kernel) & np.isfinite(geom_kernel)
+
+    flat_valid = valid.reshape(-1)
+    if np.count_nonzero(flat_valid) < 3:
+        logging.warning(
+            "⚠️  Not enough valid pixels to fit BRDF model for %s; using neutral coefficients.",
+            getattr(cube, "base_key", "unknown"),
+        )
+        iso = np.ones(cube.bands, dtype=np.float32)
+        vol = np.zeros(cube.bands, dtype=np.float32)
+        geo = np.zeros(cube.bands, dtype=np.float32)
+    else:
+        design_stack = np.stack(
+            [
+                np.ones_like(volume_kernel, dtype=np.float32),
+                volume_kernel,
+                geom_kernel,
+            ],
+            axis=-1,
+        )
+        design_flat = design_stack.reshape(-1, 3)
+        design_valid = design_flat[flat_valid]
+
+        reflectance = np.asarray(cube.data, dtype=np.float32).reshape(-1, cube.bands)
+
+        iso = np.ones(cube.bands, dtype=np.float32)
+        vol = np.zeros(cube.bands, dtype=np.float32)
+        geo = np.zeros(cube.bands, dtype=np.float32)
+
+        for band_idx in range(cube.bands):
+            y = reflectance[flat_valid, band_idx].astype(np.float64, copy=False)
+            finite_mask = np.isfinite(y)
+            if np.count_nonzero(finite_mask) < 3:
+                continue
+            X = design_valid[finite_mask].astype(np.float64, copy=False)
+            y_valid = y[finite_mask]
+            try:
+                solution, *_ = np.linalg.lstsq(X, y_valid, rcond=None)
+            except np.linalg.LinAlgError:
+                continue
+            iso[band_idx] = np.float32(solution[0])
+            vol[band_idx] = np.float32(solution[1])
+            geo[band_idx] = np.float32(solution[2])
+
+    coeff_payload = {
+        "iso": iso.astype(float).tolist(),
+        "vol": vol.astype(float).tolist(),
+        "geo": geo.astype(float).tolist(),
+        "volume_kernel": "RossThick",
+        "geom_kernel": "LiSparseReciprocal",
+    }
+
+    with coeff_path.open("w", encoding="utf-8") as coeff_file:
+        json.dump(coeff_payload, coeff_file, indent=2)
+
+    return coeff_path

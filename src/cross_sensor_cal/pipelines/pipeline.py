@@ -214,6 +214,7 @@ def _silence_noise(enabled: bool):
 from cross_sensor_cal.corrections import (
     apply_brdf_correct,
     apply_topo_correct,
+    fit_and_save_brdf_model,
 )
 from cross_sensor_cal.envi_writer import EnviWriter
 from cross_sensor_cal.neon_cube import NeonCube
@@ -666,29 +667,42 @@ def go_forth_and_multiply(
         return trimmed or "30006.001"
 
     def _attach_brdf_coefficients(cube: NeonCube, refl_file: NEONReflectanceFile) -> None:
-        candidates = NEONReflectanceCoefficientsFile.find_in_directory(
-            refl_file.directory,
-            correction="brdfandtopo",
-            suffix="envi",
-        )
-        if not candidates:
-            candidates = NEONReflectanceCoefficientsFile.find_in_directory(
-                refl_file.directory,
-                correction="brdf",
-            )
-
         coeff_data = None
-        for cand in candidates:
+        saved_model_path = refl_file.directory / f"{cube.base_key}_brdf_model.json"
+        if saved_model_path.exists():
             try:
-                with cand.file_path.open("r", encoding="utf-8") as coeff_file:
+                with saved_model_path.open("r", encoding="utf-8") as coeff_file:
                     coeff_data = json.load(coeff_file)
-                    break
-            except Exception as exc:  # pragma: no cover - defensive guard against corrupt JSON
+            except Exception as exc:  # pragma: no cover - defensive guard
                 logging.warning(
-                    "⚠️  Could not read BRDF coefficient file %s: %s",
-                    cand.file_path,
+                    "⚠️  Could not read persisted BRDF model %s: %s",
+                    saved_model_path,
                     exc,
                 )
+
+        if coeff_data is None:
+            candidates = NEONReflectanceCoefficientsFile.find_in_directory(
+                refl_file.directory,
+                correction="brdfandtopo",
+                suffix="envi",
+            )
+            if not candidates:
+                candidates = NEONReflectanceCoefficientsFile.find_in_directory(
+                    refl_file.directory,
+                    correction="brdf",
+                )
+
+            for cand in candidates:
+                try:
+                    with cand.file_path.open("r", encoding="utf-8") as coeff_file:
+                        coeff_data = json.load(coeff_file)
+                        break
+                except Exception as exc:  # pragma: no cover - defensive guard against corrupt JSON
+                    logging.warning(
+                        "⚠️  Could not read BRDF coefficient file %s: %s",
+                        cand.file_path,
+                        exc,
+                    )
 
         if coeff_data is None:
             logging.warning(
@@ -888,6 +902,18 @@ def go_forth_and_multiply(
             _complete_step_for_line(line_hint)
             continue
 
+        try:
+            brdf_coeff_path = fit_and_save_brdf_model(cube, refl_file.directory)
+        except Exception as exc:
+            errors += 1
+            logging.error(
+                "⚠️  Failed to fit BRDF model for %s: %s",
+                refl_file.path.name,
+                exc,
+            )
+            _complete_step_for_line(line_hint)
+            continue
+
         corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_components(
             domain=refl_file.domain or "D00",
             site=refl_file.site or "SITE",
@@ -985,7 +1011,15 @@ def go_forth_and_multiply(
             for ys, ye, xs, xe, raw_chunk in cube.iter_chunks():
                 chunk = np.asarray(raw_chunk, dtype=np.float32)
                 corrected_chunk = apply_topo_correct(cube, chunk, ys, ye, xs, xe)
-                corrected_chunk = apply_brdf_correct(cube, corrected_chunk, ys, ye, xs, xe)
+                corrected_chunk = apply_brdf_correct(
+                    cube,
+                    corrected_chunk,
+                    ys,
+                    ye,
+                    xs,
+                    xe,
+                    coeff_path=brdf_coeff_path,
+                )
                 if offset_value is not None:
                     corrected_chunk = corrected_chunk + offset_value
                     offset_applied_during_processing = True
