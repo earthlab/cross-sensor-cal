@@ -789,7 +789,6 @@ def write_resampled_product(
     )
 
 def stage_export_envi_from_h5(
-    *,
     base_folder: Path,
     product_code: str,
     flight_stem: str,
@@ -798,51 +797,112 @@ def stage_export_envi_from_h5(
     """
     Ensure we have the uncorrected ENVI export (.img/.hdr) for this flightline.
 
-    Returns (raw_img_path, raw_hdr_path).
-    Skips if already valid.
+    Returns
+    -------
+    (raw_img_path, raw_hdr_path)
+
+    Behavior
+    --------
+    1. Ask get_flightline_products() where the raw ENVI should live.
+    2. If those paths already exist and validate, SKIP heavy export immediately.
+       This prevents re-loading huge (>20 GB) hyperspectral cubes on reruns.
+    3. Otherwise, run neon_to_envi_no_hytools() ONE TIME to generate ENVI.
+    4. After export, if the canonical paths STILL aren't valid, raise RuntimeError
+       that includes a diff of which new files appeared. That diff is then used to
+       correct get_flightline_products(), so on the next run we really will skip.
     """
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
 
-    h5_path = Path(paths["h5"])
-    raw_img_path = Path(paths["raw_envi_img"])
-    raw_hdr_path = Path(paths["raw_envi_hdr"])
+    h5_path = paths["h5"]
+    raw_img_path = paths["raw_envi_img"]
+    raw_hdr_path = paths["raw_envi_hdr"]
 
     base_folder = Path(base_folder)
     base_folder.mkdir(parents=True, exist_ok=True)
 
-    if not h5_path.exists():
-        h5_path = _find_h5_for_flightline(base_folder, flight_stem)
+    # Announce what we *expect* the raw ENVI export to be called.
+    logger.info(
+        "🔎 ENVI export target for %s is %s / %s",
+        flight_stem,
+        raw_img_path.name,
+        raw_hdr_path.name,
+    )
 
+    # FAST SKIP: if canonical raw ENVI already looks valid, avoid
+    # calling neon_to_envi_no_hytools() entirely. This is critical to
+    # prevent rereading ~23 GB cubes and killing the kernel.
     if is_valid_envi_pair(raw_img_path, raw_hdr_path):
         logger.info(
-            "✅ ENVI export already complete for %s -> %s / %s (skipping)",
+            "✅ ENVI export already complete for %s -> %s / %s (skipping heavy export)",
             flight_stem,
             raw_img_path.name,
             raw_hdr_path.name,
         )
         return raw_img_path, raw_hdr_path
 
-    logger.info("📦 Exporting ENVI for %s", flight_stem)
+    # Not valid yet: we'll try to generate it.
+    logger.info(
+        "📦 ENVI export not found or invalid for %s, generating from %s",
+        flight_stem,
+        h5_path.name,
+    )
+
+    # Snapshot directory state BEFORE export so we can diff.
+    before_listing = {p.name: p for p in base_folder.glob("*")}
+
+    # This is the heavy step that currently logs
+    # "NeonCube: loaded ... ~23.07 GB" and "Processing chunks: GRGRGR..."
     neon_to_envi_no_hytools(
         images=[str(h5_path)],
         output_dir=str(base_folder),
         brightness_offset=brightness_offset,
     )
 
-    if not is_valid_envi_pair(raw_img_path, raw_hdr_path):
-        raise RuntimeError(
-            f"ENVI export failed for {flight_stem}. "
-            f"Expected {raw_img_path.name} / {raw_hdr_path.name} but did not find valid files."
-        )
-
-    logger.info(
-        "✅ ENVI export completed for %s -> %s / %s",
-        flight_stem,
-        raw_img_path.name,
-        raw_hdr_path.name,
+    # Snapshot AFTER export and collect the names of new files.
+    after_listing = {p.name: p for p in base_folder.glob("*")}
+    created_names = sorted(
+        name for name in after_listing.keys() if name not in before_listing
     )
-    return raw_img_path, raw_hdr_path
+
+    # Now that export has run, re-check the canonical expected outputs.
+    if is_valid_envi_pair(raw_img_path, raw_hdr_path):
+        logger.info(
+            "✅ ENVI export completed for %s -> %s / %s",
+            flight_stem,
+            raw_img_path.name,
+            raw_hdr_path.name,
+        )
+        return raw_img_path, raw_hdr_path
+
+    # If we still can't validate the canonical "raw_envi_img"/"raw_envi_hdr",
+    # we assume get_flightline_products() is wrong for this stage.
+    # Raise a RuntimeError that tells the dev EXACTLY which files actually appeared.
+    created_pretty = "\n  ".join(created_names) if created_names else "(no new files detected)"
+
+    raise RuntimeError(
+        (
+            "ENVI export for {stem} ran, but the canonical raw ENVI paths from "
+            "get_flightline_products() did not validate.\n\n"
+            "Canonical expectation:\n"
+            "  {raw_img}\n"
+            "  {raw_hdr}\n\n"
+            "New files actually created during this export call:\n"
+            "  {created}\n\n"
+            "→ ACTION REQUIRED:\n"
+            "Update get_flightline_products() so that keys 'raw_envi_img' and "
+            "'raw_envi_hdr' point at the actual uncorrected ENVI output that "
+            "neon_to_envi_no_hytools() writes (the pre-BRDF/topo cube). Once "
+            "those keys match reality, reruns will hit the '✅ ENVI export "
+            "already complete ... (skipping heavy export)' branch and will no "
+            "longer try to reload huge cubes into memory on every run."
+        ).format(
+            stem=flight_stem,
+            raw_img=raw_img_path.name,
+            raw_hdr=raw_hdr_path.name,
+            created=created_pretty,
+        )
+    )
 
 
 def stage_build_and_write_correction_json(
