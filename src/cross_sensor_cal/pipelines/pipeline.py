@@ -5,18 +5,31 @@ cross_sensor_cal.pipelines.pipeline
 
 Updated October 2025
 
-Implements the core NEON hyperspectral → corrected reflectance → cross-sensor pipeline.
+This module implements the core single-flightline and multi-flightline processing pipeline
+for NEON hyperspectral flight lines. The pipeline is now:
 
-New features:
-- Corrected scientific order (ENVI → correction JSON → correction → convolution)
-- Per-stage validation and skip logic
-- Clear, informative logging
-- Safe reruns and partial recovery
+    1. ENVI export from NEON .h5
+    2. BRDF/topo correction parameter JSON build
+    3. BRDF + topographic correction
+    4. Sensor convolution/resampling
 
-Example:
+Key guarantees:
+- The stages ALWAYS run in the order above.
+- Convolution/resampling ALWAYS uses the BRDF+topo corrected ENVI product
+  (<flight_stem>_brdfandtopo_corrected_envi.img/.hdr), never the raw .h5.
+- Each stage is idempotent:
+    * If valid outputs already exist, that stage logs "✅ ... skipping" and returns.
+    * If outputs are missing or corrupted, that stage recomputes them.
+- The pipeline is restart-safe. You can rerun go_forth_and_multiply() after an interruption
+  and it will resume where it left off without recomputing successfully completed work.
+- All file naming and file locations are defined centrally by get_flightline_products().
+  Stages do not hardcode filenames directly.
+
+Typical usage:
+
     from pathlib import Path
-
     from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+
     go_forth_and_multiply(
         base_folder=Path("output_tester"),
         site_code="NIWO",
@@ -26,6 +39,15 @@ Example:
             "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance",
         ],
     )
+
+Logs will include messages like:
+    "🔎 ENVI export target for ... is <stem>_envi.img / <stem>_envi.hdr"
+    "✅ ENVI export already complete ... (skipping heavy export)"
+    "✅ BRDF+topo correction already complete ... (skipping)"
+    "🎯 Convolving corrected reflectance for ..."
+    "🎉 Finished pipeline for <flight_stem>"
+
+These logs confirm both correct ordering and skip behavior.
 """
 from __future__ import annotations
 
