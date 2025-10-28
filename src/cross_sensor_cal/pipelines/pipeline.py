@@ -815,8 +815,8 @@ def stage_export_envi_from_h5(
     paths = get_flightline_products(base_folder, product_code, flight_stem)
 
     h5_path = paths["h5"]
-    raw_img_path = paths["raw_envi_img"]
-    raw_hdr_path = paths["raw_envi_hdr"]
+    raw_img_path = Path(paths["raw_envi_img"])
+    raw_hdr_path = Path(paths["raw_envi_hdr"])
 
     base_folder = Path(base_folder)
     base_folder.mkdir(parents=True, exist_ok=True)
@@ -832,7 +832,17 @@ def stage_export_envi_from_h5(
     # FAST SKIP: if canonical raw ENVI already looks valid, avoid
     # calling neon_to_envi_no_hytools() entirely. This is critical to
     # prevent rereading ~23 GB cubes and killing the kernel.
-    if is_valid_envi_pair(raw_img_path, raw_hdr_path):
+    def _looks_valid(img_path: Path, hdr_path: Path) -> bool:
+        return (
+            img_path.exists()
+            and img_path.is_file()
+            and img_path.stat().st_size > 0
+            and hdr_path.exists()
+            and hdr_path.is_file()
+            and hdr_path.stat().st_size > 0
+        )
+
+    if _looks_valid(raw_img_path, raw_hdr_path):
         logger.info(
             "✅ ENVI export already complete for %s -> %s / %s (skipping heavy export)",
             flight_stem,
@@ -866,7 +876,11 @@ def stage_export_envi_from_h5(
     )
 
     # Now that export has run, re-check the canonical expected outputs.
-    if is_valid_envi_pair(raw_img_path, raw_hdr_path):
+    paths = get_flightline_products(base_folder, product_code, flight_stem)
+    raw_img_path = Path(paths["raw_envi_img"])
+    raw_hdr_path = Path(paths["raw_envi_hdr"])
+
+    if _looks_valid(raw_img_path, raw_hdr_path):
         logger.info(
             "✅ ENVI export completed for %s -> %s / %s",
             flight_stem,
