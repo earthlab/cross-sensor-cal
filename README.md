@@ -30,9 +30,18 @@ cscal-pipeline --help
 Programmatic invocation is equally simple:
 
 ```python
+from pathlib import Path
+
 from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
 
-go_forth_and_multiply(input_dir="path/to/neon_h5s", output_dir="out_dir")
+go_forth_and_multiply(
+    base_folder=Path("data/NIWO_2023-08"),
+    site_code="NIWO",
+    year_month="2023-08",
+    flight_lines=[
+        "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance",
+    ],
+)
 ```
 
 If you need the full geospatial/hyperspectral toolchain (Rasterio, GeoPandas, Spectral, Ray, HDF5),
@@ -55,18 +64,47 @@ Feature availability by install type:
 
 Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line identifier.
 
+## 🚀 Updated Processing Workflow (October 2025)
+
+The pipeline now runs in four clearly ordered, restart-safe stages:
+
+1. **ENVI Export** — Converts NEON `.h5` reflectance files to ENVI format.  
+   Skips automatically if `_envi.img/.hdr` already exist.
+2. **Correction JSON** — Builds illumination/topographic correction parameters.  
+   Written to `<stem>_brdfandtopo_corrected_envi.json` and reused if valid.
+3. **BRDF + Topographic Correction** — Applies physical corrections using the precomputed JSON.  
+   Produces `<stem>_brdfandtopo_corrected_envi.img/.hdr`.
+4. **Convolution / Resampling** — Generates simulated reflectance for target sensors (Landsat, Sentinel, etc.).  
+   Operates only on the corrected ENVI and skips finished sensors.
+
+✅ **Idempotent Execution:**  
+If you rerun the same `go_forth_and_multiply()` call, all previously completed steps are detected and skipped automatically. Invalid or incomplete files (e.g., from interrupted runs) are recomputed.
+
+📜 **Logs now show:**
+```
+✅ ENVI export already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
+✅ Correction JSON already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
+✅ BRDF+topo correction already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
+✅ Landsat 8 OLI convolution already complete, skipping
+🎉 Finished pipeline for NEON_D13_NIWO_DP1_L019-1...
+```
+
+💡 **Why this matters:**  
+The pipeline can now resume safely after partial failures or system restarts without duplicating computation. It guarantees that convolution uses the corrected data products and that every output on disk has passed integrity checks.
+
 ## Pipeline Overview
 
 1. **Locate NEON reflectance HDF5 files.** Download or copy the flightline `.h5` files from NEON AOP into your workspace before starting.
-2. **Export HDF5 to ENVI (no HyTools).** `neon_to_envi_no_hytools()` opens each file with `NeonCube`, streams spatial tiles, and writes float32 BSQ ENVI rasters plus ancillary angle layers via `EnviWriter`. This stage runs entirely within cross-sensor-cal—no HyTools or Ray runtime dependencies remain.
-3. **Fit per-flightline BRDF coefficients.** `fit_and_save_brdf_model()` derives BRDF parameters from the flightline’s sun/sensor geometry and saves them as `<flightline>_brdf_model.json` for reuse.
-4. **Apply topographic and BRDF correction.** Tiles from the uncorrected ENVI cube are corrected using slope/aspect rasters and the stored BRDF coefficients (falling back to neutral coefficients with a warning when a JSON is missing or unreadable). An optional `brightness_offset` can be added before writing `<flightline>_brdfandtopo_corrected_envi.img/.hdr`, whose header includes spatial metadata and true wavelength/FWHM information.
-5. **Convolve to simulated sensors.** `convolve_resample_product()` memmaps the corrected cube, multiplies each tile by sensor-specific spectral response functions from `cross_sensor_cal/data/`, and emits one ENVI product per simulated sensor band set.
+2. **Export HDF5 to ENVI (no HyTools).** `neon_to_envi_no_hytools()` opens each file with `NeonCube`, streams spatial tiles, and writes float32 BSQ ENVI rasters plus ancillary angle layers via `EnviWriter`. This stage runs entirely within cross-sensor-cal—no HyTools or Ray runtime dependencies remain. Existing `_envi.img/.hdr` pairs are validated and reused.
+3. **Persist correction parameters.** `build_and_write_correction_json()` inspects the flightline geometry and writes `<flightline>_brdfandtopo_corrected_envi.json`. The JSON is regenerated only when missing or invalid.
+4. **Apply topographic and BRDF correction.** Tiles from the uncorrected ENVI cube are corrected using slope/aspect rasters and the stored parameters. Optional `brightness_offset` is applied before writing `<flightline>_brdfandtopo_corrected_envi.img/.hdr`, whose header includes spatial metadata and true wavelength/FWHM information. Existing outputs are checked for completeness before skipping.
+5. **Convolve to simulated sensors.** `convolve_resample_product()` memmaps the corrected cube, multiplies each tile by sensor-specific spectral response functions from `cross_sensor_cal/data/`, and emits one ENVI product per simulated sensor band set. Finished products are validated and skipped on reruns.
 
 ## Data Products
 
 - **`<flightline>_directional_reflectance.img/.hdr`** – Uncorrected directional reflectance exported from the NEON HDF5 (no topographic, BRDF, or spectral convolution applied). Ancillary angle rasters are written alongside for downstream use.
-- **`<flightline>_brdf_model.json`** – JSON coefficients fitted once per flightline; used to drive BRDF correction and defaults to neutral coefficients when unavailable.
+- **`<flightline>_brdf_model.json`** – Intermediate BRDF coefficients referenced by the correction JSON. Regenerated only when inputs change.
+- **`<flightline>_brdfandtopo_corrected_envi.json`** – Correction parameters describing illumination geometry, BRDF coefficients, and ancillary stats for the flightline. Reused whenever it remains valid on disk.
 - **`<flightline>_brdfandtopo_corrected_envi.img/.hdr`** – Float32 BSQ cube with both topographic and BRDF corrections applied (and any configured brightness offset). The header preserves spatial metadata plus wavelength lists, FWHM values, and wavelength units that power later resampling steps.
 - **`<flightline>_resampled_<sensor>.img/.hdr`** – Simulated multispectral products generated by spectrally convolving the corrected cube with sensor SRFs. These rasters inherit map metadata from the corrected cube but represent only the spectral convolution stage (no additional corrections).
 

@@ -1,4 +1,32 @@
 #!/usr/bin/env python3
+"""
+cross_sensor_cal.pipelines.pipeline
+-----------------------------------
+
+Updated October 2025
+
+Implements the core NEON hyperspectral → corrected reflectance → cross-sensor pipeline.
+
+New features:
+- Corrected scientific order (ENVI → correction JSON → correction → convolution)
+- Per-stage validation and skip logic
+- Clear, informative logging
+- Safe reruns and partial recovery
+
+Example:
+    from pathlib import Path
+
+    from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+    go_forth_and_multiply(
+        base_folder=Path("output_tester"),
+        site_code="NIWO",
+        year_month="2023-08",
+        flight_lines=[
+            "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance",
+            "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance",
+        ],
+    )
+"""
 from __future__ import annotations
 
 import argparse
@@ -684,7 +712,13 @@ def stage_export_envi_from_h5(
     flight_stem: str,
     brightness_offset: float | None = None,
 ) -> tuple[Path, Path]:
-    """Ensure the raw ENVI export exists for *flight_stem*."""
+    """Ensure the raw ENVI export exists for *flight_stem*.
+
+    Validates ``<stem>_reflectance_envi.img/.hdr`` and
+    ``<stem>_reflectance_ancillary_envi.img/.hdr`` before deciding whether to
+    re-run ``neon_to_envi_no_hytools``. Any missing or empty component triggers a
+    fresh export so downstream stages always see intact ENVI pairs.
+    """
 
     base_folder = Path(base_folder)
     h5_path = _find_h5_for_flightline(base_folder, flight_stem)
@@ -739,7 +773,13 @@ def stage_build_and_write_correction_json(
     raw_img_path: Path,
     raw_hdr_path: Path,
 ) -> Path:
-    """Generate the correction JSON required for BRDF/topo processing."""
+    """Generate or reuse the correction JSON required for BRDF/topo processing.
+
+    Produces ``<stem>_brdfandtopo_corrected_envi.json`` alongside the ENVI
+    export. If a valid JSON already exists it is returned immediately; otherwise
+    the helper recomputes BRDF coefficients, summarises ancillary rasters, and
+    persists the document.
+    """
 
     base_folder = Path(base_folder)
     h5_path = _find_h5_for_flightline(base_folder, flight_stem)
@@ -767,7 +807,13 @@ def stage_apply_brdf_topo_correction(
     raw_hdr_path: Path,
     correction_json_path: Path,
 ) -> tuple[Path, Path]:
-    """Apply BRDF + topographic correction using the precomputed JSON."""
+    """Apply BRDF + topographic correction using the precomputed JSON.
+
+    Builds ``<stem>_brdfandtopo_corrected_envi.img/.hdr`` when absent or
+    corrupted, reusing the JSON parameters captured in the previous stage. The
+    outputs are validated with ``is_valid_envi_pair`` to protect later stages
+    from incomplete files.
+    """
 
     corrected_img_path, corrected_hdr_path = apply_brdf_topo_correction(
         raw_img_path=raw_img_path,
@@ -793,7 +839,12 @@ def stage_convolve_all_sensors(
     corrected_hdr_path: Path,
     resample_method: str = "convolution",
 ):
-    """Convolve the corrected ENVI cube to the library of target sensors."""
+    """Convolve the corrected ENVI cube to the library of target sensors.
+
+    Each sensor target validates and reuses ``<stem>_resampled_<sensor>.img/.hdr``
+    when present, logging a skip message. Missing or invalid outputs trigger a
+    fresh call to ``convolve_resample_product``.
+    """
 
     if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise FileNotFoundError(
@@ -869,7 +920,19 @@ def process_one_flightline(
     resample_method: str = "convolution",
     brightness_offset: float | None = None,
 ):
-    """Canonical per-flightline workflow with skip-aware stages."""
+    """Run the structured, skip-aware workflow for a single flightline.
+
+    The function enforces the stage order:
+
+    1. Validate/export ENVI from the source ``.h5``
+    2. Materialise ``<stem>_brdfandtopo_corrected_envi.json``
+    3. Create ``<stem>_brdfandtopo_corrected_envi.img/.hdr``
+    4. Convolve the corrected cube for every configured sensor
+
+    Each stage calls ``is_valid_envi_pair`` / ``is_valid_json`` to determine
+    whether existing outputs can be reused. Invalid, truncated, or missing files
+    trigger recomputation so partial runs recover cleanly.
+    """
 
     logger.info("🚀 Processing %s ...", flight_stem)
 
@@ -993,7 +1056,31 @@ def go_forth_and_multiply(
     resample_method: str = "convolution",
     brightness_offset: float | None = None,
 ) -> None:
-    """Top-level driver that orchestrates the four pipeline stages per flightline."""
+    """Execute the full idempotent pipeline for each requested flightline.
+
+    The driver enforces the canonical stage order (ENVI export → correction JSON →
+    BRDF+topographic correction → convolution) and validates every output before
+    moving forward. Existing, healthy artefacts are reused so rerunning the same
+    invocation is safe and fast.
+
+    Parameters
+    ----------
+    base_folder:
+        Root directory where intermediate and final ENVI artefacts are written.
+    site_code:
+        NEON site identifier used for download helpers and logging context.
+    year_month:
+        Year-month string (``YYYY-MM``) that scopes NEON downloads.
+    flight_lines:
+        Iterable of NEON flightline stems to process.
+    product_code:
+        Optional NEON product override. Defaults to ``DP1.30006.001``.
+    resample_method:
+        Convolution strategy; ``"convolution"`` enforces corrected-cube SRF
+        resampling. Alternate methods are preserved for backward compatibility.
+    brightness_offset:
+        Optional scalar offset added during the correction stage.
+    """
 
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
