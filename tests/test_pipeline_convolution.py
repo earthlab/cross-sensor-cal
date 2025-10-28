@@ -19,11 +19,15 @@ def test_pipeline_order_and_inputs(tmp_path):
     with patch("cross_sensor_cal.pipeline.export_envi_from_h5") as mock_export, \
         patch("cross_sensor_cal.pipeline.build_and_write_correction_json") as mock_json, \
         patch("cross_sensor_cal.pipeline.apply_brdf_topo_correction") as mock_corr, \
-        patch("cross_sensor_cal.pipeline.convolve_all_sensors") as mock_conv:
+        patch("cross_sensor_cal.pipeline.convolve_all_sensors") as mock_conv, \
+        patch("cross_sensor_cal.pipeline.is_valid_json") as mock_valid_json, \
+        patch("cross_sensor_cal.pipeline.is_valid_envi_pair") as mock_valid_envi:
 
         mock_export.return_value = (fake_raw_img, fake_raw_hdr)
         mock_json.return_value = corr_json
         mock_corr.return_value = (corrected_img, corrected_hdr)
+        mock_valid_json.return_value = True
+        mock_valid_envi.return_value = True
 
         from cross_sensor_cal.pipeline import process_flightline
 

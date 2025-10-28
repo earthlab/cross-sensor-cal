@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
+
+from .file_types import NEONReflectanceENVIFile, NEONReflectanceFile
+from .utils_checks import is_valid_envi_pair, is_valid_json
 
 if TYPE_CHECKING:  # pragma: no cover - import-time hints only
     from .brdf_topo import build_and_write_correction_json as _build_json_fn
@@ -16,24 +19,45 @@ if TYPE_CHECKING:  # pragma: no cover - import-time hints only
 logger = logging.getLogger(__name__)
 
 
-def export_envi_from_h5(h5_path: Path, out_dir: Path) -> Tuple[Path, Path]:
-    """Export a NEON directional reflectance HDF5 file to ENVI format.
+def _derive_raw_envi_paths(h5_path: Path, out_dir: Path) -> tuple[Path, Path, str]:
+    """Compute the expected raw ENVI paths for a given NEON HDF5 file."""
 
-    Parameters
-    ----------
-    h5_path
-        Path to the NEON ``*_directional_reflectance.h5`` file.
-    out_dir
-        Destination directory for the exported ENVI files.
+    refl = NEONReflectanceFile.from_filename(h5_path)
+    if not refl.tile:
+        raise RuntimeError(
+            "Unable to determine NEON tile identifier from HDF5 filename; "
+            "expected standard NEON naming convention."
+        )
 
-    Returns
-    -------
-    tuple[Path, Path]
-        Paths to the exported ``.img`` and ``.hdr`` files respectively.
-    """
+    envi = NEONReflectanceENVIFile.from_components(
+        domain=refl.domain,
+        site=refl.site,
+        product=refl.product or "DP1.30006.001",
+        tile=refl.tile,
+        date=refl.date,
+        time=refl.time,
+        directional=refl.directional,
+        folder=out_dir,
+    )
 
+    img_path = envi.path
+    hdr_path = img_path.with_suffix(".hdr")
+    stem = img_path.stem
+    return img_path, hdr_path, stem
+
+
+def export_envi_from_h5(h5_path: Path, out_dir: Path) -> tuple[Path, Path]:
+    """Export a NEON directional reflectance HDF5 file to ENVI format."""
+
+    h5_path = Path(h5_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_img_path, raw_hdr_path, stem = _derive_raw_envi_paths(h5_path, out_dir)
+
+    if is_valid_envi_pair(raw_img_path, raw_hdr_path):
+        logger.info("✅ ENVI export already complete for %s, skipping", stem)
+        return raw_img_path, raw_hdr_path
 
     from .neon_to_envi import neon_to_envi_no_hytools
 
@@ -42,16 +66,14 @@ def export_envi_from_h5(h5_path: Path, out_dir: Path) -> Tuple[Path, Path]:
         raise RuntimeError(f"Failed to export ENVI from {h5_path}")
 
     first_entry = export_metadata[0]
-    raw_img = Path(first_entry["img"]).resolve()
-    raw_hdr = Path(first_entry["hdr"]).resolve()
+    raw_img_path = Path(first_entry["img"]).resolve()
+    raw_hdr_path = Path(first_entry["hdr"]).resolve()
 
-    if not raw_img.exists() or not raw_hdr.exists():
-        raise RuntimeError(
-            f"ENVI export for {h5_path} did not produce expected files in {out_dir}"
-        )
+    if not is_valid_envi_pair(raw_img_path, raw_hdr_path):
+        raise RuntimeError(f"ENVI export failed for {h5_path}")
 
-    logger.info("📦 Exported ENVI reflectance: %s", raw_hdr)
-    return raw_img, raw_hdr
+    logger.info("📦 Exported ENVI reflectance: %s", raw_hdr_path)
+    return raw_img_path, raw_hdr_path
 
 
 def build_and_write_correction_json(*args, **kwargs):
@@ -78,15 +100,7 @@ def process_flightline(
     *,
     sensor_list: list[str] | None = None,
 ) -> None:
-    """Run the full processing workflow for a single NEON flightline.
-
-    Steps
-    -----
-    1. Export raw ENVI from the HDF5 directional reflectance cube.
-    2. Compute BRDF/topographic correction metadata and persist as JSON.
-    3. Apply the correction using the persisted parameters.
-    4. Spectrally convolve the corrected ENVI to the requested sensor bandpasses.
-    """
+    """Full per-flightline pipeline with idempotent skipping."""
 
     logger = logging.getLogger(__name__)
 
@@ -104,9 +118,9 @@ def process_flightline(
         out_dir=out_dir,
     )
 
-    if correction_json_path is None or not correction_json_path.exists():
+    if not is_valid_json(correction_json_path):
         raise RuntimeError(
-            f"Failed to create correction JSON for {h5_path.name} in {out_dir}"
+            f"Correction JSON invalid for {h5_path.name}: {correction_json_path}"
         )
 
     corrected_img_path, corrected_hdr_path = apply_brdf_topo_correction(
@@ -116,14 +130,9 @@ def process_flightline(
         out_dir=out_dir,
     )
 
-    if not corrected_img_path.exists() or not corrected_hdr_path.exists():
+    if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise RuntimeError(
-            f"BRDF/topo correction did not produce corrected ENVI for {h5_path.name}"
-        )
-    if "_brdfandtopo_corrected_envi" not in corrected_img_path.name:
-        raise RuntimeError(
-            "Corrected ENVI filename missing required suffix "
-            f"(got {corrected_img_path.name})"
+            f"Corrected ENVI invalid for {h5_path.name}: {corrected_img_path}"
         )
 
     logger.info("🎯 Convolving corrected reflectance: %s", corrected_hdr_path)

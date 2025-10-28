@@ -16,6 +16,7 @@ from .corrections import (
 )
 from .envi_writer import EnviWriter
 from .neon_cube import NeonCube
+from .utils_checks import is_valid_envi_pair, is_valid_json
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,13 @@ def build_and_write_correction_json(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    corrected_stem = _derive_corrected_stem(raw_img_path)
+    json_path = out_dir / f"{corrected_stem}.json"
+
+    if is_valid_json(json_path):
+        logger.info("✅ Correction JSON already complete for %s, skipping", corrected_stem)
+        return json_path
+
     cube = NeonCube(h5_path=h5_path)
     coeff_path = fit_and_save_brdf_model(cube, out_dir)
 
@@ -88,9 +96,6 @@ def build_and_write_correction_json(
             "max": max_val,
         }
 
-    corrected_stem = _derive_corrected_stem(raw_img_path)
-    json_path = out_dir / f"{corrected_stem}.json"
-
     params = {
         "base_key": cube.base_key,
         "stem": corrected_stem,
@@ -108,7 +113,7 @@ def build_and_write_correction_json(
     with json_path.open("w", encoding="utf-8") as f:
         json.dump(params, f, indent=2)
 
-    if not json_path.exists():
+    if not is_valid_json(json_path):
         raise RuntimeError(f"Failed to write correction JSON: {json_path}")
 
     logger.info("📝 Correction parameters saved: %s", json_path)
@@ -130,8 +135,19 @@ def apply_brdf_topo_correction(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    if not correction_json_path.exists():
-        raise FileNotFoundError(f"Correction JSON missing: {correction_json_path}")
+    corrected_stem = _derive_corrected_stem(raw_img_path)
+    corrected_img_path = out_dir / f"{corrected_stem}.img"
+    corrected_hdr_path = out_dir / f"{corrected_stem}.hdr"
+
+    if is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+        logger.info("✅ BRDF+topo correction already complete for %s, skipping", corrected_stem)
+        return corrected_img_path, corrected_hdr_path
+
+    if not is_valid_json(correction_json_path):
+        raise RuntimeError(
+            "Missing or invalid correction JSON before correction for "
+            f"{corrected_stem}: {correction_json_path}"
+        )
 
     with correction_json_path.open("r", encoding="utf-8") as f:
         params = json.load(f)
@@ -143,6 +159,16 @@ def apply_brdf_topo_correction(
         )
         coeff_path = None
 
+    json_stem = params.get("stem") if isinstance(params, dict) else None
+    if json_stem:
+        corrected_stem = json_stem
+        corrected_img_path = out_dir / f"{corrected_stem}.img"
+        corrected_hdr_path = out_dir / f"{corrected_stem}.hdr"
+
+    if is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+        logger.info("✅ BRDF+topo correction already complete for %s, skipping", corrected_stem)
+        return corrected_img_path, corrected_hdr_path
+
     source_h5 = Path(params.get("h5_path", "")) if params else None
     if source_h5 is None or not source_h5.exists():
         raise RuntimeError(
@@ -151,10 +177,6 @@ def apply_brdf_topo_correction(
         )
 
     cube = NeonCube(h5_path=source_h5)
-
-    corrected_stem = params.get("stem") or _derive_corrected_stem(raw_img_path)
-    corrected_img_path = out_dir / f"{corrected_stem}.img"
-    corrected_hdr_path = out_dir / f"{corrected_stem}.hdr"
 
     header = cube.build_envi_header()
     header["description"] = (
@@ -185,9 +207,9 @@ def apply_brdf_topo_correction(
     finally:
         writer.close()
 
-    if not corrected_img_path.exists() or not corrected_hdr_path.exists():
+    if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise RuntimeError(
-            f"BRDF/topo correction did not create expected outputs for {corrected_stem}"
+            f"BRDF/topo correction failed for {corrected_stem}"
         )
 
     logger.info("✅ Corrected ENVI saved: %s", corrected_img_path)
