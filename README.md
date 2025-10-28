@@ -135,11 +135,17 @@ The pipeline is now organized into four explicit stages that always run in order
    `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`.  
    These corrected products are now the "truth" for downstream use.
 
-4. **Sensor Convolution / Resampling**  
+4. **Sensor Convolution / Resampling**
    Convolves the corrected reflectance cube to sensor-specific bandsets
-   (e.g. Landsat TM, Landsat OLI, etc.).  
-   Each sensor product is generated from the corrected ENVI, never from the raw `.h5`,
-   and each product is skipped if it already exists.
+   (e.g. Landsat TM, Landsat OLI, MicaSense multispectral stacks).
+   Every sensor product is generated from the BRDF + topo corrected ENVI cube—never
+   from the raw `.h5`—and each target file is checked before work begins.
+   If a non-empty output already exists, the stage logs
+   `✅ <sensor> product already complete ... (skipping)` and moves on.
+   If a sensor definition is missing from the internal library, the pipeline logs
+   a warning and skips that sensor instead of aborting the run.
+   Successful resamples must produce non-empty files; an empty artifact triggers a
+   `RuntimeError` because it indicates data corruption that needs attention.
 
 This enforced order prevents earlier bugs where convolution could run on uncorrected data.
 
