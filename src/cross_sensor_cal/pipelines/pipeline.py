@@ -256,8 +256,8 @@ def _silence_noise(enabled: bool):
             pass
 
 from cross_sensor_cal.brdf_topo import (
-    apply_brdf_topo_correction,
-    build_and_write_correction_json,
+    apply_brdf_topo_core,
+    build_correction_parameters_dict,
 )
 from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.utils import get_package_data_path
@@ -266,10 +266,10 @@ from cross_sensor_cal.utils_checks import _nonempty_file, is_valid_envi_pair, is
 from ..file_types import (
     NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceENVIFile,
-    NEONReflectanceFile,
     NEONReflectanceResampledENVIFile,
 )
 from ..neon_to_envi import neon_to_envi_no_hytools
+from ..utils.naming import get_flightline_products
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
@@ -721,6 +721,73 @@ def _prepare_sensor_targets(
     return srfs_by_sensor, stems_by_sensor
 
 
+def _resolve_sensor_entry(sensor_name: str, library: dict[str, dict[str, list[float]]]) -> tuple[str, dict[str, list[float]]]:
+    if sensor_name in library:
+        return sensor_name, library[sensor_name]
+
+    target_key = sensor_name.lower().replace("_", " ")
+    for key, value in library.items():
+        if key.lower() == sensor_name.lower() or key.lower() == target_key:
+            return key, value
+        if key.replace(" ", "_").lower() == sensor_name.lower():
+            return key, value
+    raise KeyError(sensor_name)
+
+
+def resample_to_sensor_bands(
+    *,
+    corrected_img_path: Path,
+    corrected_hdr_path: Path,
+    sensor_name: str,
+    method: str,
+) -> dict[str, np.ndarray]:
+    method_norm = (method or "convolution").lower()
+    if method_norm not in {"convolution", "gaussian", "straight"}:
+        raise RuntimeError(f"Resample method '{method}' is not supported for inline convolution")
+
+    header = _parse_envi_header(corrected_hdr_path)
+    wavelengths = header.get("wavelength")
+    if not isinstance(wavelengths, list) or not wavelengths:
+        raise RuntimeError(
+            f"ENVI header {corrected_hdr_path} missing wavelength metadata required for resampling."
+        )
+
+    sensor_library = _load_sensor_library()
+    if not sensor_library:
+        raise RuntimeError("Sensor response library unavailable; cannot convolve to target sensors")
+
+    resolved_name, entry = _resolve_sensor_entry(sensor_name, sensor_library)
+
+    srfs = _build_sensor_srfs(
+        np.asarray(wavelengths, dtype=np.float32),
+        entry.get("wavelengths", []),
+        entry.get("fwhms", []),
+        method_norm,
+    )
+    if not srfs:
+        raise RuntimeError(
+            f"No spectral response functions computed for {resolved_name}; cannot resample."
+        )
+
+    return srfs
+
+
+def write_resampled_product(
+    *,
+    arr: dict[str, np.ndarray],
+    out_path: Path,
+    sensor_name: str,
+    flight_stem: str,
+    corrected_hdr_path: Path,
+) -> None:
+    out_path = Path(out_path)
+    out_stem = out_path.with_suffix("")
+    convolve_resample_product(
+        corrected_hdr_path=corrected_hdr_path,
+        sensor_srf=arr,
+        out_stem_resampled=out_stem,
+    )
+
 def stage_export_envi_from_h5(
     *,
     base_folder: Path,
@@ -728,43 +795,32 @@ def stage_export_envi_from_h5(
     flight_stem: str,
     brightness_offset: float | None = None,
 ) -> tuple[Path, Path]:
-    """Ensure the raw ENVI export exists for *flight_stem*.
+    """
+    Ensure we have the uncorrected ENVI export (.img/.hdr) for this flightline.
 
-    Validates ``<stem>_reflectance_envi.img/.hdr`` and
-    ``<stem>_reflectance_ancillary_envi.img/.hdr`` before deciding whether to
-    re-run ``neon_to_envi_no_hytools``. Any missing or empty component triggers a
-    fresh export so downstream stages always see intact ENVI pairs.
+    Returns (raw_img_path, raw_hdr_path).
+    Skips if already valid.
     """
 
+    paths = get_flightline_products(base_folder, product_code, flight_stem)
+
+    h5_path = Path(paths["h5"])
+    raw_img_path = Path(paths["raw_envi_img"])
+    raw_hdr_path = Path(paths["raw_envi_hdr"])
+
     base_folder = Path(base_folder)
-    h5_path = _find_h5_for_flightline(base_folder, flight_stem)
-    refl_file = NEONReflectanceFile.from_filename(h5_path)
+    base_folder.mkdir(parents=True, exist_ok=True)
 
-    product_value = _normalize_product_code(refl_file.product or product_code)
-    product_token = f"DP1.{product_value}"
-
-    if not refl_file.tile:
-        raise RuntimeError(
-            "Unable to determine NEON tile identifier from HDF5 filename; "
-            "expected standard NEON naming convention."
-        )
-
-    raw_envi = NEONReflectanceENVIFile.from_components(
-        domain=refl_file.domain or "D00",
-        site=refl_file.site or "SITE",
-        product=product_token,
-        tile=refl_file.tile,
-        date=refl_file.date or "00000000",
-        time=refl_file.time,
-        directional=getattr(refl_file, "directional", False),
-        folder=base_folder,
-    )
-
-    raw_img_path = raw_envi.path
-    raw_hdr_path = raw_img_path.with_suffix(".hdr")
+    if not h5_path.exists():
+        h5_path = _find_h5_for_flightline(base_folder, flight_stem)
 
     if is_valid_envi_pair(raw_img_path, raw_hdr_path):
-        logger.info("✅ ENVI export already complete for %s, skipping", flight_stem)
+        logger.info(
+            "✅ ENVI export already complete for %s -> %s / %s (skipping)",
+            flight_stem,
+            raw_img_path.name,
+            raw_hdr_path.name,
+        )
         return raw_img_path, raw_hdr_path
 
     logger.info("📦 Exporting ENVI for %s", flight_stem)
@@ -775,9 +831,17 @@ def stage_export_envi_from_h5(
     )
 
     if not is_valid_envi_pair(raw_img_path, raw_hdr_path):
-        raise RuntimeError(f"ENVI export failed for {flight_stem}")
+        raise RuntimeError(
+            f"ENVI export failed for {flight_stem}. "
+            f"Expected {raw_img_path.name} / {raw_hdr_path.name} but did not find valid files."
+        )
 
-    logger.info("✅ ENVI export completed for %s", flight_stem)
+    logger.info(
+        "✅ ENVI export completed for %s -> %s / %s",
+        flight_stem,
+        raw_img_path.name,
+        raw_hdr_path.name,
+    )
     return raw_img_path, raw_hdr_path
 
 
@@ -789,28 +853,49 @@ def stage_build_and_write_correction_json(
     raw_img_path: Path,
     raw_hdr_path: Path,
 ) -> Path:
-    """Generate or reuse the correction JSON required for BRDF/topo processing.
+    """
+    Compute + persist BRDF/topo correction parameters (illumination geometry, slope/aspect,
+    BRDF coefficients, etc.) before applying correction.
 
-    Produces ``<stem>_brdfandtopo_corrected_envi.json`` alongside the ENVI
-    export. If a valid JSON already exists it is returned immediately; otherwise
-    the helper recomputes BRDF coefficients, summarises ancillary rasters, and
-    persists the document.
+    Writes the canonical correction JSON, returns its path.
+    Skips if valid.
     """
 
-    base_folder = Path(base_folder)
-    h5_path = _find_h5_for_flightline(base_folder, flight_stem)
-    correction_json_path = build_and_write_correction_json(
+    paths = get_flightline_products(base_folder, product_code, flight_stem)
+
+    correction_json_path = Path(paths["correction_json"])
+    h5_path = Path(paths["h5"])
+
+    if is_valid_json(correction_json_path):
+        logger.info(
+            "✅ Correction JSON already complete for %s -> %s (skipping)",
+            flight_stem,
+            correction_json_path.name,
+        )
+        return correction_json_path
+
+    params = build_correction_parameters_dict(
         h5_path=h5_path,
         raw_img_path=raw_img_path,
         raw_hdr_path=raw_hdr_path,
-        out_dir=base_folder,
+        base_folder=base_folder,
+        flight_stem=flight_stem,
+        product_code=product_code,
     )
+
+    with open(correction_json_path, "w", encoding="utf-8") as f:
+        json.dump(params, f, indent=2)
 
     if not is_valid_json(correction_json_path):
         raise RuntimeError(
-            f"Failed to prepare correction JSON for {flight_stem}: {correction_json_path}"
+            f"Failed to write correction JSON for {flight_stem}: {correction_json_path}"
         )
 
+    logger.info(
+        "✅ Wrote correction JSON for %s -> %s",
+        flight_stem,
+        correction_json_path.name,
+    )
     return correction_json_path
 
 
@@ -823,26 +908,62 @@ def stage_apply_brdf_topo_correction(
     raw_hdr_path: Path,
     correction_json_path: Path,
 ) -> tuple[Path, Path]:
-    """Apply BRDF + topographic correction using the precomputed JSON.
+    """
+    Apply BRDF + topographic correction using the precomputed JSON.
+    Produces the canonical corrected ENVI:
+        *_brdfandtopo_corrected_envi.img/.hdr
 
-    Builds ``<stem>_brdfandtopo_corrected_envi.img/.hdr`` when absent or
-    corrupted, reusing the JSON parameters captured in the previous stage. The
-    outputs are validated with ``is_valid_envi_pair`` to protect later stages
-    from incomplete files.
+    Returns (corrected_img_path, corrected_hdr_path).
+    Skips if already valid.
     """
 
-    corrected_img_path, corrected_hdr_path = apply_brdf_topo_correction(
+    paths = get_flightline_products(base_folder, product_code, flight_stem)
+
+    corrected_img_path = Path(paths["corrected_img"])
+    corrected_hdr_path = Path(paths["corrected_hdr"])
+
+    if is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
+        logger.info(
+            "✅ BRDF+topo correction already complete for %s -> %s / %s (skipping)",
+            flight_stem,
+            corrected_img_path.name,
+            corrected_hdr_path.name,
+        )
+        return corrected_img_path, corrected_hdr_path
+
+    if not is_valid_json(correction_json_path):
+        raise RuntimeError(
+            f"Missing or invalid correction JSON for {flight_stem}: {correction_json_path}"
+        )
+
+    with open(correction_json_path, "r", encoding="utf-8") as f:
+        params = json.load(f)
+
+    apply_brdf_topo_core(
         raw_img_path=raw_img_path,
         raw_hdr_path=raw_hdr_path,
-        correction_json_path=correction_json_path,
-        out_dir=base_folder,
+        params=params,
+        out_img_path=corrected_img_path,
+        out_hdr_path=corrected_hdr_path,
     )
 
     if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise RuntimeError(
-            f"Corrected ENVI invalid for {flight_stem}: {corrected_img_path}"
+            f"BRDF/topo correction failed for {flight_stem}. "
+            f"Expected {corrected_img_path.name} / {corrected_hdr_path.name}."
         )
 
+    if "_brdfandtopo_corrected_envi" not in corrected_img_path.name:
+        raise RuntimeError(
+            f"Corrected output missing required suffix for {flight_stem}: {corrected_img_path.name}"
+        )
+
+    logger.info(
+        "✅ BRDF+topo correction completed for %s -> %s / %s",
+        flight_stem,
+        corrected_img_path.name,
+        corrected_hdr_path.name,
+    )
     return corrected_img_path, corrected_hdr_path
 
 
@@ -853,79 +974,77 @@ def stage_convolve_all_sensors(
     flight_stem: str,
     corrected_img_path: Path,
     corrected_hdr_path: Path,
-    resample_method: str = "convolution",
+    resample_method: str | None = "convolution",
 ):
-    """Convolve the corrected ENVI cube to the library of target sensors.
-
-    Each sensor target validates and reuses ``<stem>_resampled_<sensor>.img/.hdr``
-    when present, logging a skip message. Missing or invalid outputs trigger a
-    fresh call to ``convolve_resample_product``.
     """
+    Convolve/resample ONLY the corrected BRDF+topo ENVI to target sensors.
+
+    Uses canonical sensor output paths from get_flightline_products().
+    Skips any sensor product that already exists and is non-empty.
+
+    Logs failures in terms of the corrected product, not the .h5.
+    """
+
+    paths = get_flightline_products(base_folder, product_code, flight_stem)
+    sensor_products = paths.get("sensor_products", {})
 
     if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise FileNotFoundError(
-            f"Corrected ENVI missing or invalid for {flight_stem}: {corrected_img_path}"
+            f"Corrected ENVI missing or invalid for {flight_stem}: "
+            f"{corrected_img_path}, {corrected_hdr_path}"
         )
 
-    try:
-        corrected_file = NEONReflectanceBRDFCorrectedENVIFile.from_filename(corrected_img_path)
-    except ValueError as exc:
-        raise RuntimeError(
-            f"Could not parse corrected ENVI filename for {flight_stem}: {corrected_img_path.name}"
-        ) from exc
+    method_norm = (resample_method or "convolution").lower()
 
-    srfs_by_sensor, stems_by_sensor = _prepare_sensor_targets(
-        corrected_file=corrected_file,
-        corrected_hdr_path=corrected_hdr_path,
-        resample_method=resample_method,
-        product_code=product_code,
-    )
+    for sensor_name, out_path in sensor_products.items():
+        out_path = Path(out_path)
+        out_hdr_path = out_path.with_suffix(".hdr")
 
-    if not srfs_by_sensor:
-        return
-
-    for sensor_name, srfs in srfs_by_sensor.items():
-        out_stem = stems_by_sensor.get(sensor_name)
-        if out_stem is None:
-            continue
-
-        out_img_path = out_stem.with_suffix(".img")
-        out_hdr_path = out_stem.with_suffix(".hdr")
-
-        if is_valid_envi_pair(out_img_path, out_hdr_path):
+        if _nonempty_file(out_path) and out_hdr_path.exists():
             logger.info(
-                "✅ %s convolution already complete for %s, skipping",
+                "✅ %s product already complete for %s -> %s (skipping)",
                 sensor_name,
                 flight_stem,
+                out_path.name,
             )
             continue
 
         try:
-            convolve_resample_product(
+            srfs = resample_to_sensor_bands(
+                corrected_img_path=corrected_img_path,
                 corrected_hdr_path=corrected_hdr_path,
-                sensor_srf=srfs,
-                out_stem_resampled=out_stem,
+                sensor_name=sensor_name,
+                method=method_norm,
             )
+
+            write_resampled_product(
+                arr=srfs,
+                out_path=out_path,
+                sensor_name=sensor_name,
+                flight_stem=flight_stem,
+                corrected_hdr_path=corrected_hdr_path,
+            )
+
+            if not _nonempty_file(out_path):
+                raise RuntimeError(
+                    f"{sensor_name} resample produced empty file for {flight_stem}: {out_path}"
+                )
+
+            logger.info(
+                "✅ %s product completed for %s -> %s",
+                sensor_name,
+                flight_stem,
+                out_path.name,
+            )
+
         except Exception:
             logger.error(
-                "⚠️  Resample failed for %s (%s)",
+                "⚠️  Resample failed for %s (%s) -> expected %s",
                 corrected_img_path.name,
                 sensor_name,
+                out_path.name,
                 exc_info=True,
             )
-            continue
-
-        if not is_valid_envi_pair(out_img_path, out_hdr_path):
-            raise RuntimeError(
-                f"{sensor_name} resample produced invalid output for {flight_stem}: {out_img_path}"
-            )
-
-        logger.info(
-            "✅ Resampled %s for %s → %s",
-            sensor_name,
-            flight_stem,
-            out_img_path,
-        )
 
 
 def process_one_flightline(
@@ -933,21 +1052,25 @@ def process_one_flightline(
     base_folder: Path,
     product_code: str,
     flight_stem: str,
-    resample_method: str = "convolution",
+    resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
 ):
     """Run the structured, skip-aware workflow for a single flightline.
 
-    The function enforces the stage order:
+    Enforced stage order:
+      1) export ENVI from H5
+      2) build correction JSON
+      3) apply BRDF + topographic correction
+      4) convolve / resample to target sensors
 
-    1. Validate/export ENVI from the source ``.h5``
-    2. Materialise ``<stem>_brdfandtopo_corrected_envi.json``
-    3. Create ``<stem>_brdfandtopo_corrected_envi.img/.hdr``
-    4. Convolve the corrected cube for every configured sensor
+    Each stage:
+      - uses get_flightline_products() for canonical file naming
+      - checks if its outputs already exist and are valid
+      - skips if possible
+      - re-runs only missing or invalid work
 
-    Each stage calls ``is_valid_envi_pair`` / ``is_valid_json`` to determine
-    whether existing outputs can be reused. Invalid, truncated, or missing files
-    trigger recomputation so partial runs recover cleanly.
+    Partially written / corrupt files will fail validation and
+    trigger recomputation so partial runs recover safely.
     """
 
     logger.info("🚀 Processing %s ...", flight_stem)
@@ -966,7 +1089,6 @@ def process_one_flightline(
         raw_img_path=raw_img_path,
         raw_hdr_path=raw_hdr_path,
     )
-
     if not is_valid_json(correction_json_path):
         raise RuntimeError(
             f"Correction JSON invalid for {flight_stem}: {correction_json_path}"
@@ -980,7 +1102,6 @@ def process_one_flightline(
         raw_hdr_path=raw_hdr_path,
         correction_json_path=correction_json_path,
     )
-
     if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise RuntimeError(
             f"Corrected ENVI invalid for {flight_stem}: {corrected_img_path}"
@@ -1069,41 +1190,22 @@ def go_forth_and_multiply(
     flight_lines: list[str],
     *,
     product_code: str = "DP1.30006.001",
-    resample_method: str = "convolution",
+    resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
 ) -> None:
-    """Execute the full idempotent pipeline for each requested flightline.
-
-    The driver enforces the canonical stage order (ENVI export → correction JSON →
-    BRDF+topographic correction → convolution) and validates every output before
-    moving forward. Existing, healthy artefacts are reused so rerunning the same
-    invocation is safe and fast.
-
-    Parameters
-    ----------
-    base_folder:
-        Root directory where intermediate and final ENVI artefacts are written.
-    site_code:
-        NEON site identifier used for download helpers and logging context.
-    year_month:
-        Year-month string (``YYYY-MM``) that scopes NEON downloads.
-    flight_lines:
-        Iterable of NEON flightline stems to process.
-    product_code:
-        Optional NEON product override. Defaults to ``DP1.30006.001``.
-    resample_method:
-        Convolution strategy; ``"convolution"`` enforces corrected-cube SRF
-        resampling. Alternate methods are preserved for backward compatibility.
-    brightness_offset:
-        Optional scalar offset added during the correction stage.
+    """
+    Top-level driver that users call.
+    This now:
+      - ensures correct stage order,
+      - uses canonical naming everywhere,
+      - skips work when outputs are already valid,
+      - regenerates any missing/partial work safely,
+      - supports resample_method ("convolution", "legacy", etc.)
+        and brightness_offset passthrough.
     """
 
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
-
-    if not flight_lines:
-        logger.info("No flightlines provided. Nothing to process.")
-        return
 
     method_norm = (resample_method or "convolution").lower()
 
@@ -1112,7 +1214,7 @@ def go_forth_and_multiply(
             base_folder=base_path,
             product_code=product_code,
             flight_stem=flight_stem,
-            resample_method=resample_method,
+            resample_method=method_norm,
             brightness_offset=brightness_offset,
         )
 
