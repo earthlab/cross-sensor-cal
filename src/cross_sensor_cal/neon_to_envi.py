@@ -1,264 +1,44 @@
-import os
-import argparse
-import shutil
+"""HyTools-free NEON to ENVI exporter used by the production pipeline."""
 
-# Suppress Ray's /dev/shm fallback warning to keep conversion logs clean.
-os.environ.setdefault("RAY_DISABLE_OBJECT_STORE_WARNING", "1")
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Iterable
 
 import numpy as np
-from pathlib import Path
-import re
-from functools import partial
-from typing import TYPE_CHECKING
 
-from ._optional import require_h5py, require_ray
-from .hytools_compat import get_write_envi, get_hytools_class
-from .file_types import NEONReflectanceFile, NEONReflectanceENVIFile, NEONReflectanceAncillaryENVIFile
-from .ray_utils import init_ray
-from .neon_cube import NeonCube
 from .envi_writer import EnviWriter
-
-if TYPE_CHECKING:  # pragma: no cover - only for static typing
-    import h5py
-
-# --- Utility functions ---
-def get_all_keys(group):
-    h5py = require_h5py()
-
-    if isinstance(group, h5py.Dataset):
-        return [group.name]
-    all_keys = []
-    for key in group.keys():
-        all_keys += get_all_keys(group[key])
-    return all_keys
-
-def get_actual_key(h5_file, expected_key):
-    actual_keys = {key.lower(): key for key in get_all_keys(h5_file)}
-    return actual_keys.get(expected_key.lower())
-
-def get_all_solar_angles(logs_group):
-    return np.array([
-        (logs_group[log]["Solar_Azimuth_Angle"][()], logs_group[log]["Solar_Zenith_Angle"][()])
-        for log in logs_group.keys()
-    ])
-
-def ensure_directory_exists(directory_path):
-    Path(directory_path).mkdir(parents=True, exist_ok=True)
-
-def envi_header_for_ancillary(hy_obj, attributes):
-    """
-    Generates a minimal ENVI header dictionary for ancillary data export.
-    """
-    return {
-        "samples": attributes.get("samples", 0),
-        "lines": attributes.get("lines", 0),
-        "bands": len(attributes.get("band names", [])),
-        "interleave": "bsq",
-        "data type": attributes.get("data type", 4),
-        "file type": "ENVI Standard",
-        "byte order": 0,
-        "band names": attributes.get("band names", []),
-        "map info": hy_obj.get_header().get("map info", []),
-        "coordinate system string": hy_obj.get_header().get("coordinate system string", "")
-    }
-
-# --- Main export task ---
-def neon_to_envi_task(hy_obj, output_dir, metadata=None):
-    original_path = Path(hy_obj.file_name)
-
-    # Use metadata if provided, else fallback to parsing from filename
-    if metadata:
-        print(f"📎 Using injected metadata for: {original_path.name}")
-        neon_file = NEONReflectanceFile(
-            path=original_path,
-            domain=metadata.get("domain", "D00"),
-            site=metadata.get("site", "UNK"),
-            date=metadata.get("date", "00000000"),
-            time=metadata.get("time"),
-            tile=metadata.get("tile"),
-            suffix=metadata.get("suffix", None)
-        )
-    else:
-        try:
-            neon_file = NEONReflectanceFile.from_filename(original_path)
-        except ValueError:
-            print(f"⚠️ Could not parse {original_path}, using fallback naming.")
-            neon_file = NEONReflectanceFile(
-                path=original_path, domain="D00", site="UNK",
-                date="00000000", time=None, tile=None, suffix="fallback"
-            )
-
-    # Create output directory
-    specific_output_dir = Path(output_dir) / original_path.stem
-    specific_output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Build ENVI output file (suffix removed!)
-    envi_file = NEONReflectanceENVIFile.from_components(
-        domain=neon_file.domain,
-        site=neon_file.site,
-        date=neon_file.date,
-        time=neon_file.time,
-        folder=specific_output_dir,
-        tile=neon_file.tile
-    )
-
-    if envi_file.path.exists():
-        print(f"⚠️ Skipping existing file: {envi_file.file_path}")
-        return
-
-    # Process and write
-    hy_obj.load_data()
-    WriteENVI = get_write_envi()
-    writer = WriteENVI(envi_file.file_path, hy_obj.get_header())
-    iterator = hy_obj.iterate(by='chunk')
-    while not iterator.complete:
-        chunk = iterator.read_next()
-        writer.write_chunk(chunk, iterator.current_line, iterator.current_column)
-        if iterator.complete:
-            writer.close()
-
-    print(f"✅ Saved: {envi_file.file_path}")
+from .file_types import NEONReflectanceENVIFile, NEONReflectanceFile
+from .neon_cube import NeonCube
 
 
-# --- Ancillary export ---
-def find_reflectance_metadata_group(h5_file):
-    for group in h5_file.keys():
-        candidate = f"{group}/Reflectance/Metadata"
-        if candidate in h5_file:
-            return candidate
-    raise ValueError("Could not find Reflectance/Metadata group.")
+def _resolve_output(envi_file: NEONReflectanceENVIFile) -> Path:
+    """Return the ENVI stem that should be written for ``envi_file``."""
 
-def export_anc(hy_obj, output_dir):
-    WriteENVI = get_write_envi()
-    neon_file = NEONReflectanceFile.from_filename(Path(hy_obj.file_name))
-    h5py = require_h5py()
-
-    with h5py.File(hy_obj.file_name, 'r') as h5_file:
-        try:
-            base_path = find_reflectance_metadata_group(h5_file) + "/"
-        except ValueError as e:
-            print(f"❌ {e} in file: {hy_obj.file_name}")
-            return
-
-        ancillary_keys = [
-            "Ancillary_Imagery/Path_Length",
-            "to-sensor_Azimuth_Angle",
-            "to-sensor_Zenith_Angle",
-            "Logs/Solar_Azimuth_Angle",
-            "Logs/Solar_Zenith_Angle",
-            "Ancillary_Imagery/Slope",
-            "Ancillary_Imagery/Aspect"
-        ]
-
-        data = [
-            h5_file.get(base_path + key)[()]
-            if h5_file.get(base_path + key) is not None else np.array([], dtype=np.float32)
-            for key in ancillary_keys
-        ]
-
-        attributes = {
-            'samples': max((d.shape[1] for d in data if d.ndim == 2), default=0),
-            'lines': max((d.shape[0] for d in data if d.ndim == 2), default=0),
-            'data type': 4,
-            'band names': ['Path Length', 'Sensor Azimuth', 'Sensor Zenith',
-                           'Solar Azimuth', 'Solar Zenith', 'Slope', 'Aspect']
-        }
-
-        header = envi_header_for_ancillary(hy_obj, attributes)
-        specific_output_dir = Path(output_dir) / neon_file.path.stem
-        specific_output_dir.mkdir(parents=True, exist_ok=True)
-
-        ancillary_file = NEONReflectanceAncillaryENVIFile.from_components(
-            domain=neon_file.domain,
-            site=neon_file.site,
-            date=neon_file.date,
-            time=neon_file.time,
-            folder=specific_output_dir,
-            tile=neon_file.tile
-        )
-
-        if ancillary_file.path.exists():
-            print(f"⚠️ Skipping existing ancillary file: {ancillary_file.file_path}")
-            return
-
-        writer = WriteENVI(ancillary_file.file_path, header)
-        for i, array in enumerate(data):
-            if array.size > 0:
-                writer.write_band(array, i)
-        writer.close()
-        print(f"📦 Ancillary data saved: {ancillary_file.file_path}")
-
-# --- Main driver ---
-def neon_to_envi(
-    images: list[str],
-    output_dir: str,
-    anc: bool = False,
-    metadata_override: dict | None = None,
-    *,
-    num_cpus: int | None = None,
-):
-    if not images:
-        raise ValueError("No input images provided to neon_to_envi().")
-
-    ray = require_ray()
-
-    cpu_request = num_cpus if num_cpus is not None else max(len(images), 8)
-    resolved_cpus = init_ray(cpu_request)
-    print(f"🚀 Using {resolved_cpus} CPUs for conversion.")
-
-    HyTools = get_hytools_class()
-    hytool = ray.remote(HyTools)
-    actors = [hytool.remote() for _ in images]
-
-    _ = ray.get([
-        actor.read_file.remote(image, 'neon')
-        for actor, image in zip(actors, images)
-    ])
-
-    _ = ray.get([
-        actor.do.remote(
-            partial(
-                neon_to_envi_task,
-                output_dir=str(output_dir),
-                metadata=metadata_override.get(Path(image).name) if metadata_override else None
-            )
-        )
-        for actor, image in zip(actors, images)
-    ])
-
-    if anc:
-        print("\n📦 Exporting ancillary ENVI data...")
-        _ = ray.get([
-            actor.do.remote(
-                partial(export_anc, output_dir=str(output_dir))
-            )
-            for actor in actors
-        ])
-
-    print("✅ All processing complete.")
-    ray.shutdown()
+    return envi_file.path.with_suffix("")
 
 
 def neon_to_envi_no_hytools(
-    images: list[str],
+    images: Iterable[str],
     output_dir: str,
     brightness_offset: float | None = None,
 ) -> list[dict]:
-    """
-    Convert one or more NEON .h5 reflectance products into ENVI BSQ rasters
-    using NeonCube + EnviWriter (no HyTools, no Ray).
+    """Convert NEON `.h5` reflectance cubes into ENVI BSQ rasters.
 
-    For now only a single HDF5 input is supported. Mosaic support for multiple
-    tiles can be added later when required by downstream workflows.
+    The implementation streams chunks out of :class:`NeonCube` and writes them via
+    :class:`EnviWriter`. It is restart-safe: valid outputs are reused automatically
+    when the function is called again.
     """
 
-    if len(images) != 1:
+    image_list = list(images)
+    if len(image_list) != 1:
         raise NotImplementedError(
             "neon_to_envi_no_hytools currently supports exactly one NEON HDF5 "
-            f"input; received {len(images)} files."
+            f"input; received {len(image_list)} files."
         )
 
-    h5_path = Path(images[0])
+    h5_path = Path(image_list[0])
     if not h5_path.exists():
         raise FileNotFoundError(f"NEON HDF5 file not found: {h5_path}")
 
@@ -290,7 +70,7 @@ def neon_to_envi_no_hytools(
         folder=output_dir_path,
     )
 
-    out_stem = envi_file.path.with_suffix("")
+    out_stem = _resolve_output(envi_file)
     writer = EnviWriter(out_stem, header)
 
     offset_value: np.float32 | None = None
@@ -316,13 +96,28 @@ def neon_to_envi_no_hytools(
 
     return [metadata]
 
-# --- CLI runner (optional use) ---
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert NEON AOP H5 to ENVI format and optionally export ancillary data.")
-    parser.add_argument('--images', nargs='+', required=True, help="Input image path names")
-    parser.add_argument('--output_dir', required=True, help="Output directory")
-    parser.add_argument('-anc', action='store_true', help="Flag to output ancillary data")
-    args = parser.parse_args()
 
-    neon_to_envi(args.images, args.output_dir, args.anc)
+def _main(argv: Iterable[str] | None = None) -> None:
+    """Simple CLI wrapper around :func:`neon_to_envi_no_hytools`."""
 
+    parser = argparse.ArgumentParser(
+        description="Convert a NEON AOP HDF5 flight line into an ENVI (.img/.hdr) pair."
+    )
+    parser.add_argument("image", help="Path to the NEON HDF5 reflectance product")
+    parser.add_argument("output_dir", help="Directory where ENVI outputs will be written")
+    parser.add_argument(
+        "--brightness-offset",
+        type=float,
+        default=None,
+        help="Optional scalar added to every reflectance value before writing.",
+    )
+
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    neon_to_envi_no_hytools([
+        args.image,
+    ], args.output_dir, brightness_offset=args.brightness_offset)
+
+
+if __name__ == "__main__":  # pragma: no cover - thin CLI wrapper
+    _main()

@@ -1,3 +1,7 @@
+# DEPRECATED: Replaced by cross_sensor_cal.resample / standard_resample.
+# The active pipeline ONLY resamples from the BRDF+topo corrected ENVI cube,
+# and ONLY writes ENVI (.img/.hdr).
+# This file has been staged for removal.
 """Spectral convolution helpers used by the streamlined pipeline."""
 
 from __future__ import annotations

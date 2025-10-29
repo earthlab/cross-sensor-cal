@@ -1,5 +1,10 @@
 # 🔄 Data Pipeline Overview & Sorting Responsibilities
 
+> **Deprecated:** Modern runs rely on the idempotent pipeline in
+> `src/cross_sensor_cal/pipelines/pipeline.py` and the optional stage 8 sync
+> helpers. This onboarding note described now-removed scripts and GeoTIFF
+> deliverables.
+
 ## 🌐 Context
 
 This project processes NEON hyperspectral HDF5 (`.h5`) files through a series of transformations to produce corrected and convolved raster data products. The pipeline runs in a cloud instance without persistent local storage. To preserve data between runs, we interface with CyVerse’s persistent storage system using `gocmd` — a modified command-line tool developed by ESIIL.

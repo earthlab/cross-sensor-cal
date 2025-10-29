@@ -1,5 +1,9 @@
 # Source Code
 
+> **Deprecated:** This overview referenced the pre-package module layout
+> (e.g. `src.convolution_resample`). See the root `README.md` for the supported
+> ENVI-only pipeline.
+
 ## Overview
 The `src` directory contains the Python modules that implement the cross-sensor
 calibration workflow. Each module handles a specific stage, from downloading

@@ -1,3 +1,6 @@
+# DEPRECATED: Superseded by cross_sensor_cal.pipelines.pipeline.go_forth_and_multiply().
+# The active pipeline enforces ENVI-only, idempotent stages defined in src/cross_sensor_cal/pipelines/pipeline.py.
+# This file has been staged for removal.
 """High-level orchestration utilities for the cross-sensor-cal workflow."""
 
 from __future__ import annotations

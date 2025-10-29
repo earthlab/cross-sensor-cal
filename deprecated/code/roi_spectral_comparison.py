@@ -1,3 +1,6 @@
+# DEPRECATED: We no longer export GeoTIFF deliverables.
+# Final products are ENVI (.img/.hdr) plus optional .parquet.
+# This file has been staged for removal.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence

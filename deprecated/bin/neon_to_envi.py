@@ -1,3 +1,6 @@
+# DEPRECATED: This CLI reflects the pre-package layout and is not wired to the
+# current pipeline in cross_sensor_cal/pipelines/pipeline.py.
+# Use the new CLI / go_forth_and_multiply() entry points instead.
 import os
 import sys
 import argparse

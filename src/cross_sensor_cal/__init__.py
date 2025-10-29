@@ -9,14 +9,17 @@ try:  # pragma: no cover - version metadata absent in editable installs
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "0+unknown"
 
-__all__ = [
-    "__version__",
-]
+__all__ = ["__version__"]
 
 
 def __getattr__(name: str):  # pragma: no cover - thin lazy import helper
-    if name in {"pipeline", "brdf_topo", "convolution"}:
-        module = import_module(f"cross_sensor_cal.{name}")
+    if name == "pipeline":
+        module = import_module("cross_sensor_cal.pipelines.pipeline")
+        globals()[name] = module
+        __all__.append(name)
+        return module
+    if name == "brdf_topo":
+        module = import_module("cross_sensor_cal.brdf_topo")
         globals()[name] = module
         __all__.append(name)
         return module

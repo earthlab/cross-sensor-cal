@@ -1,3 +1,6 @@
+# DEPRECATED: Exploratory visualization helpers are no longer packaged.
+# The supported workflow inspects ENVI products via downstream analysis tools,
+# not these ad-hoc plotting utilities. This file has been staged for removal.
 """Utility functions for visualising ENVI hyperspectral datasets."""
 
 from __future__ import annotations

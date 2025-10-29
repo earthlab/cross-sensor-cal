@@ -1,5 +1,9 @@
 # Stage 02 Sorting
 
+> **Deprecated:** Sorting is now handled by `generate_file_move_list()` and the
+> optional stage 8 helpers inside `src/cross_sensor_cal/pipelines/pipeline.py`.
+> This legacy write-up referenced missing CLI scripts and GeoTIFF outputs.
+
 > DO NOT EDIT OUTSIDE MARKERS
 <!-- FILLME:START -->
 ## Overview
