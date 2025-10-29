@@ -98,6 +98,44 @@ except Exception:  # pragma: no cover
     tqdm = None
 
 
+@contextlib.contextmanager
+def _tile_progress(total: int, label: str):
+    """Yield a simple ``update()`` callable for tile progress reporting."""
+
+    if total <= 0:
+        yield lambda step=1: None
+        return
+
+    if tqdm is not None:
+        bar = tqdm(total=total, desc=label, leave=False)
+
+        try:
+            yield lambda step=1: bar.update(step)
+        finally:
+            bar.close()
+        return
+
+    count = 0
+    padded_label = label
+    initial_message = f"{padded_label}:   0% (0/{total})"
+    print(initial_message, end="", flush=True)
+
+    def _update(step: int = 1) -> None:
+        nonlocal count
+        count += step
+        percent = 0 if total == 0 else min(100, int(count * 100 / total))
+        message = f"\r{padded_label}: {percent:3d}% ({count}/{total})"
+        print(message, end="", flush=True)
+        if count >= total:
+            print()
+
+    try:
+        yield _update
+    finally:
+        if count < total:
+            print()
+
+
 def _pretty_line(line: str) -> str:
     """
     Return a short, readable label for a flight line (prefer the tile like L019-1).
@@ -452,6 +490,7 @@ def convolve_resample_product(
     out_stem_resampled: Path,
     tile_y: int = 100,
     tile_x: int = 100,
+    progress_label: str | None = None,
 ) -> None:
     src_header = _parse_envi_header(corrected_hdr_path)
     try:
@@ -515,39 +554,39 @@ def convolve_resample_product(
         except (TypeError, ValueError):
             nodata_float = None
 
-    first_tile = True
-    for ys in range(0, lines, tile_y):
-        ye = min(lines, ys + tile_y)
-        for xs in range(0, samples, tile_x):
-            xe = min(samples, xs + tile_x)
-            if first_tile:
-                print("Processing resample tiles: ", end="", flush=True)
-                first_tile = False
-            print("GR", end="", flush=True)
+    tiles_y = (lines + tile_y - 1) // tile_y
+    tiles_x = (samples + tile_x - 1) // tile_x
+    total_tiles = tiles_y * tiles_x
+    label = progress_label or "Resampling tiles"
 
-            tile_bsq = mm[:, ys:ye, xs:xe]
-            tile_yxb = np.transpose(tile_bsq, (1, 2, 0)).astype(np.float32, copy=False)
+    with _tile_progress(total_tiles, label) as update_progress:
+        for ys in range(0, lines, tile_y):
+            ye = min(lines, ys + tile_y)
+            for xs in range(0, samples, tile_x):
+                xe = min(samples, xs + tile_x)
 
-            sensor_tile = resample_chunk_to_sensor(
-                tile_yxb,
-                wavelengths_arr,
-                srfs_prepped,
-            )
-            sensor_tile = sensor_tile.astype(np.float32, copy=False)
+                tile_bsq = mm[:, ys:ye, xs:xe]
+                tile_yxb = np.transpose(tile_bsq, (1, 2, 0)).astype(np.float32, copy=False)
 
-            if nodata_float is not None:
-                if np.isnan(nodata_float):
-                    invalid_mask = np.isnan(tile_yxb).all(axis=2)
-                else:
-                    invalid_mask = np.all(np.isclose(tile_yxb, nodata_float), axis=2)
-                if invalid_mask.any():
-                    sensor_tile[invalid_mask] = nodata_float
+                sensor_tile = resample_chunk_to_sensor(
+                    tile_yxb,
+                    wavelengths_arr,
+                    srfs_prepped,
+                )
+                sensor_tile = sensor_tile.astype(np.float32, copy=False)
 
-            for band_index, band_name in enumerate(sensor_band_names):
-                mm_out[band_index, ys:ye, xs:xe] = sensor_tile[:, :, band_index]
+                if nodata_float is not None:
+                    if np.isnan(nodata_float):
+                        invalid_mask = np.isnan(tile_yxb).all(axis=2)
+                    else:
+                        invalid_mask = np.all(np.isclose(tile_yxb, nodata_float), axis=2)
+                    if invalid_mask.any():
+                        sensor_tile[invalid_mask] = nodata_float
 
-    if not first_tile:
-        print()
+                for band_index, band_name in enumerate(sensor_band_names):
+                    mm_out[band_index, ys:ye, xs:xe] = sensor_tile[:, :, band_index]
+
+                update_progress()
 
     mm_out.flush()
     del mm_out
@@ -878,6 +917,7 @@ def write_resampled_product(
         corrected_hdr_path=corrected_hdr_path,
         sensor_srf=arr,
         out_stem_resampled=out_stem,
+        progress_label=f"🧪 {sensor_name} tiles",
     )
 
 
@@ -887,6 +927,7 @@ def write_resampled_envi_cube(
     hdr_path: Path,
     *,
     corrected_hdr_path: Path,
+    progress_label: str | None = None,
 ) -> None:
     """Persist a resampled sensor bandstack to ENVI ``.img``/``.hdr`` files."""
 
@@ -900,6 +941,7 @@ def write_resampled_envi_cube(
         corrected_hdr_path=corrected_hdr_path,
         sensor_srf=bandstack_array,
         out_stem_resampled=out_stem,
+        progress_label=progress_label,
     )
 
     expected_img = out_stem.with_suffix(".img")
@@ -1279,6 +1321,7 @@ def stage_convolve_all_sensors(
                 out_img,
                 out_hdr,
                 corrected_hdr_path=corrected_hdr,
+                progress_label=f"🧪 {sensor_name} tiles",
             )
 
             if not is_valid_envi_pair(out_img, out_hdr):
