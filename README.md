@@ -49,25 +49,32 @@ Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line ident
 
 ## Pipeline overview
 
-Cross-Sensor Calibration processes every flight line through four ordered stages.
-Each stage writes ENVI (`.img/.hdr`) artifacts using canonical names from
-`get_flightline_products()` and will skip expensive work on rerun if its
-outputs already validate.
+Cross-Sensor Calibration processes every flight line through four ordered,
+restart-safe stages. Each stage writes ENVI (`.img/.hdr`) artifacts using
+canonical names from `get_flightline_products()` and logs whether it is doing
+work or skipping because valid outputs already exist.
 
-1. **ENVI export** – Loads the NEON hyperspectral `.h5` flight line and
-   writes the uncorrected ENVI cube (`<flight_stem>_envi.img/.hdr`).
-2. **Correction JSON build** – Computes BRDF + topographic correction
-   parameters and saves them to `<flight_stem>_brdfandtopo_corrected_envi.json`.
+1. **ENVI export** – Loads the NEON hyperspectral `.h5` flight line, logs the
+   target ENVI pair, and writes `<flight_stem>_envi.img/.hdr`. On rerun, if that
+   pair validates, the stage emits `✅ ENVI export already complete ... (skipping heavy export)`.
+2. **Correction JSON build** – Computes BRDF + topographic parameters and writes
+   `<flight_stem>_brdfandtopo_corrected_envi.json`. Valid JSON on disk triggers
+   `✅ Correction JSON already complete ... (skipping)`.
 3. **BRDF + topographic correction** – Uses the correction JSON to produce the
    canonical reflectance cube
-   (`<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`). All downstream work
-   consumes this corrected product.
-4. **Sensor convolution / resampling** – Reads ONLY the corrected ENVI cube to
-   generate per-sensor ENVI pairs named
-   `<flight_stem>_<sensor_name>_envi.img/.hdr`.
+   (`<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`). When the corrected ENVI
+   pair already validates the stage logs
+   `✅ BRDF+topo correction already complete ... (skipping)`.
+4. **Sensor convolution / resampling** – Reads only the corrected ENVI cube and
+   produces per-sensor ENVI pairs named `<flight_stem>_<sensor_name>_envi.img/.hdr`.
+   Each sensor logs either `✅ Wrote ...` when newly generated or `✅ ... already complete ... (skipping)`
+   when the product validates. The stage concludes with
+   `📊 Sensor convolution summary ... | succeeded=[...] skipped=[...] failed=[...]` and
+   then `🎉 Finished pipeline for <flight_stem>`.
 
-Every persistent output (raw, corrected, and sensor-specific) is an ENVI
-pair. The pipeline no longer emits GeoTIFF products.
+Every persistent output (raw, corrected, and sensor-specific) is an ENVI pair
+plus a single correction JSON. GeoTIFF products are no longer part of the
+advertised workflow.
 
 ## Running the pipeline
 
@@ -87,30 +94,40 @@ go_forth_and_multiply(
 ```
 
 This will execute the four stages above for every flight line and leave ENVI
-products in `base_folder` using the canonical naming patterns.
+products in `base_folder` using the canonical naming patterns. After the last
+flight line completes, the pipeline logs `✅ All requested flightlines processed.`.
 
 ### Idempotent / restart-safe
 
 You can safely rerun the same command. The pipeline is stage-aware and
 restart-safe:
 
-- If a stage already produced a valid output, that stage is skipped.
+- If a stage already produced a valid output, that stage logs a `✅ ... (skipping)`
+  message and returns immediately.
 - If an output is missing or looks corrupted/empty, only that stage is recomputed.
-- If you crashed halfway through a long run, you can just rerun the same cell to resume.
+- If you crashed halfway through a long run, you can rerun the same call to resume where
+  work is still needed.
 
-Typical log output on a rerun looks like:
+A realistic rerun for one flight line now looks like:
 
 ```
-12:01:03 | INFO | 🚀 Processing NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance ...
-12:01:03 | INFO | 🔎 ENVI export target for ... is NEON_D13_..._envi.img / NEON_D13_..._envi.hdr
-12:01:03 | INFO | ✅ ENVI export already complete for ..._envi.img / ..._envi.hdr (skipping heavy export)
-12:01:04 | INFO | ✅ Correction JSON already complete for ..._brdfandtopo_corrected_envi.json (skipping)
-12:01:05 | INFO | ✅ BRDF+topo correction already complete for ..._brdfandtopo_corrected_envi.img/.hdr (skipping)
-12:01:06 | INFO | 🎯 Convolving corrected reflectance for ...
-12:01:06 | INFO | ✅ landsat_oli product already complete ... (skipping)
-12:01:06 | INFO | 📊 Sensor convolution summary for ... | succeeded=['landsat_oli'] skipped=['landsat_tm'] failed=[]
-12:01:06 | INFO | 🎉 Finished pipeline for NEON_D13_...
+🚀 Processing NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance ...
+🔎 ENVI export target for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance is NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.hdr
+✅ ENVI export already complete for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.hdr (skipping heavy export)
+✅ Correction JSON already complete for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_brdfandtopo_corrected_envi.json (skipping)
+✅ BRDF+topo correction already complete for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_brdfandtopo_corrected_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_brdfandtopo_corrected_envi.hdr (skipping)
+🎯 Convolving corrected reflectance for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
+✅ Wrote landsat_tm product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_tm_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_tm_envi.hdr
+✅ Wrote landsat_etm+ product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_etm+_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_etm+_envi.hdr
+✅ Wrote landsat_oli product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli_envi.hdr
+✅ Wrote landsat_oli2 product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli2_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli2_envi.hdr
+✅ Wrote micasense product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_micasense_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_micasense_envi.hdr
+📊 Sensor convolution summary for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance | succeeded=['landsat_tm', 'landsat_etm+', 'landsat_oli', 'landsat_oli2', 'micasense'] skipped=[] failed=[]
+🎉 Finished pipeline for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
 ```
+
+After all requested flight lines finish, the run concludes with
+`✅ All requested flightlines processed.`
 
 ### Memory safety
 
@@ -154,7 +171,8 @@ missing or corrupted pieces.
   are logged with a warning and skipped.
 - Each simulated sensor writes an ENVI `.img/.hdr` pair named
   `<flight_stem>_<sensor>_envi.*`. GeoTIFFs are no longer emitted by this stage.
-- If a sensor product already exists on disk and validates as an ENVI pair, it is skipped.
+- If a sensor product already exists on disk and validates as an ENVI pair, it is skipped with
+  a `✅ ... already complete ... (skipping)` log.
 - At the end of the stage, the pipeline logs a summary of which sensors succeeded,
   which were skipped (already done), and which failed.
 - The pipeline only raises a runtime error if *all* sensors failed to produce usable
