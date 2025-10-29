@@ -50,6 +50,7 @@ nav:
       - Stage 05 · MESMA: stage-05-mesma.md
   - Validation & Support:
       - Validation: validation.md
+      - QA Panels: qa.md
       - Benchmarks: benchmarks.md
       - Troubleshooting: troubleshooting.md
       - FAQ: faq.md

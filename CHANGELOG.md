@@ -1,23 +1,24 @@
 ## [2.2.0] – 2025-10-29
-
 ### Added
-- Automatic download stage (`stage_download_h5`) with live progress bar.
-- Per-tile progress bars for ENVI export and BRDF+topo correction.
-- Parallel flightline processing with configurable concurrency (`max_workers`).
+- Automatic NEON HDF5 download (`stage_download_h5`) with live progress bar.
+- Per-flightline subdirectories containing all derived products (ENVI, corrected, convolved, parquet).
+- QA summary panel generator (`cscal-qa`) that validates export, correction, convolution, and parquet output.
+- Parallel flightline processing with `--max-workers` / `max_workers`.
+- Progress bars for download, ENVI export tiling, and BRDF+topo correction tiling.
 
 ### Changed
-- Output layout: all derived files for each flightline are now written to `<base>/<flight_stem>/`.
-- `.h5` files remain at the base folder for easier cleanup.
-- Logs now include per-flightline prefixes during parallel execution.
+- Pipeline now restores the documented behavior: `cscal-pipeline` / `go_forth_and_multiply()` handles download, correction, resampling, and export in one call.
+- Logging now includes per-flightline prefixes during parallel execution for readability.
+- Reproducibility documentation and CLI quickstart updated.
 
 ### Improved
-- Cleaner, more readable runtime output (replaced `GRGRGR...` with progress bars).
-- More informative logs for downloads, exports, and corrections.
-- Better idempotence safety and isolation between flightlines.
+- Idempotent skip logic preserved across all new stages.
+- Organized output layout for long-term storage (keep corrected outputs, discard raw `.h5` if desired).
+- Clearer environment setup instructions (conda or pip).
 
 ### Fixed
-- Restored consistent skip logic for partially completed runs.
-- Corrected missing download stage when running `go_forth_and_multiply()` on a new folder.
+- Eliminated `GRGRGRGR...` spam; replaced with tqdm-style progress bars.
+- Made output paths consistent between stages so downstream steps don't guess filenames.
 
 ## [Unreleased] – Pipeline refactor for idempotent, ordered execution (October 2025)
 

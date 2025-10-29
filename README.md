@@ -4,23 +4,93 @@ Cross-Sensor Calibration provides a Python pipeline for processing NEON Airborne
 
 ![Pipeline diagram](docs/img/pipeline.png)
 
-## Quickstart
+## Environment setup
+
+Option A (conda, recommended for GDAL/rasterio users):
+
+```bash
+conda env create -f environment.yaml
+conda activate cross-sensor-cal
+```
+
+Option B (pip, lightweight):
+
+```bash
+python -m venv cscal-env
+source cscal-env/bin/activate  # or Windows equivalent
+pip install .
+```
+
+We test on Python 3.10 in GitHub Actions (Linux x86_64) and periodically validate
+Python 3.11 builds on the same platform. Other operating systems may work, but Linux
+is the documented baseline.
+
+## Quickstart (CLI)
+
+Run the full cross-sensor pipeline on one or more NEON flight lines:
+
+```bash
+cscal-pipeline \
+  --base-folder output_demo \
+  --site-code NIWO \
+  --year-month 2023-08 \
+  --product-code DP1.30006.001 \
+  --flight-lines NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance \
+                 NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
+  --max-workers 2
+```
+
+This will:
+
+- Download each NEON `.h5` flight line (with a live download progress bar).
+- Convert the cube to ENVI using canonical `<flight_stem>_envi.img/.hdr` names.
+- Compute and apply BRDF + topographic correction.
+- Convolve to multiple sensor bandpasses (Landsat TM/ETM+/OLI, OLI2, Micasense, etc.).
+- Export reflectance products and per-sensor tables to ENVI + Parquet.
+
+Output structure:
+
+```text
+output_demo/
+    <flight_stem>.h5                       # raw NEON flightline (safe to delete later)
+    <flight_stem>/                         # all derived products for that line
+        <flight_stem>_envi.img/.hdr/.parquet
+        <flight_stem>_brdfandtopo_corrected_envi.img/.hdr/.json/.parquet
+        <flight_stem>_landsat_tm_envi.img/.hdr/.parquet
+        ...
+        <flight_stem>_qa.png               # QA summary figure (see below)
+```
+
+After the pipeline finishes you can generate QA plots summarizing each flight line:
+
+```bash
+cscal-qa --base-folder output_demo
+```
+
+That command creates `<flight_stem>_qa.png` inside each per-flightline folder.
+
+### Parallel execution from the CLI
+
+- `--max-workers N` (defaults to `2`) bounds parallelism.
+- Each worker processes one flight line in isolation inside its own subdirectory.
+- Logs from each worker are prefixed with the flight line ID for readability.
+- Memory warning: each hyperspectral cube can consume tens of GB in memory, so avoid
+  setting `--max-workers` higher than your hardware can support.
+
+## Quickstart (Python API)
 
 > As of v2.2 the pipeline automatically downloads NEON HDF5 cubes, streams live progress
 > bars, and writes every derived product into a dedicated per-flightline folder.
 
-Install the lightweight base package:
+Install the base package (includes Rasterio, GeoPandas, Spectral, Ray, and other
+runtime dependencies):
 
 ```bash
 pip install cross-sensor-cal
 ```
 
-If you need the full geospatial/hyperspectral toolchain (Rasterio, GeoPandas, Spectral,
-Ray, HDF5), install the optional extras:
-
-```bash
-pip install "cross-sensor-cal[full]"
-```
+> The legacy `full` extra remains available for compatibility and currently
+> resolves to the same dependency set as the base install.
 
 ### Quickstart Example
 
@@ -66,6 +136,22 @@ output_fresh/
     └── <same pattern>
 ```
 
+### Reproducibility guarantees
+
+- **Deterministic staging:** Each step writes files with canonical names. Downstream
+  steps never guess paths.
+- **Checkpointing / idempotence:** Stages skip work if valid outputs already exist
+  (`✅ ... already complete ... (skipping)`).
+- **Crash-safe restarts:** You can re-run `cscal-pipeline` on the same folder after an
+  interruption; it will resume from what's missing.
+- **Per-flightline isolation:** Each flight line has its own subdirectory. This allows
+  parallel execution and makes it clear which outputs belong together.
+- **Ephemeral HDF5:** The original NEON `.h5` stays at the top level and can be deleted
+  later if you only want corrected/derived products.
+- **QA panels:** After processing, `cscal-qa` generates a multi-panel summary figure per
+  flight line, to visually confirm that each step (export, correction, convolution,
+  parquet) completed successfully.
+
 ### Parallel Execution
 
 By default the pipeline processes multiple flight lines in sequence. To speed up
@@ -83,11 +169,11 @@ Feature availability by install type:
 | Feature | Base | `[full]` |
 |---|---|---|
 | Core array ops (NumPy/Scipy) | ✅ | ✅ |
-| Raster I/O (rasterio) | ⚠️ (not included) | ✅ |
-| Vector I/O/ops (GeoPandas) | ⚠️ | ✅ |
-| ENVI/HDR (spectral) | ⚠️ | ✅ |
-| HDF5 (h5py) | ⚠️ | ✅ |
-| Ray parallelism | ⚠️ | ✅ |
+| Raster I/O (Rasterio) | ✅ | ✅ |
+| Vector I/O/ops (GeoPandas) | ✅ | ✅ |
+| ENVI/HDR (Spectral) | ✅ | ✅ |
+| HDF5 (h5py) | ✅ | ✅ |
+| Ray parallelism | ✅ | ✅ |
 
 Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line identifier.
 
@@ -198,6 +284,24 @@ After a successful run you should see, for each flight line:
   - `<flight_stem>_<sensor>_envi.img/.hdr/.parquet` for each simulated sensor.
   - Support files such as `NIWO_brdf_model.json` generated during correction.
 
+## Quality Assurance (QA) panels
+
+<!-- TODO: Replace this note with an actual QA panel screenshot when available. -->
+<p align="center"><em>QA panel example coming soon.</em></p>
+
+- **Panel A – Raw ENVI RGB:** Confirms the uncorrected export renders with sensible
+  color balance and spatial alignment.
+- **Panel B – Patch-mean spectrum:** Compares raw vs. BRDF+topo corrected spectra with a
+  difference trace to verify the correction stage modified reflectance as expected.
+- **Panel C – Corrected NIR preview:** Displays a high-NIR band from the corrected cube to
+  quickly spot artifacts such as striping or nodata gaps.
+- **Panel D – Sensor thumbnails:** Shows downsampled previews for each convolved sensor
+  product to confirm bandstacks were generated.
+- **Panel E – Parquet summary:** Lists the Parquet sidecars and file sizes so you can
+  confirm tabular exports are present and non-empty.
+
+Generate these summaries at any time with `cscal-qa --base-folder <output_dir>`.
+
 The `_brdfandtopo_corrected_envi` suffix remains the canonical "final"
 reflectance for analysis and downstream comparisons; all scientific semantics
 are unchanged from previous releases.
@@ -252,25 +356,15 @@ This enforced order prevents earlier bugs where convolution could run on uncorre
 
 ## Install
 
-Cross-Sensor Calibration depends on GDAL, PROJ, Ray, h5py, and optional geospatial stacks such as Rasterio and GeoPandas. We recommend the Conda workflow below because it installs the required native libraries automatically. If you prefer a pure `pip` workflow, install system packages for GDAL/PROJ first (e.g., `brew install gdal` on macOS or `apt-get install gdal-bin libgdal-dev proj-bin` on Debian/Ubuntu).
-
-### Conda
-
-```bash
-conda create -n cscal python=3.10 gdal proj
-conda activate cscal
-pip install -e .
-```
-
-### uv/pip
+The recommended setup commands are documented in [Environment setup](#environment-setup).
+For a quick pip-based installation use:
 
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install -e .
+pip install cross-sensor-cal
 ```
 
-If GDAL wheels are unavailable for your platform, install it from Conda-forge and then point `pip` at the Conda environment by exporting `CPLUS_INCLUDE_PATH` and `C_INCLUDE_PATH`.
+> `cross-sensor-cal[full]` remains available as an alias for teams with
+> existing automation but currently resolves to the same dependency set.
 
 ## Documentation
 
@@ -291,21 +385,20 @@ Key entry points:
 
 ## Support Matrix
 
-| Python | OS            | GDAL | Ray |
-|--------|---------------|------|-----|
-| 3.10+  | Linux, macOS  | 3.4+ | 2.0+ |
+| Python versions | OS (CI)       | Notes                          |
+|-----------------|---------------|--------------------------------|
+| 3.10, 3.11      | Linux x86_64  | Tested in GitHub Actions (CI). |
+| 3.10, 3.11      | macOS / other | Community supported.           |
 
-## How to cite
+## Citation
 
-If you use Cross-Sensor Calibration in your research, please cite the project:
+If you use this software, please cite:
 
-```
-Earth Lab Data Innovation Team. (2025). Cross-Sensor Calibration (Version 0.1.0) [Software]. University of Colorado Boulder. https://github.com/earthlab/cross-sensor-cal
-```
+> cross-sensor-cal (v2.2.0): NEON hyperspectral cross-sensor harmonization pipeline.  
+> See `CITATION.cff` in this repository for full author list and metadata.
 
-Machine-readable citation metadata is provided in [CITATION.cff](CITATION.cff).
+## License
 
-## License and Citation
-
-Distributed under the GPLv3 License. Please cite the project using [CITATION.cff](CITATION.cff).
+Distributed under the GPLv3 License. Full citation details are available in
+[CITATION.cff](CITATION.cff).
 
