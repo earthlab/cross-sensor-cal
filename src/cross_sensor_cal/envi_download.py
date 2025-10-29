@@ -8,10 +8,15 @@ from typing import Iterable, Sequence
 
 import requests
 
+try:  # pragma: no cover - tqdm is optional in minimal environments
+    from tqdm import tqdm
+except Exception:  # pragma: no cover - fall back to no progress bar
+    tqdm = None
+
 logger = logging.getLogger(__name__)
 
 _NEON_API_BASE = "https://data.neonscience.org/api/v0"
-_DOWNLOAD_CHUNK_BYTES = 1 << 20  # 1 MiB
+_DOWNLOAD_CHUNK_BYTES = 8 * 1024 * 1024  # 8 MiB chunks for better throughput
 
 
 def list_neon_products() -> None:
@@ -121,10 +126,39 @@ def download_neon_file(
     try:
         with session.get(url, stream=True, timeout=60) as download_resp:
             download_resp.raise_for_status()
-            with temp_path.open("wb") as fh:
-                for chunk in download_resp.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES):
-                    if chunk:
+            total_bytes_header = download_resp.headers.get("Content-Length")
+            try:
+                total_bytes = int(total_bytes_header) if total_bytes_header else 0
+            except ValueError:
+                total_bytes = 0
+
+            bar = None
+            if tqdm is not None:
+                bar_total = total_bytes if total_bytes > 0 else None
+                bar = tqdm(
+                    total=bar_total,
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    desc=f"Downloading {flight_line}",
+                    leave=False,
+                    disable=False,
+                )
+
+            try:
+                with temp_path.open("wb") as fh:
+                    for chunk in download_resp.iter_content(
+                        chunk_size=_DOWNLOAD_CHUNK_BYTES
+                    ):
+                        if not chunk:
+                            continue
                         fh.write(chunk)
+                        if bar is not None:
+                            bar.update(len(chunk))
+            finally:
+                if bar is not None:
+                    bar.close()
+
         temp_path.replace(destination)
     except requests.RequestException as exc:  # pragma: no cover - network issues
         if temp_path.exists():

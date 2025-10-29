@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import h5py
+import math
+
 import numpy as np
 from pathlib import Path
 from typing import Dict, Iterator, Optional, Tuple
@@ -319,27 +321,25 @@ class NeonCube:
         chunk_y: int = 100,
         chunk_x: int = 100,
     ) -> Iterator[Tuple[int, int, int, int, np.ndarray]]:
-        """Yield sequential spatial chunks of the reflectance cube.
+        """Yield sequential spatial chunks of the reflectance cube."""
 
-        The chunked iteration mirrors HyTools' iterator heartbeat behaviour by
-        printing ``GR`` for each chunk and a prologue/epilogue message to
-        communicate progress when processing large cubes.
-        """
-
-        first_chunk = True
         for ys in range(0, self.lines, chunk_y):
             ye = min(self.lines, ys + chunk_y)
             for xs in range(0, self.columns, chunk_x):
                 xe = min(self.columns, xs + chunk_x)
-                if first_chunk:
-                    print("Processing chunks: ", end="", flush=True)
-                    first_chunk = False
-                print("GR", end="", flush=True)
                 chunk = self.data[ys:ye, xs:xe, :]
                 yield ys, ye, xs, xe, chunk
 
-        if not first_chunk:
-            print()
+    def chunk_count(self, chunk_y: int = 100, chunk_x: int = 100) -> int:
+        """Return the number of spatial chunks produced by :meth:`iter_chunks`."""
+
+        if chunk_y <= 0 or chunk_x <= 0:
+            raise ValueError("chunk dimensions must be positive")
+
+        return max(
+            1,
+            math.ceil(self.lines / chunk_y) * math.ceil(self.columns / chunk_x),
+        )
 
     def build_envi_header(self) -> dict:
         """Construct an ENVI header compatible with NEON reflectance outputs.

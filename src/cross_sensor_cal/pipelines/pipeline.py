@@ -60,7 +60,6 @@ import os
 import re
 import subprocess
 import sys
-from io import StringIO
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -260,34 +259,51 @@ class _FilterStream:
     """A text stream that drops lines matching noise patterns; tee others to a sink."""
 
     def __init__(self, sink, keep_saved: bool = True) -> None:
-        self._buffer = StringIO()
+        self._pending = ""
         self._sink = sink
         self._keep_saved = keep_saved
 
     def write(self, s: str) -> None:
-        self._buffer.write(s)
-        data = self._buffer.getvalue()
-        while "\n" in data:
-            line, rest = data.split("\n", 1)
-            self._buffer = StringIO()
-            self._buffer.write(rest)
-            self._process_line(line + "\n")
-            data = self._buffer.getvalue()
+        if not s:
+            return
+
+        for ch in s:
+            if ch == "\n":
+                self._emit(self._pending + "\n")
+                self._pending = ""
+            elif ch == "\r":
+                if self._pending:
+                    self._emit(self._pending)
+                    self._pending = ""
+                self._emit("\r")
+            else:
+                self._pending += ch
+
+        if self._pending:
+            self._emit(self._pending)
+            self._pending = ""
 
     def flush(self) -> None:
-        data = self._buffer.getvalue()
-        if data:
-            self._process_line(data)
-            self._buffer = StringIO()
+        if self._pending:
+            self._emit(self._pending)
+            self._pending = ""
         try:
             self._sink.flush()
         except Exception:  # pragma: no cover - sink may not support flush
             pass
 
-    def _process_line(self, line: str) -> None:
-        if not self._is_noise(line):
+    def _emit(self, text: str) -> None:
+        if not text:
+            return
+        if text == "\r":
             try:
-                self._sink.write(line)
+                self._sink.write(text)
+            except Exception:  # pragma: no cover - sink may be read-only
+                pass
+            return
+        if not self._is_noise(text):
+            try:
+                self._sink.write(text)
             except Exception:  # pragma: no cover - sink may be read-only
                 pass
 
@@ -1175,8 +1191,8 @@ def stage_export_envi_from_h5(
     # Snapshot directory state BEFORE export so we can diff.
     before_listing = {p.name: p for p in base_folder.glob("*")}
 
-    # This is the heavy step that currently logs
-    # "NeonCube: loaded ... ~23.07 GB" and "Processing chunks: GRGRGR..."
+    # This is the heavy step that logs the NeonCube memory footprint and now
+    # streams tile progress via tqdm (instead of the old "GRGRGR..." spam).
     neon_to_envi_no_hytools(
         images=[str(h5_path)],
         output_dir=str(base_folder),

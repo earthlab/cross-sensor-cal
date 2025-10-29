@@ -8,6 +8,11 @@ from typing import Iterable
 
 import numpy as np
 
+try:  # pragma: no cover - tqdm is optional in minimal environments
+    from tqdm import tqdm
+except Exception:  # pragma: no cover - fall back to no progress bar
+    tqdm = None
+
 from .envi_writer import EnviWriter
 from .file_types import NEONReflectanceENVIFile, NEONReflectanceFile
 from .neon_cube import NeonCube
@@ -77,14 +82,38 @@ def neon_to_envi_no_hytools(
     if brightness_offset is not None:
         offset_value = np.float32(brightness_offset)
 
+    chunk_y = 100
+    chunk_x = 100
+    total_chunks = cube.chunk_count(chunk_y=chunk_y, chunk_x=chunk_x)
+    bar = None
+
     try:
-        for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(chunk_y=100, chunk_x=100):
+        if tqdm is not None:
+            total_for_bar = total_chunks if total_chunks > 0 else None
+            bar = tqdm(
+                total=total_for_bar,
+                desc="ENVI export",
+                unit="tile",
+                disable=False,
+            )
+
+        processed_chunks = 0
+        for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(
+            chunk_y=chunk_y, chunk_x=chunk_x
+        ):
             chunk = raw_chunk.astype("float32", copy=False)
             if offset_value is not None:
                 chunk = chunk + offset_value
             writer.write_chunk(chunk, ys, xs)
+            processed_chunks += 1
+            if bar is not None:
+                bar.update(1)
+        if bar is not None and processed_chunks == 0:
+            bar.refresh()
     finally:
         writer.close()
+        if bar is not None:
+            bar.close()
 
     metadata = {
         "hdr": str(out_stem.with_suffix(".hdr")),
