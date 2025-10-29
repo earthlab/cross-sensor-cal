@@ -12,6 +12,7 @@ for NEON hyperspectral flight lines. The pipeline is now:
     2. BRDF/topo correction parameter JSON build
     3. BRDF + topographic correction
     4. Sensor convolution/resampling
+    5. Parquet export for every ENVI reflectance product
 
 Key guarantees:
 - The stages ALWAYS run in the order above.
@@ -332,6 +333,66 @@ def is_valid_envi_pair(img_path: Path, hdr_path: Path) -> bool:
         return True
     except Exception:
         return False
+
+
+def _export_parquet_stage(flight_dir: Path, logger) -> None:
+    """Stage: Parquet export for ENVI reflectance products."""
+
+    from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
+
+    flight_dir = Path(flight_dir)
+    search_root = flight_dir
+    if not search_root.exists():
+        parent = flight_dir.parent
+        if parent.exists():
+            search_root = parent
+    if not search_root.exists():
+        logger.warning(
+            "⚠️ Cannot locate filesystem root for Parquet export: %s",
+            flight_dir,
+        )
+        return
+
+    try:
+        envi_imgs = sorted(search_root.rglob("*_envi.img"))
+    except Exception as exc:  # pragma: no cover - filesystem issues
+        logger.warning(
+            "⚠️ Cannot discover ENVI products for Parquet export in %s: %s",
+            search_root,
+            exc,
+        )
+        return
+
+    flightline_hint = flight_dir.name.lower()
+
+    for img_path in envi_imgs:
+        try:
+            if (not img_path.exists()) or (img_path.stat().st_size == 0):
+                logger.warning(
+                    "⚠️ Cannot export Parquet for %s because .img is missing or empty",
+                    img_path.name,
+                )
+                continue
+        except Exception as exc:  # pragma: no cover - filesystem errors
+            logger.warning(
+                "⚠️ Cannot inspect %s for Parquet export: %s",
+                img_path,
+                exc,
+            )
+            continue
+
+        if not flight_dir.exists():
+            name_lower = img_path.name.lower()
+            parent_lower = str(img_path.parent).lower()
+            if flightline_hint and flightline_hint not in name_lower and flightline_hint not in parent_lower:
+                continue
+
+        stem_lower = img_path.stem.lower()
+        if any(keyword in stem_lower for keyword in ["mask", "angle", "qa", "quality"]):
+            continue
+
+        ensure_parquet_for_envi(img_path, logger)
+
 
 from cross_sensor_cal.brdf_topo import (
     apply_brdf_topo_core,
@@ -1353,6 +1414,11 @@ def stage_convolve_all_sensors(
             )
             failed.append(sensor_name)
 
+    flight_dir = Path(corrected_img).parent / flight_stem
+    logger.info("📦 Parquet export for %s ...", flight_stem)
+    _export_parquet_stage(flight_dir, logger)
+    logger.info("✅ Parquet stage complete for %s", flight_stem)
+
     logger.info(
         "📊 Sensor convolution summary for %s | succeeded=%s skipped=%s failed=%s",
         flight_stem,
@@ -1384,6 +1450,7 @@ def process_one_flightline(
       2) build correction JSON
       3) apply BRDF + topographic correction
       4) convolve / resample to target sensors
+      5) export Parquet sidecars for all reflectance ENVI outputs
 
     Each stage:
       - uses get_flightline_products() for canonical file naming
@@ -1521,6 +1588,7 @@ def go_forth_and_multiply(
       - regenerates any missing/partial work safely,
       - supports resample_method ("convolution", "legacy", etc.)
         and brightness_offset passthrough.
+      - exports Parquet sidecars for reflectance ENVI products once sensor cubes exist.
     """
 
     base_path = Path(base_folder)
