@@ -1,86 +1,174 @@
-import os.path
+"""Helpers for downloading NEON hyperspectral flight line products."""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Iterable, Sequence
 
 import requests
-import os
-import subprocess
 
-import requests
+logger = logging.getLogger(__name__)
 
-
-def list_neon_products():
-    resp = requests.get('https://data.neonscience.org/api/v0/products')
-    products = resp.json()['data']
-    for product in products:  # just first 10 for demo
-        print(product['productCode'], '-', product['productName'])
+_NEON_API_BASE = "https://data.neonscience.org/api/v0"
+_DOWNLOAD_CHUNK_BYTES = 1 << 20  # 1 MiB
 
 
-def download_neon_file(site_code, product_code, year_month, flight_line, out_dir: str):
-    os.makedirs(out_dir, exist_ok=True)
+def list_neon_products() -> None:
+    """Print the available NEON products (utility/debug helper)."""
 
-    server = 'http://data.neonscience.org/api/v0/'
-    data_url = f'{server}data/{product_code}/{site_code}/{year_month}'
+    response = requests.get(f"{_NEON_API_BASE}/products", timeout=60)
+    response.raise_for_status()
+    products = response.json().get("data", [])
+    for product in products:
+        print(product.get("productCode"), "-", product.get("productName"))
 
-    # Make the API request
-    response = requests.get(data_url)
-    if response.status_code == 200:
-        data_json = response.json()
 
-        # Initialize a flag to check if the file was found
-        file_found = False
+def _find_matching_file(records: Iterable[dict], flight_line: str) -> dict | None:
+    """Return the file record matching ``flight_line`` (preferring .h5 entries)."""
 
-        # Iterate through files in the JSON response to find the specific flight line
-        for file_info in data_json['data']['files']:
-            file_name = file_info['name']
-            if flight_line in file_name:
-                out_path = os.path.join(out_dir, file_name)
-                if os.path.exists(out_path):
-                    print(f'Skipping {out_path}, already exists')
-                    file_found = True
-                    continue
-                print(f"Downloading {file_name} from {file_info['url']} to {out_path}")
+    for record in records:
+        name = record.get("name", "")
+        if not name:
+            continue
+        if not name.lower().endswith(".h5"):
+            continue
+        if flight_line not in name:
+            continue
+        return record
+    return None
 
-                # Use subprocess.run to handle output
-                try:
-                    result = subprocess.run(
-                        ['wget', '--no-check-certificate', file_info["url"], '-O', out_path],
-                        stdout=subprocess.PIPE,  # Capture standard output
-                        stderr=subprocess.PIPE,  # Capture standard error
-                        text=True  # Decode to text
-                    )
 
-                    # Check for errors
-                    if result.returncode != 0:
-                        print(f"Error downloading file: {result.stderr}")
-                    else:
-                        print(f"Download completed for {out_path}")
-                except Exception as e:
-                    print(f"An error occurred: {e}")
+def download_neon_file(
+    site_code: str,
+    product_code: str,
+    year_month: str,
+    flight_line: str,
+    out_dir: str | Path,
+    *,
+    output_path: str | Path | None = None,
+    session: requests.Session | None = None,
+) -> tuple[Path, bool]:
+    """Download a single NEON flight line HDF5.
 
-                file_found = True
-                break
+    Parameters
+    ----------
+    site_code, product_code, year_month, flight_line
+        Identify the desired NEON hyperspectral flight line.
+    out_dir
+        Directory where downloads should be written when ``output_path`` is not
+        provided. Created if necessary.
+    output_path
+        Optional explicit destination path for the downloaded file. When
+        provided, the file will always be written to this location.
+    session
+        Optional ``requests.Session`` to reuse HTTP connections.
 
-        if not file_found:
-            print(f"Flight line {flight_line} not found in the data for {year_month}.")
-    else:
-        print(
-            f"Failed to retrieve data for {year_month}. Status code: {response.status_code}, Response: {response.text}")
+    Returns
+    -------
+    (path, was_downloaded)
+        ``path`` is the on-disk ``Path`` to the flight line. ``was_downloaded``
+        is ``True`` if a new download occurred, ``False`` if the existing file
+        was reused.
 
-def download_neon_flight_lines(site_code: str, year_month: str, flight_lines: str, out_dir: str, product_code: str = 'DP1.30006.001'):
-    """
-    Downloads NEON flight line files given a site code, product code, year, month, and flight line(s).
-
-    Args:
-    - site_code (str): The site code.
-    - product_code (str): The product code.
-    - year_month (str): The year and month of interest in 'YYYY-MM' format.
-    - flight_lines (str or list): A single flight line identifier or a list of flight line identifiers.
+    Raises
+    ------
+    FileNotFoundError
+        If the requested flight line could not be located in the NEON API
+        response.
+    RuntimeError
+        If an HTTP error occurs or the downloaded file is empty.
     """
 
-    # Check if flight_lines is a single string (flight line), if so, convert it to a list
+    if not year_month:
+        raise ValueError("year_month is required")
+
+    session = session or requests.Session()
+
+    base_dir = Path(output_path).parent if output_path is not None else Path(out_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    data_url = f"{_NEON_API_BASE}/data/{product_code}/{site_code}/{year_month}"
+    try:
+        response = session.get(data_url, timeout=60)
+        response.raise_for_status()
+    except requests.RequestException as exc:  # pragma: no cover - network issues
+        raise RuntimeError(
+            f"Failed to query NEON data API for {site_code}/{year_month}: {exc}"
+        ) from exc
+
+    files = response.json().get("data", {}).get("files", [])
+    record = _find_matching_file(files, flight_line)
+    if record is None:
+        raise FileNotFoundError(
+            f"No HDF5 file found for {flight_line} at {site_code} {year_month}."
+        )
+
+    file_name = record.get("name", "")
+    url = record.get("url")
+    if not url:
+        raise RuntimeError(f"NEON API response missing download URL for {file_name}.")
+
+    destination = Path(output_path) if output_path is not None else base_dir / file_name
+
+    try:
+        if destination.exists() and destination.stat().st_size > 0:
+            return destination, False
+    except OSError as exc:  # pragma: no cover - filesystem permissions
+        raise RuntimeError(f"Cannot access existing file {destination}: {exc}") from exc
+
+    temp_path = destination.with_suffix(destination.suffix + ".download")
+    try:
+        with session.get(url, stream=True, timeout=60) as download_resp:
+            download_resp.raise_for_status()
+            with temp_path.open("wb") as fh:
+                for chunk in download_resp.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES):
+                    if chunk:
+                        fh.write(chunk)
+        temp_path.replace(destination)
+    except requests.RequestException as exc:  # pragma: no cover - network issues
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+        raise RuntimeError(f"Failed downloading {file_name}: {exc}") from exc
+    except Exception:
+        if temp_path.exists():  # pragma: no cover - cleanup best-effort
+            temp_path.unlink(missing_ok=True)
+        raise
+
+    if destination.stat().st_size <= 0:
+        destination.unlink(missing_ok=True)
+        raise RuntimeError(f"Downloaded file {destination} is empty.")
+
+    return destination, True
+
+
+def download_neon_flight_lines(
+    site_code: str,
+    year_month: str,
+    flight_lines: Sequence[str] | str,
+    out_dir: str | Path,
+    product_code: str = "DP1.30006.001",
+) -> list[Path]:
+    """Download one or more NEON flight lines into ``out_dir``.
+
+    Returns a list of ``Path`` objects pointing to the downloaded (or reused)
+    files.
+    """
+
     if isinstance(flight_lines, str):
         flight_lines = [flight_lines]
 
-    # Iterate through each flight line and download the corresponding file
+    results: list[Path] = []
     for flight_line in flight_lines:
-        print(f"Downloading NEON flight line: {flight_line}")
-        download_neon_file(site_code, product_code, year_month, flight_line, out_dir)
+        path, was_downloaded = download_neon_file(
+            site_code,
+            product_code,
+            year_month,
+            flight_line,
+            out_dir,
+        )
+        results.append(path)
+        action = "downloaded" if was_downloaded else "already present"
+        print(f"{flight_line}: {action} at {path}")
+
+    return results
