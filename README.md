@@ -144,8 +144,22 @@ The pipeline is now organized into four explicit stages that always run in order
    `✅ <sensor> product already complete ... (skipping)` and moves on.
    If a sensor definition is missing from the internal library, the pipeline logs
    a warning and skips that sensor instead of aborting the run.
-   Successful resamples must produce non-empty files; an empty artifact triggers a
-   `RuntimeError` because it indicates data corruption that needs attention.
+   Successful resamples must produce non-empty files; empty artifacts are logged as
+   failures and summarized at the end of the stage.
+
+#### Sensor convolution / resampling behavior
+
+- The final stage turns the corrected reflectance cube
+  (`*_brdfandtopo_corrected_envi.img/.hdr`) into simulated sensor products
+  (e.g. Landsat-style band stacks).
+- Each target sensor is attempted independently. Missing/unknown sensor definitions
+  are logged with a warning and skipped.
+- If a sensor product already exists on disk and is non-empty, it is skipped.
+- At the end of the stage, the pipeline logs a summary of which sensors succeeded,
+  which were skipped (already done), and which failed.
+- The pipeline only raises a runtime error if *all* sensors failed to produce usable
+  output for that flight line. Otherwise, partial success is allowed and the
+  pipeline continues.
 
 This enforced order prevents earlier bugs where convolution could run on uncorrected data.
 
