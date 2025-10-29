@@ -8,14 +8,10 @@ from typing import Iterable
 
 import numpy as np
 
-try:  # pragma: no cover - tqdm is optional in minimal environments
-    from tqdm import tqdm
-except Exception:  # pragma: no cover - fall back to no progress bar
-    tqdm = None
-
 from .envi_writer import EnviWriter
 from .file_types import NEONReflectanceENVIFile, NEONReflectanceFile
 from .neon_cube import NeonCube
+from .progress_utils import TileProgressReporter
 
 
 def _resolve_output(envi_file: NEONReflectanceENVIFile) -> Path:
@@ -28,6 +24,9 @@ def neon_to_envi_no_hytools(
     images: Iterable[str],
     output_dir: str,
     brightness_offset: float | None = None,
+    *,
+    interactive_mode: bool = True,
+    log_every: int = 25,
 ) -> list[dict]:
     """Convert NEON `.h5` reflectance cubes into ENVI BSQ rasters.
 
@@ -85,19 +84,14 @@ def neon_to_envi_no_hytools(
     chunk_y = 100
     chunk_x = 100
     total_chunks = cube.chunk_count(chunk_y=chunk_y, chunk_x=chunk_x)
-    bar = None
+    reporter = TileProgressReporter(
+        stage_name="ENVI export",
+        total_tiles=total_chunks,
+        interactive_mode=interactive_mode,
+        log_every=log_every,
+    )
 
     try:
-        if tqdm is not None:
-            total_for_bar = total_chunks if total_chunks > 0 else None
-            bar = tqdm(
-                total=total_for_bar,
-                desc="ENVI export",
-                unit="tile",
-                disable=False,
-            )
-
-        processed_chunks = 0
         for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(
             chunk_y=chunk_y, chunk_x=chunk_x
         ):
@@ -105,15 +99,10 @@ def neon_to_envi_no_hytools(
             if offset_value is not None:
                 chunk = chunk + offset_value
             writer.write_chunk(chunk, ys, xs)
-            processed_chunks += 1
-            if bar is not None:
-                bar.update(1)
-        if bar is not None and processed_chunks == 0:
-            bar.refresh()
+            reporter.update(1)
     finally:
         writer.close()
-        if bar is not None:
-            bar.close()
+        reporter.close()
 
     metadata = {
         "hdr": str(out_stem.with_suffix(".hdr")),

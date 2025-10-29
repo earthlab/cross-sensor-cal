@@ -101,44 +101,6 @@ except Exception:  # pragma: no cover
     tqdm = None
 
 
-@contextlib.contextmanager
-def _tile_progress(total: int, label: str):
-    """Yield a simple ``update()`` callable for tile progress reporting."""
-
-    if total <= 0:
-        yield lambda step=1: None
-        return
-
-    if tqdm is not None:
-        bar = tqdm(total=total, desc=label, leave=False)
-
-        try:
-            yield lambda step=1: bar.update(step)
-        finally:
-            bar.close()
-        return
-
-    count = 0
-    padded_label = label
-    initial_message = f"{padded_label}:   0% (0/{total})"
-    print(initial_message, end="", flush=True)
-
-    def _update(step: int = 1) -> None:
-        nonlocal count
-        count += step
-        percent = 0 if total == 0 else min(100, int(count * 100 / total))
-        message = f"\r{padded_label}: {percent:3d}% ({count}/{total})"
-        print(message, end="", flush=True)
-        if count >= total:
-            print()
-
-    try:
-        yield _update
-    finally:
-        if count < total:
-            print()
-
-
 @contextmanager
 def _scoped_log_prefix(prefix: str):
     """Temporarily wrap module logger methods to prefix messages."""
@@ -439,6 +401,7 @@ from ..file_types import (
 )
 from ..envi_download import download_neon_file
 from ..neon_to_envi import neon_to_envi_no_hytools
+from ..progress_utils import TileProgressReporter
 from ..utils.naming import get_flight_paths, get_flightline_products
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
@@ -583,6 +546,9 @@ def convolve_resample_product(
     tile_y: int = 100,
     tile_x: int = 100,
     progress_label: str | None = None,
+    *,
+    interactive_mode: bool = True,
+    log_every: int = 25,
 ) -> None:
     src_header = _parse_envi_header(corrected_hdr_path)
     try:
@@ -651,7 +617,14 @@ def convolve_resample_product(
     total_tiles = tiles_y * tiles_x
     label = progress_label or "Resampling tiles"
 
-    with _tile_progress(total_tiles, label) as update_progress:
+    reporter = TileProgressReporter(
+        stage_name=label,
+        total_tiles=total_tiles,
+        interactive_mode=interactive_mode,
+        log_every=log_every,
+    )
+
+    try:
         for ys in range(0, lines, tile_y):
             ye = min(lines, ys + tile_y)
             for xs in range(0, samples, tile_x):
@@ -678,7 +651,9 @@ def convolve_resample_product(
                 for band_index, band_name in enumerate(sensor_band_names):
                     mm_out[band_index, ys:ye, xs:xe] = sensor_tile[:, :, band_index]
 
-                update_progress()
+                reporter.update(1)
+    finally:
+        reporter.close()
 
     mm_out.flush()
     del mm_out
@@ -1002,6 +977,8 @@ def write_resampled_product(
     sensor_name: str,
     flight_stem: str,
     corrected_hdr_path: Path,
+    interactive_mode: bool = True,
+    log_every: int = 25,
 ) -> None:
     out_path = Path(out_path)
     out_stem = out_path.with_suffix("")
@@ -1010,6 +987,8 @@ def write_resampled_product(
         sensor_srf=arr,
         out_stem_resampled=out_stem,
         progress_label=f"🧪 {sensor_name} tiles",
+        interactive_mode=interactive_mode,
+        log_every=log_every,
     )
 
 
@@ -1020,6 +999,8 @@ def write_resampled_envi_cube(
     *,
     corrected_hdr_path: Path,
     progress_label: str | None = None,
+    interactive_mode: bool = True,
+    log_every: int = 25,
 ) -> None:
     """Persist a resampled sensor bandstack to ENVI ``.img``/``.hdr`` files."""
 
@@ -1034,6 +1015,8 @@ def write_resampled_envi_cube(
         sensor_srf=bandstack_array,
         out_stem_resampled=out_stem,
         progress_label=progress_label,
+        interactive_mode=interactive_mode,
+        log_every=log_every,
     )
 
     expected_img = out_stem.with_suffix(".img")
@@ -1139,6 +1122,8 @@ def stage_export_envi_from_h5(
     product_code: str,
     flight_stem: str,
     brightness_offset: float | None = None,
+    *,
+    parallel_mode: bool = False,
 ) -> tuple[Path, Path]:
     """
     Ensure we have the uncorrected ENVI export (.img/.hdr) for this flightline.
@@ -1213,6 +1198,7 @@ def stage_export_envi_from_h5(
         images=[str(h5_path)],
         output_dir=str(work_dir),
         brightness_offset=brightness_offset,
+        interactive_mode=not parallel_mode,
     )
 
     # Snapshot AFTER export and collect the names of new files.
@@ -1272,6 +1258,7 @@ def stage_build_and_write_correction_json(
     flight_stem: str,
     raw_img_path: Path,
     raw_hdr_path: Path,
+    parallel_mode: bool = False,
 ) -> Path:
     """
     Compute + persist BRDF/topo correction parameters (illumination geometry, slope/aspect,
@@ -1331,6 +1318,7 @@ def stage_apply_brdf_topo_correction(
     raw_img_path: Path,
     raw_hdr_path: Path,
     correction_json_path: Path,
+    parallel_mode: bool = False,
 ) -> tuple[Path, Path]:
     """
     Apply BRDF + topographic correction using the precomputed JSON.
@@ -1373,6 +1361,7 @@ def stage_apply_brdf_topo_correction(
         params=params,
         out_img_path=corrected_img_path,
         out_hdr_path=corrected_hdr_path,
+        interactive_mode=not parallel_mode,
     )
 
     if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
@@ -1403,6 +1392,7 @@ def stage_convolve_all_sensors(
     corrected_img_path: Path | None = None,
     corrected_hdr_path: Path | None = None,
     resample_method: str | None = "convolution",
+    parallel_mode: bool = False,
 ):
     """Convolve the BRDF+topo corrected ENVI cube into sensor bandstacks."""
 
@@ -1499,6 +1489,7 @@ def stage_convolve_all_sensors(
                 out_hdr,
                 corrected_hdr_path=corrected_hdr,
                 progress_label=f"🧪 {sensor_name} tiles",
+                interactive_mode=not parallel_mode,
             )
 
             if not is_valid_envi_pair(out_img, out_hdr):
@@ -1561,6 +1552,7 @@ def process_one_flightline(
     flight_stem: str,
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
+    parallel_mode: bool = False,
 ):
     """Run the structured, skip-aware workflow for a single flightline.
 
@@ -1591,6 +1583,7 @@ def process_one_flightline(
         product_code=product_code,
         flight_stem=flight_stem,
         brightness_offset=brightness_offset,
+        parallel_mode=parallel_mode,
     )
 
     correction_json_path = stage_build_and_write_correction_json(
@@ -1599,6 +1592,7 @@ def process_one_flightline(
         flight_stem=flight_stem,
         raw_img_path=raw_img_path,
         raw_hdr_path=raw_hdr_path,
+        parallel_mode=parallel_mode,
     )
     if not is_valid_json(correction_json_path):
         raise RuntimeError(
@@ -1612,6 +1606,7 @@ def process_one_flightline(
         raw_img_path=raw_img_path,
         raw_hdr_path=raw_hdr_path,
         correction_json_path=correction_json_path,
+        parallel_mode=parallel_mode,
     )
     if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise RuntimeError(
@@ -1625,6 +1620,7 @@ def process_one_flightline(
         corrected_img_path=corrected_img_path,
         corrected_hdr_path=corrected_hdr_path,
         resample_method=resample_method,
+        parallel_mode=parallel_mode,
     )
 
 
@@ -1720,6 +1716,7 @@ def go_forth_and_multiply(
     base_path.mkdir(parents=True, exist_ok=True)
 
     method_norm = (resample_method or "convolution").lower()
+    parallel_mode = max_workers is not None and max_workers > 1
 
     # Phase A: ensure downloads exist before spinning up heavy processing
     for flight_stem in flight_lines:
@@ -1739,6 +1736,7 @@ def go_forth_and_multiply(
                 flight_stem=flight_stem,
                 resample_method=method_norm,
                 brightness_offset=brightness_offset,
+                parallel_mode=parallel_mode,
             )
         return flight_stem
 
