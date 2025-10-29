@@ -163,6 +163,10 @@ def apply_brdf_topo_core(
     out_hdr_path = Path(out_hdr_path)
     out_img_path.parent.mkdir(parents=True, exist_ok=True)
 
+    assert (
+        "brdfandtopo_corrected" not in raw_img_path.name.lower()
+    ), "Refusing to correct an already corrected cube."
+
     source_h5 = Path(params.get("h5_path", "")) if isinstance(params, dict) else None
     if source_h5 is None or not source_h5.exists():
         raise RuntimeError(
@@ -199,6 +203,20 @@ def apply_brdf_topo_core(
         log_every=log_every,
     )
 
+    brightness_offset: float | None = None
+    if isinstance(params, dict):
+        offset_val = params.get("brightness_offset")
+        try:
+            brightness_offset = float(offset_val) if offset_val is not None else None
+        except (TypeError, ValueError):  # pragma: no cover - defensive against malformed JSON
+            brightness_offset = None
+
+    brightness_offset_np: np.float32 | None = None
+    if brightness_offset is not None:
+        brightness_offset_np = np.float32(brightness_offset)
+
+    brightness_offset_logged = False
+
     try:
         for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(
             chunk_y=chunk_y, chunk_x=chunk_x
@@ -215,6 +233,11 @@ def apply_brdf_topo_core(
                 coeff_path=coeff_path,
             )
             corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
+            if brightness_offset_np is not None:
+                if not brightness_offset_logged:
+                    logger.debug("Applying brightness_offset=%.3f once", brightness_offset)
+                    brightness_offset_logged = True
+                corrected_chunk = corrected_chunk + brightness_offset_np
             writer.write_chunk(corrected_chunk, ys, xs)
             reporter.update(1)
     finally:
