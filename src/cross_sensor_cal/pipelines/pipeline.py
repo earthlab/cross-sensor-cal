@@ -1679,6 +1679,8 @@ def process_one_flightline(
             base_folder=base_folder,
             flight_stem=flight_stem,
             out_png=qa_png,
+            shaded_regions=True,
+            overwrite=True,
         )
         logger.info("🖼️  Wrote QA panel for %s -> %s", flight_stem, qa_png.name)
     except Exception as exc:  # pragma: no cover - QA best effort
