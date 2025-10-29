@@ -111,8 +111,10 @@ After a successful run you should see, for each flight line:
   (JSON parameters used for physical correction)
 - `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`
   (Corrected reflectance cube in ENVI format; used for all downstream work)
-- Per-sensor convolution/resample outputs (e.g. Landsat-like products); each file
-  is generated from the corrected ENVI cube, not from the raw `.h5`.
+- Per-sensor convolution/resample outputs (e.g. Landsat-like products). Each
+  sensor emits an ENVI pair named `<flight_stem>_<sensor>_envi.img` and
+  `<flight_stem>_<sensor>_envi.hdr`, generated directly from the corrected ENVI
+  cube. GeoTIFF sensor exports are no longer produced.
 
 The `_brdfandtopo_corrected_envi` suffix is now guaranteed and should be considered
 the canonical "final" reflectance for analysis and downstream comparisons.
@@ -139,13 +141,14 @@ The pipeline is now organized into four explicit stages that always run in order
    Convolves the corrected reflectance cube to sensor-specific bandsets
    (e.g. Landsat TM, Landsat OLI, MicaSense multispectral stacks).
    Every sensor product is generated from the BRDF + topo corrected ENVI cube—never
-   from the raw `.h5`—and each target file is checked before work begins.
-   If a non-empty output already exists, the stage logs
+   from the raw `.h5`—and each target ENVI pair
+   (`<flight_stem>_<sensor>_envi.img/.hdr`) is checked before work begins.
+   If a valid ENVI pair already exists, the stage logs
    `✅ <sensor> product already complete ... (skipping)` and moves on.
    If a sensor definition is missing from the internal library, the pipeline logs
    a warning and skips that sensor instead of aborting the run.
-   Successful resamples must produce non-empty files; empty artifacts are logged as
-   failures and summarized at the end of the stage.
+   Successful resamples must produce non-empty ENVI pairs; invalid artifacts are
+   logged as failures and summarized at the end of the stage.
 
 #### Sensor convolution / resampling behavior
 
@@ -154,7 +157,9 @@ The pipeline is now organized into four explicit stages that always run in order
   (e.g. Landsat-style band stacks).
 - Each target sensor is attempted independently. Missing/unknown sensor definitions
   are logged with a warning and skipped.
-- If a sensor product already exists on disk and is non-empty, it is skipped.
+- Each simulated sensor writes an ENVI `.img/.hdr` pair named
+  `<flight_stem>_<sensor>_envi.*`. GeoTIFFs are no longer emitted by this stage.
+- If a sensor product already exists on disk and validates as an ENVI pair, it is skipped.
 - At the end of the stage, the pipeline logs a summary of which sensors succeeded,
   which were skipped (already done), and which failed.
 - The pipeline only raises a runtime error if *all* sensors failed to produce usable
