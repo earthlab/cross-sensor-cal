@@ -2,51 +2,63 @@
 
 > DO NOT EDIT OUTSIDE MARKERS
 <!-- FILLME:START -->
-The Cross‑Sensor Calibration workflow is organized into five sequential stages.
-Each stage consumes artifacts from the previous one and produces standardized
-outputs for the next.
+The Cross‑Sensor Calibration workflow runs every NEON flight line through an
+idempotent, restart-safe series of stages. Each stage writes ENVI (`.img/.hdr`)
+artifacts using canonical names provided by
+`cross_sensor_cal.utils.naming.get_flightline_products()`.
 
-### Raster
-- **Inputs:** raw NEON AOP HDF5 flightlines and sensor configuration files
-- **Outputs:** corrected, resampled rasters in ENVI/GeoTIFF format
+### Stage 1 · ENVI export
+- **Inputs:** NEON AOP directional reflectance `.h5` flight line.
+- **Outputs:** `<flight_stem>_envi.img/.hdr` written via the HyTools-free
+  :func:`neon_to_envi_no_hytools` exporter.
 
-### Sorting
-- **Inputs:** processed rasters and ancillary metadata
-- **Outputs:** directory tree grouped by site/date with manifests for downstream use
+### Stage 2 · Correction parameters
+- **Inputs:** Stage 1 ENVI pair.
+- **Outputs:** `<flight_stem>_brdfandtopo_corrected_envi.json` containing BRDF +
+  topographic coefficients.
 
-### Pixel Table
-- **Inputs:** sorted rasters and optional vector masks or polygons
-- **Outputs:** tabular spectra with pixel coordinates and metadata (`*_pixels.csv`)
+### Stage 3 · BRDF + topographic correction
+- **Inputs:** Stage 1 ENVI pair and Stage 2 JSON.
+- **Outputs:** `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`, the canonical
+  science-ready reflectance cube.
 
-### Spectral Library
-- **Inputs:** pixel tables from one or more scenes
-- **Outputs:** aggregated spectral library files (`spectra_library.*`) ready for analysis
+### Stage 4 · Sensor convolution / resampling
+- **Inputs:** Stage 3 corrected ENVI pair and the bundled sensor response
+  library.
+- **Outputs:** Per-sensor ENVI products named
+  `<flight_stem>_<sensor>_envi.img/.hdr` (e.g. Landsat, MicaSense).
 
-### MESMA
-- **Inputs:** spectral library and target rasters
-- **Outputs:** Multiple Endmember Spectral Mixture Analysis results and fractional cover maps
+### Stage 6 · Parquet summaries *(in progress)*
+- **Inputs:** Corrected ENVI pair and per-sensor ENVI products.
+- **Outputs:** One Parquet table per ENVI science product for downstream
+  analytics.
 
-#### Artifacts
-| Stage | Key file/folder outputs |
-|-------|-------------------------|
-| Raster | `data/<site>/raster/*.tif` |
-| Sorting | `data/<site>/sorted/` |
-| Pixel Table | `pixel_tables/*.csv` |
-| Spectral Library | `spectral_library/` |
-| MESMA | `mesma/` (maps, summaries) |
+### Optional stages
+- **Stage 7:** Masking / polygon extraction for validation workflows.
+- **Stage 8:** File sorting and iRODS synchronisation via `gocmd`.
+
+#### Key artifacts
+| Stage | Primary deliverables |
+|-------|----------------------|
+| 1 | `<flight_stem>_envi.img` / `<flight_stem>_envi.hdr` |
+| 2 | `<flight_stem>_brdfandtopo_corrected_envi.json` |
+| 3 | `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr` |
+| 4 | `<flight_stem>_<sensor>_envi.img/.hdr` |
+| 6 | `<flight_stem>_<product>.parquet` (planned) |
 
 ```mermaid
 flowchart LR
-    R[Raster]
-    S[Sorting]
-    P[Pixel Table]
-    L[Spectral Library]
-    M[MESMA]
-    R --> S --> P --> L --> M
+    E[ENVI export]
+    C[Correction JSON]
+    B[BRDF+topo correction]
+    R[Resample sensors]
+    P[Parquet export]
+    E --> C --> B --> R --> P
 ```
 
 ### Who is this for?
-Researchers and practitioners working with NEON AOP flightlines, drone imagery,
-or Landsat scenes who need a reproducible pipeline for cross‑sensor spectral
-analysis.
+Researchers processing NEON AOP flight lines who need reproducible ENVI
+deliverables and per-sensor band stacks for cross-sensor analysis. Downstream
+workflows can build on the corrected ENVI cubes and Parquet summaries without
+touching the legacy GeoTIFF toolchain.
 <!-- FILLME:END -->

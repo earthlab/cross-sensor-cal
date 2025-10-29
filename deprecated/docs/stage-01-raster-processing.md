@@ -1,5 +1,9 @@
 # Stage 01 Raster Processing
 
+> **Deprecated:** This guide documents the legacy HyTools-driven raster
+> processing workflow. The supported pipeline is described in
+> `docs/pipeline.md` and relies on `go_forth_and_multiply()`.
+
 > DO NOT EDIT OUTSIDE MARKERS
 <!-- FILLME:START -->
 ## Purpose

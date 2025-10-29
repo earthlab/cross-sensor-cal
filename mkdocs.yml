@@ -44,8 +44,7 @@ nav:
       - Naming Conventions: naming-conventions.md
       - Schemas: schemas.md
   - Pipeline:
-      - Stage 01 · Raster Processing: stage-01-raster-processing.md
-      - Stage 02 · Sorting: stage-02-sorting.md
+      - Pipeline Reference: pipeline.md
       - Stage 03 · Pixel Extraction: stage-03-pixel-extraction.md
       - Stage 04 · Spectral Library: stage-04-spectral-library.md
       - Stage 05 · MESMA: stage-05-mesma.md
@@ -60,5 +59,3 @@ nav:
       - Dev Notes: dev-notes.md
       - Glossary: glossary.md
       - References: references.md
-      - Onboarding:
-          - Sorting and Retrieval Overview: onboarding/sorting_and_retrieval_overview.md

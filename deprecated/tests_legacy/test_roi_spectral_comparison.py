@@ -1,3 +1,6 @@
+# DEPRECATED TEST: This test targets an older workflow (GeoTIFF export / HyTools).
+# It has been moved out of CI and staged for removal.
+# Active tests live under tests/ and validate ENVI-only, idempotent behavior.
 
 from pathlib import Path
 

@@ -1,3 +1,7 @@
+# DEPRECATED: Replaced by cross_sensor_cal.resample / standard_resample.
+# The active pipeline ONLY resamples from the BRDF+topo corrected ENVI cube,
+# and ONLY writes ENVI (.img/.hdr).
+# This file has been staged for removal.
 """Spectral resampling utilities for NEON hyperspectral products.
 
 References:

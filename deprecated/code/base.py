@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# DEPRECATED: This implementation depended on HyTools and is no longer used.
+# The pipeline now uses the internal ENVI export path defined in cross_sensor_cal.neon_to_envi.
+# This file has been staged for removal.
 """
 HyTools:  Hyperspectral image processing library
 Copyright (C) 2021 University of Wisconsin
