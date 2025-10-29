@@ -383,6 +383,7 @@ def _export_parquet_stage(
         if any(keyword in stem_lower for keyword in ["mask", "angle", "qa", "quality"]):
             continue
 
+        # ensure the raw ENVI (and any other reflectance cubes) receive Parquet outputs
         ensure_parquet_for_envi(img_path, logger)
 
 
@@ -1128,6 +1129,7 @@ def stage_export_envi_from_h5(
     brightness_offset: float | None = None,
     *,
     parallel_mode: bool = False,
+    recover_missing_raw: bool = True,
 ) -> tuple[Path, Path]:
     """
     Ensure we have the uncorrected ENVI export (.img/.hdr) for this flightline.
@@ -1173,12 +1175,35 @@ def stage_export_envi_from_h5(
 
     corrected_img = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
     if corrected_img.exists() and not raw_img_path.exists():
-        raise FileNotFoundError(
-            "Raw ENVI missing for {stem} but corrected exists. "
-            "A prior cleanup or naming bug likely removed/overwrote the raw export.".format(
-                stem=flight_stem
+        if recover_missing_raw:
+            logger.warning(
+                "♻️  Raw ENVI missing for %s but corrected exists. Rebuilding raw from HDF5.",
+                flight_stem,
             )
-        )
+            if not h5_path.exists():
+                raise FileNotFoundError(
+                    f"Cannot recover raw ENVI for {flight_stem}: {h5_path.name} not found."
+                )
+            neon_to_envi_no_hytools(
+                images=[str(h5_path)],
+                output_dir=str(work_dir),
+                brightness_offset=brightness_offset,
+                interactive_mode=not parallel_mode,
+            )
+            if not raw_img_path.exists() or not raw_hdr_path.exists():
+                raise FileNotFoundError(
+                    f"Recovery failed: expected {raw_img_path.name} / {raw_hdr_path.name}"
+                )
+            logger.info(
+                "✅ Rebuilt raw ENVI -> %s / %s",
+                raw_img_path.name,
+                raw_hdr_path.name,
+            )
+        else:
+            raise FileNotFoundError(
+                f"Raw ENVI missing for {flight_stem} but corrected exists. "
+                "Re-run with recover_missing_raw=True to rebuild."
+            )
 
     # FAST SKIP: if canonical raw ENVI already looks valid, avoid
     # calling neon_to_envi_no_hytools() entirely. This is critical to
@@ -1546,7 +1571,7 @@ def stage_convolve_all_sensors(
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
     logger.info(
-        "📊 Sensor convolution summary for %s | created=%s existing=%s failed=%s",
+        "📊 Sensor convolution summary for %s | created=%s, existing=%s, failed=%s",
         flight_stem,
         created,
         existing,

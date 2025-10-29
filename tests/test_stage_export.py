@@ -135,6 +135,51 @@ def test_stage_export_raises_when_corrected_without_raw(tmp_path: Path, monkeypa
             base_folder=base,
             product_code="DP1.30006.001",
             flight_stem=flight_stem,
+            recover_missing_raw=False,
         )
 
     assert "Raw ENVI missing" in str(excinfo.value)
+
+
+def test_stage_export_recovers_missing_raw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base = tmp_path / "workspace"
+    base.mkdir()
+
+    flight_stem = "NEON_D13_TEST_DP1_L001-1_20230101_directional_reflectance"
+    h5_path = _write_nonempty(base / f"{flight_stem}.h5")
+
+    work_dir = base / flight_stem
+    work_dir.mkdir()
+    corrected_img = _write_nonempty(
+        work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
+    )
+
+    created: dict[str, Path] = {}
+
+    def _fake_export(images, output_dir, brightness_offset=None, **_):
+        assert images == [str(h5_path)]
+        created["output_dir"] = Path(output_dir)
+        created["brightness_offset"] = brightness_offset
+        _write_nonempty(created["output_dir"] / f"{flight_stem}_envi.img")
+        _write_nonempty(created["output_dir"] / f"{flight_stem}_envi.hdr")
+
+    monkeypatch.setattr(
+        "cross_sensor_cal.pipelines.pipeline.neon_to_envi_no_hytools",
+        _fake_export,
+    )
+
+    raw_img, raw_hdr = stage_export_envi_from_h5(
+        base_folder=base,
+        product_code="DP1.30006.001",
+        flight_stem=flight_stem,
+        brightness_offset=0.42,
+        parallel_mode=False,
+    )
+
+    assert raw_img.exists()
+    assert raw_hdr.exists()
+    assert raw_img == work_dir / f"{flight_stem}_envi.img"
+    assert raw_hdr == work_dir / f"{flight_stem}_envi.hdr"
+    assert created["output_dir"] == work_dir
+    assert created["brightness_offset"] == 0.42
+    assert corrected_img.exists()
