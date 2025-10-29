@@ -9,11 +9,6 @@ from typing import Tuple
 
 import numpy as np
 
-try:  # pragma: no cover - tqdm is optional in minimal environments
-    from tqdm import tqdm
-except Exception:  # pragma: no cover - fall back to no progress bar
-    tqdm = None
-
 from .corrections import (
     apply_brdf_correct,
     apply_topo_correct,
@@ -21,6 +16,7 @@ from .corrections import (
 )
 from .envi_writer import EnviWriter
 from .neon_cube import NeonCube
+from .progress_utils import TileProgressReporter
 from .utils_checks import is_valid_envi_pair, is_valid_json
 
 
@@ -156,6 +152,8 @@ def apply_brdf_topo_core(
     params: dict,
     out_img_path: Path,
     out_hdr_path: Path,
+    interactive_mode: bool = True,
+    log_every: int = 25,
 ) -> None:
     """Run the BRDF+topographic correction using ``params`` into ``out_*`` paths."""
 
@@ -194,19 +192,14 @@ def apply_brdf_topo_core(
     chunk_y = 100
     chunk_x = 100
     total_chunks = cube.chunk_count(chunk_y=chunk_y, chunk_x=chunk_x)
-    bar = None
+    reporter = TileProgressReporter(
+        stage_name="BRDF+topo correction",
+        total_tiles=total_chunks,
+        interactive_mode=interactive_mode,
+        log_every=log_every,
+    )
 
     try:
-        if tqdm is not None:
-            total_for_bar = total_chunks if total_chunks > 0 else None
-            bar = tqdm(
-                total=total_for_bar,
-                desc="BRDF+topo correction",
-                unit="tile",
-                disable=False,
-            )
-
-        processed_chunks = 0
         for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(
             chunk_y=chunk_y, chunk_x=chunk_x
         ):
@@ -223,15 +216,10 @@ def apply_brdf_topo_core(
             )
             corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
             writer.write_chunk(corrected_chunk, ys, xs)
-            processed_chunks += 1
-            if bar is not None:
-                bar.update(1)
-        if bar is not None and processed_chunks == 0:
-            bar.refresh()
+            reporter.update(1)
     finally:
         writer.close()
-        if bar is not None:
-            bar.close()
+        reporter.close()
 
     if not is_valid_envi_pair(out_img_path, out_hdr_path):
         raise RuntimeError(f"BRDF/topo correction failed for {out_img_path}")
@@ -243,6 +231,8 @@ def apply_brdf_topo_correction(
     raw_hdr_path: Path,
     correction_json_path: Path,
     out_dir: Path,
+    interactive_mode: bool = True,
+    log_every: int = 25,
 ) -> Tuple[Path, Path]:
     """Apply BRDF + topographic correction using precomputed parameters."""
 
@@ -285,6 +275,8 @@ def apply_brdf_topo_correction(
         params=params,
         out_img_path=corrected_img_path,
         out_hdr_path=corrected_hdr_path,
+        interactive_mode=interactive_mode,
+        log_every=log_every,
     )
 
     logger.info("✅ Corrected ENVI saved: %s", corrected_img_path)
