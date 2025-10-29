@@ -63,6 +63,9 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
+
 import numpy as np
 
 # ---------------------------------------------------------------------
@@ -134,6 +137,35 @@ def _tile_progress(total: int, label: str):
     finally:
         if count < total:
             print()
+
+
+@contextmanager
+def _scoped_log_prefix(prefix: str):
+    """Temporarily wrap module logger methods to prefix messages."""
+
+    logger = logging.getLogger(__name__)
+
+    class _PrefixAdapter(logging.LoggerAdapter):
+        def process(self, msg, kwargs):
+            return f"[{prefix}] {msg}", kwargs
+
+    adapter = _PrefixAdapter(logger, {})
+    old_info = logger.info
+    old_warning = logger.warning
+    old_error = logger.error
+    old_debug = logger.debug
+
+    logger.info = adapter.info
+    logger.warning = adapter.warning
+    logger.error = adapter.error
+    logger.debug = adapter.debug
+    try:
+        yield
+    finally:
+        logger.info = old_info
+        logger.warning = old_warning
+        logger.error = old_error
+        logger.debug = old_debug
 
 
 def _pretty_line(line: str) -> str:
@@ -1668,17 +1700,20 @@ def go_forth_and_multiply(
     product_code: str = "DP1.30006.001",
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
+    max_workers: int = 2,
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
 
-    For each ``flight_stem`` this function performs the following steps:
+    Steps:
 
-      1. Ensure the NEON ``.h5`` is present locally via :func:`stage_download_h5`.
+      1. Ensure the NEON ``.h5`` for each ``flight_stem`` is present locally via
+         :func:`stage_download_h5` (performed serially).
       2. Run the per-flightline pipeline (ENVI export → corrections → resample →
-         Parquet) by delegating to :func:`process_one_flightline`.
+         Parquet) by delegating to :func:`process_one_flightline` in parallel.
 
     The function maintains canonical naming, idempotent stage behavior, and
-    optional legacy resample translation.
+    optional legacy resample translation. ``max_workers`` bounds parallelism so
+    callers can balance throughput against memory/CPU pressure.
     """
 
     base_path = Path(base_folder)
@@ -1686,6 +1721,7 @@ def go_forth_and_multiply(
 
     method_norm = (resample_method or "convolution").lower()
 
+    # Phase A: ensure downloads exist before spinning up heavy processing
     for flight_stem in flight_lines:
         stage_download_h5(
             base_folder=base_path,
@@ -1695,13 +1731,25 @@ def go_forth_and_multiply(
             flight_stem=flight_stem,
         )
 
-        process_one_flightline(
-            base_folder=base_path,
-            product_code=product_code,
-            flight_stem=flight_stem,
-            resample_method=method_norm,
-            brightness_offset=brightness_offset,
-        )
+    def _worker(flight_stem: str) -> str:
+        with _scoped_log_prefix(flight_stem):
+            process_one_flightline(
+                base_folder=base_path,
+                product_code=product_code,
+                flight_stem=flight_stem,
+                resample_method=method_norm,
+                brightness_offset=brightness_offset,
+            )
+        return flight_stem
+
+    futures = []
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for flight_stem in flight_lines:
+            futures.append(pool.submit(_worker, flight_stem))
+
+        for fut in as_completed(futures):
+            done_flight = fut.result()
+            logger.info("🎉 Finished pipeline for %s (parallel worker join)", done_flight)
 
     if method_norm in {"legacy", "resample"}:
         logger.info("🔁 Legacy resampling requested; translating corrected products.")
