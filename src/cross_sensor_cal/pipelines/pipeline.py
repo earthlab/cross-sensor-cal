@@ -164,7 +164,19 @@ def _stale_hint(step: str) -> str:
 
 def _belongs_to(line: str, path_obj: Path) -> bool:
     name = path_obj.name
-    return (line in name) or (line in str(path_obj.parent))
+    parent = str(path_obj.parent)
+
+    candidates = {line}
+    if "_reflectance" in line:
+        prefix, _, suffix = line.partition("_reflectance")
+        if prefix:
+            candidates.add(prefix)
+        if suffix:
+            candidates.add(f"{prefix}{suffix}")
+    if "_directional" in line:
+        candidates.add(line.replace("_directional", ""))
+
+    return any(candidate and (candidate in name or candidate in parent) for candidate in candidates)
 
 
 def _safe_total(total: int) -> int:
