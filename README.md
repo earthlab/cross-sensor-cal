@@ -6,7 +6,8 @@ Cross-Sensor Calibration provides a Python pipeline for processing NEON Airborne
 
 ## Quickstart
 
-> As of v2.0, cross-sensor-cal no longer depends on HyTools. All NEON handling is internal and GPL-compatible.
+> As of v2.2 the pipeline automatically downloads NEON HDF5 cubes, streams live progress
+> bars, and writes every derived product into a dedicated per-flightline folder.
 
 Install the lightweight base package:
 
@@ -14,24 +15,67 @@ Install the lightweight base package:
 pip install cross-sensor-cal
 ```
 
-Create a workspace and download a flight line:
-
-```bash
-mkdir -p data/SITE
-cscal-download SITE --year-month 2021-06 --flight FLIGHT_LINE --output data
-```
-
-Run the end-to-end processing pipeline (see `--help` for all options):
-
-```bash
-cscal-pipeline --help
-```
-
-If you need the full geospatial/hyperspectral toolchain (Rasterio, GeoPandas, Spectral, Ray, HDF5),
-install the optional extras:
+If you need the full geospatial/hyperspectral toolchain (Rasterio, GeoPandas, Spectral,
+Ray, HDF5), install the optional extras:
 
 ```bash
 pip install "cross-sensor-cal[full]"
+```
+
+### Quickstart Example
+
+```python
+from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+from pathlib import Path
+
+go_forth_and_multiply(
+    base_folder=Path("output_fresh"),
+    site_code="NIWO",
+    year_month="2023-08",
+    product_code="DP1.30006.001",
+    flight_lines=[
+        "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance",
+        "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance",
+    ],
+    max_workers=2,  # Run flightlines in parallel
+)
+```
+
+This automatically:
+
+- Downloads the required NEON HDF5 flightlines with live progress bars.
+- Converts each cube to ENVI with per-tile progress updates.
+- Builds BRDF + topo correction JSON.
+- Applies corrections, performs cross-sensor convolution, and exports Parquet tables.
+- Writes every derived product into a per-flightline subfolder while leaving the raw
+  `.h5` next to it for easy cleanup.
+
+### Example Output Layout
+
+```text
+output_fresh/
+├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance.h5
+├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance/
+│   ├── ..._envi.img/.hdr/.parquet
+│   ├── ..._brdfandtopo_corrected_envi.img/.hdr/.json/.parquet
+│   ├── ..._landsat_tm_envi.img/.hdr/.parquet
+│   ├── ..._micasense_envi.img/.hdr/.parquet
+│   └── NIWO_brdf_model.json
+├── NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance.h5
+└── NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/
+    └── <same pattern>
+```
+
+### Parallel Execution
+
+By default the pipeline processes multiple flight lines in sequence. To speed up
+workflows, set `max_workers` in `go_forth_and_multiply()` to run several in
+parallel. Each worker operates on its own subfolder and logs are prefixed with
+the flightline ID:
+
+```
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 🚀 Processing ...
+[NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance] 🚀 Processing ...
 ```
 
 Feature availability by install type:
@@ -49,32 +93,37 @@ Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line ident
 
 ## Pipeline overview
 
-Cross-Sensor Calibration processes every flight line through four ordered,
-restart-safe stages. Each stage writes ENVI (`.img/.hdr`) artifacts using
-canonical names from `get_flightline_products()` and logs whether it is doing
-work or skipping because valid outputs already exist.
+Cross-Sensor Calibration processes every flight line through an idempotent
+five-stage flow. Each stage streams a tqdm-style progress bar, logs with a
+scoped `[flight_stem]` prefix, and writes artifacts using canonical names from
+`get_flight_paths()`:
 
-1. **ENVI export** – Loads the NEON hyperspectral `.h5` flight line, logs the
-   target ENVI pair, and writes `<flight_stem>_envi.img/.hdr`. On rerun, if that
-   pair validates, the stage emits `✅ ENVI export already complete ... (skipping heavy export)`.
-2. **Correction JSON build** – Computes BRDF + topographic parameters and writes
-   `<flight_stem>_brdfandtopo_corrected_envi.json`. Valid JSON on disk triggers
-   `✅ Correction JSON already complete ... (skipping)`.
-3. **BRDF + topographic correction** – Uses the correction JSON to produce the
-   canonical reflectance cube
-   (`<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`). When the corrected ENVI
-   pair already validates the stage logs
-   `✅ BRDF+topo correction already complete ... (skipping)`.
-4. **Sensor convolution / resampling** – Reads only the corrected ENVI cube and
-   produces per-sensor ENVI pairs named `<flight_stem>_<sensor_name>_envi.img/.hdr`.
-   Each sensor logs either `✅ Wrote ...` when newly generated or `✅ ... already complete ... (skipping)`
-   when the product validates. The stage concludes with
-   `📊 Sensor convolution summary ... | succeeded=[...] skipped=[...] failed=[...]` and
-   then `🎉 Finished pipeline for <flight_stem>`.
+```mermaid
+flowchart LR
+    D[Download .h5]
+    E[Export ENVI]
+    J[Build BRDF+topo JSON]
+    C[Correct reflectance]
+    R[Resample + Parquet]
+    D --> E --> J --> C --> R
+```
 
-Every persistent output (raw, corrected, and sensor-specific) is an ENVI pair
-plus a single correction JSON. GeoTIFF products are no longer part of the
-advertised workflow.
+1. **Download** – `stage_download_h5()` ensures every NEON `.h5` exists before
+   heavy processing begins. Downloads show live byte counters and leave the
+   `.h5` beside the derived folder for easy cleanup.
+2. **ENVI export** – Converts the HDF5 cube into `<flight_stem>_envi.img/.hdr`
+   with chunk-level progress bars and restart-safe validation.
+3. **BRDF + topo JSON** – Computes correction parameters once and reuses valid
+   JSON on reruns.
+4. **BRDF + topo correction** – Applies the physical correction to produce the
+   canonical `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`, updating the
+   progress bar for each processed chunk.
+5. **Sensor resampling + Parquet** – Convolves the corrected cube to per-sensor
+   ENVI pairs and emits Parquet summaries into the same per-flightline folder.
+
+Helper utilities such as `get_flight_paths(base_folder, flight_stem)` and
+`_scoped_log_prefix(prefix)` keep each worker isolated, ensure consistent
+filenames, and make the parallel logs readable.
 
 ## Running the pipeline
 
@@ -86,16 +135,18 @@ go_forth_and_multiply(
     base_folder=Path("output_tester"),
     site_code="NIWO",
     year_month="2023-08",
+    product_code="DP1.30006.001",
     flight_lines=[
         "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance",
         "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance",
     ],
+    max_workers=4,
 )
 ```
 
-This will execute the four stages above for every flight line and leave ENVI
-products in `base_folder` using the canonical naming patterns. After the last
-flight line completes, the pipeline logs `✅ All requested flightlines processed.`.
+This executes the download → ENVI → BRDF+topo → resample pipeline for every
+flight line, streaming progress bars along the way. After the last worker
+finishes, the pipeline logs `✅ All requested flightlines processed.`.
 
 ### Idempotent / restart-safe
 
@@ -108,22 +159,21 @@ restart-safe:
 - If you crashed halfway through a long run, you can rerun the same call to resume where
   work is still needed.
 
-A realistic rerun for one flight line now looks like:
+A realistic rerun for one flight line now looks like (progress bars omitted for
+brevity):
 
 ```
-🚀 Processing NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance ...
-🔎 ENVI export target for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance is NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.hdr
-✅ ENVI export already complete for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.hdr (skipping heavy export)
-✅ Correction JSON already complete for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_brdfandtopo_corrected_envi.json (skipping)
-✅ BRDF+topo correction already complete for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_brdfandtopo_corrected_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_brdfandtopo_corrected_envi.hdr (skipping)
-🎯 Convolving corrected reflectance for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
-✅ Wrote landsat_tm product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_tm_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_tm_envi.hdr
-✅ Wrote landsat_etm+ product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_etm+_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_etm+_envi.hdr
-✅ Wrote landsat_oli product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli_envi.hdr
-✅ Wrote landsat_oli2 product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli2_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_oli2_envi.hdr
-✅ Wrote micasense product for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance -> NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_micasense_envi.img / NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_micasense_envi.hdr
-📊 Sensor convolution summary for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance | succeeded=['landsat_tm', 'landsat_etm+', 'landsat_oli', 'landsat_oli2', 'micasense'] skipped=[] failed=[]
-🎉 Finished pipeline for NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 🚀 Processing ...
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 📥 stage_download_h5() found existing .h5 (skipping)
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 🔎 ENVI export target is ..._envi.img / ..._envi.hdr
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] ✅ ENVI export already complete -> ..._envi.img / ..._envi.hdr (skipping heavy export)
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] ✅ Correction JSON already complete -> ..._brdfandtopo_corrected_envi.json (skipping)
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] ✅ BRDF+topo correction already complete -> ..._brdfandtopo_corrected_envi.img / ..._brdfandtopo_corrected_envi.hdr (skipping)
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 🎯 Convolving corrected reflectance
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] ✅ Wrote landsat_tm product -> ..._landsat_tm_envi.img / ..._landsat_tm_envi.hdr
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] ✅ Wrote micasense product -> ..._micasense_envi.img / ..._micasense_envi.hdr
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 📊 Sensor convolution summary | succeeded=['landsat_tm', 'micasense'] skipped=['landsat_etm+', 'landsat_oli', 'landsat_oli2'] failed=[]
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 🎉 Finished pipeline
 ```
 
 After all requested flight lines finish, the run concludes with
@@ -139,28 +189,26 @@ If it's already there, it logs "✅ ... skipping heavy export" and moves on.
 
 After a successful run you should see, for each flight line:
 
-- `<flight_stem>.h5`
-- `<flight_stem>_envi.img/.hdr`
-  (Uncorrected reflectance cube in ENVI format; first stage output)
-- `<flight_stem>_brdfandtopo_corrected_envi.json`
-  (JSON parameters used for physical correction)
-- `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`
-  (Corrected reflectance cube in ENVI format; used for all downstream work)
-- Per-sensor convolution/resample outputs (e.g. Landsat-style bandstacks). Each
-  sensor emits an ENVI pair named `<flight_stem>_<sensor>_envi.img` and
-  `<flight_stem>_<sensor>_envi.hdr`, generated directly from the corrected ENVI
-  cube. GeoTIFF sensor exports are no longer produced. Successful reruns may
-  log these as `skipped` when valid products already exist.
+- `<base_folder>/<flight_stem>.h5` at the workspace root for easy cleanup or
+  archival.
+- `<base_folder>/<flight_stem>/` containing every derived artifact:
+  - `<flight_stem>_envi.img/.hdr/.parquet` (uncorrected ENVI export + summary).
+  - `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr/.json/.parquet` (canonical
+    corrected cube).
+  - `<flight_stem>_<sensor>_envi.img/.hdr/.parquet` for each simulated sensor.
+  - Support files such as `NIWO_brdf_model.json` generated during correction.
 
-The `_brdfandtopo_corrected_envi` suffix is now guaranteed and should be considered
-the canonical "final" reflectance for analysis and downstream comparisons.
+The `_brdfandtopo_corrected_envi` suffix remains the canonical "final"
+reflectance for analysis and downstream comparisons; all scientific semantics
+are unchanged from previous releases.
 
 ### Pipeline stages
 
-Each stage uses `get_flightline_products()` to discover its inputs/outputs and
-performs a restart-safe validation before doing work. Valid ENVI pairs or JSON
-artifacts are reused rather than recomputed, ensuring reruns only fill in
-missing or corrupted pieces.
+Each stage uses `get_flight_paths()` to discover its inputs/outputs and performs
+restart-safe validation before doing work. Valid ENVI pairs or JSON artifacts
+are reused rather than recomputed, ensuring reruns only fill in missing or
+corrupted pieces. `_scoped_log_prefix()` keeps the console readable when several
+flightlines run concurrently.
 
 #### Sensor convolution / resampling behavior
 
@@ -184,16 +232,18 @@ This enforced order prevents earlier bugs where convolution could run on uncorre
 ### Developer notes
 
 - `process_one_flightline()` is now the canonical per-flightline workflow.
-- `go_forth_and_multiply()` loops over flightlines and handles options like `brightness_offset`.
-- `get_flightline_products()` is the single source of truth for naming and layout of:
+- `go_forth_and_multiply()` orchestrates downloads, per-flightline workers, and
+  options like `max_workers`.
+- `get_flight_paths()` is the single source of truth for naming and layout of:
   - the `.h5` input,
+  - the per-flightline working directory,
   - the uncorrected ENVI export,
   - the correction JSON,
   - the corrected ENVI (`*_brdfandtopo_corrected_envi.*`),
-  - the per-sensor convolution outputs.
+  - the per-sensor convolution outputs and Parquet summaries.
 
-  All pipeline stages call `get_flightline_products()` instead of guessing filenames.
-  If file naming changes, update `get_flightline_products()`, not each stage.
+  All pipeline stages call `get_flight_paths()` instead of guessing filenames.
+  If file naming changes, update `get_flight_paths()`, not each stage.
 
 - Each stage validates its outputs (non-empty files, parseable JSON, etc.). If outputs are valid,
   that stage logs "✅ ... skipping" and returns immediately.  

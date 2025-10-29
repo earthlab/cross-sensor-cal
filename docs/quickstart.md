@@ -32,20 +32,20 @@ pip install -e .
 
 ### 2. Prepare the Data Directory
 
-Create a dedicated base folder for this run. The pipeline will download all intermediate files into this directory.
+Create a dedicated base folder for this run. The pipeline will download each NEON `.h5` into this directory automatically and write derived products into per-flightline subfolders.
 
 ```bash
 BASE=data/NIWO_2023-08
 mkdir -p "$BASE"
 ```
 
-Optional: If you already have an HDF5 flight line, copy it into `"$BASE"`. Otherwise the download step will populate the directory.
+Optional: If you already have an HDF5 flight line, copy it into `"$BASE"`. Otherwise `stage_download_h5()` will stream it with a progress bar the first time you run the pipeline.
 
 ---
 
 ### 3. Run the CLI Pipeline
 
-The `jefe.py` script orchestrates downloading, converting, correcting, and resampling in the new four-stage order. The following command processes a single flight line and skips remote syncing.
+The `jefe.py` script orchestrates downloading, converting, correcting, and resampling in the refreshed five-stage order. The following command processes a single flight line and skips remote syncing.
 
 ```bash
 FLIGHT_LINE=NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
@@ -65,13 +65,14 @@ Key options:
 - `2023-08` – year and month of the flight.
 - `--no-sync` – generate results without uploading to iRODS.
 
-The script now reports idempotent skips such as:
+The script now shows per-flightline log prefixes and tqdm progress bars instead of the old `GRGRGR...` spam. Reruns surface
+idempotent skips such as:
 
 ```
-✅ ENVI export already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
-✅ Correction JSON already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
-✅ BRDF+topo correction already complete for NEON_D13_NIWO_DP1_L019-1..., skipping
-✅ Landsat 8 OLI convolution already complete, skipping
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 📥 stage_download_h5() found existing .h5 (skipping)
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] ✅ ENVI export already complete -> ..._envi.img / ..._envi.hdr (skipping heavy export)
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] ✅ BRDF+topo correction already complete -> ..._brdfandtopo_corrected_envi.img / ..._brdfandtopo_corrected_envi.hdr (skipping)
+[NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance] 📊 Sensor convolution summary | succeeded=['landsat_tm', 'micasense'] skipped=['landsat_oli'] failed=[]
 ```
 
 These messages confirm that outputs passed validation and the stage moved on without recomputing.
@@ -94,9 +95,11 @@ go_forth_and_multiply(
     base_folder=base,
     site_code="NIWO",
     year_month="2023-08",
+    product_code="DP1.30006.001",
     flight_lines=[
         "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance",
     ],
+    max_workers=2,
 )
 
 # Rerunning the exact command is safe; completed stages log "skipping" and are validated automatically.
@@ -120,13 +123,12 @@ data/
 └── NIWO_2023-08/
     ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance.h5
     ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance/
-    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_brdfandtopo_corrected_envi.img
-    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_brdfandtopo_corrected_envi.hdr
-    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_brdfandtopo_corrected_envi.json
-    │   ├── Convolution_Reflectance_Resample_Landsat_8_OLI/
-    │   │   └── NEON_D13_NIWO_DP1_L019-1_20230815_resampled_Landsat_8_OLI.img/.hdr
-    ├── envi_file_move_list.csv
-    └── logs/
+    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.img/.hdr/.parquet
+    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_brdfandtopo_corrected_envi.img/.hdr/.json/.parquet
+    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_landsat_tm_envi.img/.hdr/.parquet
+    │   ├── NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_micasense_envi.img/.hdr/.parquet
+    │   └── NIWO_brdf_model.json
+    └── <other flightlines follow the same pattern>
 ```
 
 The actual directory names may differ slightly depending on optional steps (e.g., polygon masking or resampling to additional sensors).
@@ -135,9 +137,9 @@ The actual directory names may differ slightly depending on optional steps (e.g.
 
 ### 6. Minimal Validation Checklist
 
-- `_brdfandtopo_corrected_envi.img/.hdr/.json` exist for each processed flightline.
-- Resampled products appear under the corresponding `Convolution_Reflectance_Resample_*` directories.
-- `envi_file_move_list.csv` lists every generated raster.
+- `<flight_stem>.h5` exists at the base folder root for each requested line.
+- `<base>/<flight_stem>/` contains ENVI, JSON, and Parquet products for that line.
+- Logs include `[flight_stem]` prefixes with `✅ ... (skipping)` when rerunning on completed stages.
 
 ---
 

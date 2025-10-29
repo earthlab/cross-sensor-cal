@@ -32,17 +32,18 @@ processing workflows.
 
 ```mermaid
 flowchart LR
-    R[Stage 01\nRaster Processing]
-    S[Stage 02\nSorting]
-    P[Stage 03\nPixel Extraction]
-    L[Stage 04\nSpectral Library]
-    M[Stage 05\nMESMA]
-    R --> S --> P --> L --> M
+    D[Download .h5]
+    E[Export ENVI]
+    J[Build BRDF+topo JSON]
+    C[Correct reflectance]
+    R[Resample + Parquet]
+    D --> E --> J --> C --> R
 ```
 
-Each stage consumes artifacts from the previous one and exports outputs that are
-ready for the next step. Dive into the dedicated pages in the pipeline section
-for detailed instructions, expected inputs, and generated products.
+Each stage emits tqdm-style progress bars, prefixes logs with the flightline ID,
+and writes outputs into `<base>/<flight_stem>/` while leaving the `.h5` at the
+workspace root for easy cleanup. Dive into the dedicated pages in the pipeline
+section for detailed instructions, expected inputs, and generated products.
 
 ## Need help?
 
