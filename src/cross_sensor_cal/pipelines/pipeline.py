@@ -351,58 +351,40 @@ def is_valid_envi_pair(img_path: Path, hdr_path: Path) -> bool:
         return False
 
 
-def _export_parquet_stage(flight_dir: Path, logger) -> None:
+def _export_parquet_stage(
+    *,
+    base_folder: Path,
+    product_code: str,
+    flight_stem: str,
+    logger,
+) -> None:
     """Stage: Parquet export for ENVI reflectance products."""
 
     from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
 
-    flight_dir = Path(flight_dir)
-    search_root = flight_dir
-    if not search_root.exists():
-        parent = flight_dir.parent
-        if parent.exists():
-            search_root = parent
-    if not search_root.exists():
-        logger.warning(
-            "⚠️ Cannot locate filesystem root for Parquet export: %s",
-            flight_dir,
-        )
-        return
+    paths = get_flightline_products(base_folder, product_code, flight_stem)
+    work_dir = Path(paths.get("work_dir", Path(base_folder) / flight_stem))
 
-    try:
-        envi_imgs = sorted(search_root.rglob("*_envi.img"))
-    except Exception as exc:  # pragma: no cover - filesystem issues
-        logger.warning(
-            "⚠️ Cannot discover ENVI products for Parquet export in %s: %s",
-            search_root,
-            exc,
-        )
-        return
-
-    flightline_hint = flight_dir.name.lower()
-
-    for img_path in envi_imgs:
+    if not work_dir.exists():
         try:
-            if (not img_path.exists()) or (img_path.stat().st_size == 0):
-                logger.warning(
-                    "⚠️ Cannot export Parquet for %s because .img is missing or empty",
-                    img_path.name,
-                )
-                continue
-        except Exception as exc:  # pragma: no cover - filesystem errors
+            work_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:  # pragma: no cover - best effort directory creation
             logger.warning(
-                "⚠️ Cannot inspect %s for Parquet export: %s",
-                img_path,
-                exc,
+                "⚠️ Cannot create Parquet work directory for %s: %s",
+                flight_stem,
+                work_dir,
             )
-            continue
 
-        if not flight_dir.exists():
-            name_lower = img_path.name.lower()
-            parent_lower = str(img_path.parent).lower()
-            if flightline_hint and flightline_hint not in name_lower and flightline_hint not in parent_lower:
-                continue
+    if not work_dir.exists():
+        logger.warning(
+            "⚠️ Cannot locate work directory for Parquet export: %s",
+            work_dir,
+        )
+        return
 
+    logger.info("📦 Parquet export for %s ...", flight_stem)
+
+    for img_path in sorted(work_dir.glob("*.img")):
         stem_lower = img_path.stem.lower()
         if any(keyword in stem_lower for keyword in ["mask", "angle", "qa", "quality"]):
             continue
@@ -425,7 +407,7 @@ from ..file_types import (
 )
 from ..envi_download import download_neon_file
 from ..neon_to_envi import neon_to_envi_no_hytools
-from ..utils.naming import get_flightline_products
+from ..utils.naming import get_flight_paths, get_flightline_products
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
@@ -1053,9 +1035,11 @@ def stage_download_h5(
 ) -> Path:
     """Ensure ``<base_folder>/<flight_stem>.h5`` exists and is non-empty."""
 
-    base_path = Path(base_folder)
+    flight_paths = get_flight_paths(base_folder, flight_stem)
+    base_path = Path(flight_paths["base"])
+    h5_path = Path(flight_paths["h5_path"])
+
     base_path.mkdir(parents=True, exist_ok=True)
-    h5_path = base_path / f"{flight_stem}.h5"
 
     try:
         if h5_path.exists() and h5_path.stat().st_size > 0:
@@ -1144,12 +1128,12 @@ def stage_export_envi_from_h5(
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
 
-    h5_path = paths["h5"]
+    h5_path = Path(paths["h5"])
+    work_dir = Path(paths.get("work_dir", Path(base_folder) / flight_stem))
     raw_img_path = Path(paths["raw_envi_img"])
     raw_hdr_path = Path(paths["raw_envi_hdr"])
 
-    base_folder = Path(base_folder)
-    base_folder.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
 
     # Announce what we *expect* the raw ENVI export to be called.
     logger.info(
@@ -1189,18 +1173,18 @@ def stage_export_envi_from_h5(
     )
 
     # Snapshot directory state BEFORE export so we can diff.
-    before_listing = {p.name: p for p in base_folder.glob("*")}
+    before_listing = {p.name: p for p in work_dir.glob("*")}
 
     # This is the heavy step that logs the NeonCube memory footprint and now
     # streams tile progress via tqdm (instead of the old "GRGRGR..." spam).
     neon_to_envi_no_hytools(
         images=[str(h5_path)],
-        output_dir=str(base_folder),
+        output_dir=str(work_dir),
         brightness_offset=brightness_offset,
     )
 
     # Snapshot AFTER export and collect the names of new files.
-    after_listing = {p.name: p for p in base_folder.glob("*")}
+    after_listing = {p.name: p for p in work_dir.glob("*")}
     created_names = sorted(
         name for name in after_listing.keys() if name not in before_listing
     )
@@ -1269,6 +1253,10 @@ def stage_build_and_write_correction_json(
 
     correction_json_path = Path(paths["correction_json"])
     h5_path = Path(paths["h5"])
+    work_dir = Path(paths.get("work_dir", correction_json_path.parent))
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    correction_json_path.parent.mkdir(parents=True, exist_ok=True)
 
     if is_valid_json(correction_json_path):
         logger.info(
@@ -1282,7 +1270,7 @@ def stage_build_and_write_correction_json(
         h5_path=h5_path,
         raw_img_path=raw_img_path,
         raw_hdr_path=raw_hdr_path,
-        base_folder=base_folder,
+        base_folder=work_dir,
         flight_stem=flight_stem,
         product_code=product_code,
     )
@@ -1325,6 +1313,10 @@ def stage_apply_brdf_topo_correction(
 
     corrected_img_path = Path(paths["corrected_img"])
     corrected_hdr_path = Path(paths["corrected_hdr"])
+    work_dir = Path(paths.get("work_dir", corrected_img_path.parent))
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    corrected_img_path.parent.mkdir(parents=True, exist_ok=True)
 
     if is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         logger.info(
@@ -1506,9 +1498,12 @@ def stage_convolve_all_sensors(
             )
             failed.append(sensor_name)
 
-    flight_dir = Path(corrected_img).parent / flight_stem
-    logger.info("📦 Parquet export for %s ...", flight_stem)
-    _export_parquet_stage(flight_dir, logger)
+    _export_parquet_stage(
+        base_folder=base_folder,
+        product_code=product_code,
+        flight_stem=flight_stem,
+        logger=logger,
+    )
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
     logger.info(
@@ -1555,6 +1550,9 @@ def process_one_flightline(
     """
 
     logger.info("🚀 Processing %s ...", flight_stem)
+
+    flight_paths = get_flight_paths(base_folder, flight_stem)
+    Path(flight_paths["work_dir"]).mkdir(parents=True, exist_ok=True)
 
     raw_img_path, raw_hdr_path = stage_export_envi_from_h5(
         base_folder=base_folder,

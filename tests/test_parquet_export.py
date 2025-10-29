@@ -77,18 +77,22 @@ class DummyLogger:
 
 
 def test_export_parquet_stage_creates_sidecars_for_all_envi(tmp_path: Path, monkeypatch) -> None:
-    corrected_img = tmp_path / "NEON_D13_SITE_20230815_brdfandtopo_corrected_envi.img"
-    corrected_hdr = tmp_path / "NEON_D13_SITE_20230815_brdfandtopo_corrected_envi.hdr"
+    flight_stem = "NEON_D13_SITE_20230815_directional_reflectance"
+    work_dir = tmp_path / flight_stem
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    corrected_img = work_dir / "NEON_D13_SITE_20230815_brdfandtopo_corrected_envi.img"
+    corrected_hdr = work_dir / "NEON_D13_SITE_20230815_brdfandtopo_corrected_envi.hdr"
     corrected_img.write_bytes(b"xx")
     corrected_hdr.write_bytes(b"hdr")
 
-    oli_img = tmp_path / "NEON_D13_SITE_20230815_directional_reflectance_landsat_oli_envi.img"
-    oli_hdr = tmp_path / "NEON_D13_SITE_20230815_directional_reflectance_landsat_oli_envi.hdr"
+    oli_img = work_dir / "NEON_D13_SITE_20230815_directional_reflectance_landsat_oli_envi.img"
+    oli_hdr = work_dir / "NEON_D13_SITE_20230815_directional_reflectance_landsat_oli_envi.hdr"
     oli_img.write_bytes(b"yy")
     oli_hdr.write_bytes(b"hdr")
 
-    mask_img = tmp_path / "NEON_D13_SITE_20230815_directional_reflectance_cloud_mask_envi.img"
-    mask_hdr = tmp_path / "NEON_D13_SITE_20230815_directional_reflectance_cloud_mask_envi.hdr"
+    mask_img = work_dir / "NEON_D13_SITE_20230815_directional_reflectance_cloud_mask_envi.img"
+    mask_hdr = work_dir / "NEON_D13_SITE_20230815_directional_reflectance_cloud_mask_envi.hdr"
     mask_img.write_bytes(b"zz")
     mask_hdr.write_bytes(b"hdr")
 
@@ -104,11 +108,22 @@ def test_export_parquet_stage_creates_sidecars_for_all_envi(tmp_path: Path, monk
     monkeypatch.setattr(px, "ensure_parquet_for_envi", fake_ensure)
 
     logger = DummyLogger()
-    _export_parquet_stage(tmp_path, logger)
+    _export_parquet_stage(
+        base_folder=tmp_path,
+        product_code="DP1.30006.001",
+        flight_stem=flight_stem,
+        logger=logger,
+    )
 
-    assert (tmp_path / "NEON_D13_SITE_20230815_brdfandtopo_corrected_envi.parquet").exists()
-    assert (tmp_path / "NEON_D13_SITE_20230815_directional_reflectance_landsat_oli_envi.parquet").exists()
-    assert not (tmp_path / "NEON_D13_SITE_20230815_directional_reflectance_cloud_mask_envi.parquet").exists()
+    assert (work_dir / "NEON_D13_SITE_20230815_brdfandtopo_corrected_envi.parquet").exists()
+    assert (
+        work_dir
+        / "NEON_D13_SITE_20230815_directional_reflectance_landsat_oli_envi.parquet"
+    ).exists()
+    assert not (
+        work_dir
+        / "NEON_D13_SITE_20230815_directional_reflectance_cloud_mask_envi.parquet"
+    ).exists()
 
     assert corrected_img.name in calls
     assert oli_img.name in calls
