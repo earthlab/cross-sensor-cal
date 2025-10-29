@@ -59,7 +59,6 @@ import os
 import re
 import subprocess
 import sys
-import traceback
 from io import StringIO
 from pathlib import Path
 from typing import Any, Sequence
@@ -1163,6 +1162,10 @@ def stage_convolve_all_sensors(
 
     method_norm = (resample_method or "convolution").lower()
 
+    succeeded: list[str] = []
+    skipped: list[str] = []
+    failed: list[str] = []
+
     for sensor_name, out_path in sensor_products.items():
         out_path = Path(out_path)
         out_hdr_path = out_path.with_suffix(".hdr")
@@ -1174,6 +1177,7 @@ def stage_convolve_all_sensors(
                 flight_stem,
                 out_path.name,
             )
+            skipped.append(sensor_name)
             continue
 
         resolved_name, sensor_entry = _safe_resolve_sensor_entry(sensor_name, sensor_library)
@@ -1183,6 +1187,7 @@ def stage_convolve_all_sensors(
                 sensor_name,
                 flight_stem,
             )
+            failed.append(sensor_name)
             continue
 
         try:
@@ -1204,10 +1209,15 @@ def stage_convolve_all_sensors(
                 corrected_hdr_path=corrected_hdr,
             )
 
-            if not _nonempty_file(out_path):
-                raise RuntimeError(
-                    f"{sensor_name} resample produced empty file for {flight_stem}: {out_path}"
+            if not (_nonempty_file(out_path) and _nonempty_file(out_hdr_path)):
+                logger.error(
+                    "⚠️  %s resample produced empty file for %s: %s",
+                    sensor_name,
+                    flight_stem,
+                    out_path,
                 )
+                failed.append(sensor_name)
+                continue
 
             logger.info(
                 "✅ Wrote %s product for %s -> %s",
@@ -1215,15 +1225,29 @@ def stage_convolve_all_sensors(
                 flight_stem,
                 out_path.name,
             )
+            succeeded.append(sensor_name)
 
-        except Exception:
-            logger.error(
-                "⚠️  Resample failed for %s (%s) -> expected %s\n%s",
-                corrected_img.name,
+        except Exception:  # noqa: BLE001 - want to log full traceback
+            logger.exception(
+                "⚠️  Resample failed for %s (%s) -> expected %s",
+                flight_stem,
                 sensor_name,
                 out_path,
-                traceback.format_exc(),
             )
+            failed.append(sensor_name)
+
+    logger.info(
+        "📊 Sensor convolution summary for %s | succeeded=%s skipped=%s failed=%s",
+        flight_stem,
+        succeeded,
+        skipped,
+        failed,
+    )
+
+    if not succeeded and not skipped:
+        raise RuntimeError(
+            f"All sensor resamples failed or were undefined for {flight_stem}. Failed sensors: {failed}"
+        )
 
     logger.info("🎉 Finished pipeline for %s", flight_stem)
 
@@ -1288,7 +1312,6 @@ def process_one_flightline(
             f"Corrected ENVI invalid for {flight_stem}: {corrected_img_path}"
         )
 
-    logger.info("🎯 Convolving corrected reflectance for %s", flight_stem)
     stage_convolve_all_sensors(
         base_folder=base_folder,
         product_code=product_code,
@@ -1297,8 +1320,6 @@ def process_one_flightline(
         corrected_hdr_path=corrected_hdr_path,
         resample_method=resample_method,
     )
-
-    logger.info("🎉 Finished pipeline for %s", flight_stem)
 
 
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
