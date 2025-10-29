@@ -11,6 +11,8 @@
 - Logging now surfaces "✅ ... skipping" when a stage is already complete and valid.
 - Automatic recovery from partial runs: if a previous run was interrupted mid-stage,
   the pipeline will re-run *just that* stage to repair missing/corrupt outputs.
+- Per-sensor convolution now emits a summary log of succeeded, skipped, and failed sensors,
+  tolerating partial success while still reporting detailed outcomes.
 
 ### Changed
 - The pipeline no longer guesses filenames on the fly. All stage logic now pulls canonical
@@ -20,6 +22,8 @@
   on uncorrected reflectance or raw `.h5`.
 - The correction JSON (`*_brdfandtopo_corrected_envi.json`) is now explicitly
   generated before the BRDF/topo correction step. The correction step reads it.
+- Legacy GeoTIFF per-sensor exports were removed; every persistent sensor output is now an ENVI
+  `.img/.hdr` pair.
 
 ### Fixed
 - Removed a race/ordering bug where convolution could be attempted before BRDF+topo
