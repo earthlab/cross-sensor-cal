@@ -91,18 +91,26 @@ def test_pipeline_idempotence_skip_behavior(
     flight_stem = "NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance"
 
     h5_path = _write_nonempty(base / f"{flight_stem}.h5")
-    raw_img = _write_nonempty(base / f"{flight_stem}_envi.img")
-    raw_hdr = _write_nonempty(base / f"{flight_stem}_envi.hdr")
-    corrected_img = _write_nonempty(base / f"{flight_stem}_brdfandtopo_corrected_envi.img")
-    corrected_hdr = _write_nonempty(base / f"{flight_stem}_brdfandtopo_corrected_envi.hdr")
-    correction_json = base / f"{flight_stem}_brdfandtopo_corrected_envi.json"
+
+    work_dir = base / flight_stem
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_img = _write_nonempty(work_dir / f"{flight_stem}_envi.img")
+    raw_hdr = _write_nonempty(work_dir / f"{flight_stem}_envi.hdr")
+    corrected_img = _write_nonempty(
+        work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
+    )
+    corrected_hdr = _write_nonempty(
+        work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.hdr"
+    )
+    correction_json = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.json"
     correction_json.write_text(json.dumps({"ok": True}))
 
     sensors = ["landsat_tm", "landsat_etm+", "landsat_oli", "landsat_oli2", "micasense"]
     sensor_pairs = []
     for sensor in sensors:
-        sensor_img = _write_nonempty(base / f"{flight_stem}_{sensor}_envi.img")
-        sensor_hdr = _write_nonempty(base / f"{flight_stem}_{sensor}_envi.hdr")
+        sensor_img = _write_nonempty(work_dir / f"{flight_stem}_{sensor}_envi.img")
+        sensor_hdr = _write_nonempty(work_dir / f"{flight_stem}_{sensor}_envi.hdr")
         sensor_pairs.extend([sensor_img, sensor_hdr])
 
     preexisting_paths = [
