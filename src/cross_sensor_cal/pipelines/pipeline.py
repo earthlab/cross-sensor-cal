@@ -62,7 +62,7 @@ import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 import numpy as np
 
@@ -308,10 +308,6 @@ def is_valid_envi_pair(img_path: Path, hdr_path: Path) -> bool:
     except Exception:
         return False
 
-from cross_sensor_cal.brdf_topo import (
-    apply_brdf_topo_core,
-    build_correction_parameters_dict,
-)
 from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.utils import get_package_data_path
 from cross_sensor_cal.utils_checks import is_valid_json
@@ -323,12 +319,19 @@ from ..file_types import (
     NEONReflectanceResampledENVIFile,
 )
 from ..parquet_export import ensure_parquet_for_envi
-from ..neon_to_envi import neon_to_envi_no_hytools
 from ..utils.naming import get_flightline_products
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
 from ..file_sort import generate_file_move_list
+
+
+if TYPE_CHECKING:  # pragma: no cover - only for static analyzers
+    from cross_sensor_cal.brdf_topo import (
+        apply_brdf_topo_core,
+        build_correction_parameters_dict,
+    )
+    from cross_sensor_cal.neon_to_envi import neon_to_envi_no_hytools
 
 
 def _format_envi_scalar(value: object) -> str:
@@ -913,6 +916,8 @@ def stage_export_envi_from_h5(
 
     # This is the heavy step that currently logs
     # "NeonCube: loaded ... ~23.07 GB" and "Processing chunks: GRGRGR..."
+    from cross_sensor_cal.neon_to_envi import neon_to_envi_no_hytools
+
     neon_to_envi_no_hytools(
         images=[str(h5_path)],
         output_dir=str(base_folder),
@@ -998,6 +1003,8 @@ def stage_build_and_write_correction_json(
         )
         return correction_json_path
 
+    from cross_sensor_cal.brdf_topo import build_correction_parameters_dict
+
     params = build_correction_parameters_dict(
         h5_path=h5_path,
         raw_img_path=raw_img_path,
@@ -1059,6 +1066,8 @@ def stage_apply_brdf_topo_correction(
         raise RuntimeError(
             f"Missing or invalid correction JSON for {flight_stem}: {correction_json_path}"
         )
+
+    from cross_sensor_cal.brdf_topo import apply_brdf_topo_core
 
     with open(correction_json_path, "r", encoding="utf-8") as f:
         params = json.load(f)
