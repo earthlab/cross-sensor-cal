@@ -47,6 +47,28 @@ Feature availability by install type:
 
 Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line identifier.
 
+## Pipeline overview
+
+Cross-Sensor Calibration processes every flight line through four ordered stages.
+Each stage writes ENVI (`.img/.hdr`) artifacts using canonical names from
+`get_flightline_products()` and will skip expensive work on rerun if its
+outputs already validate.
+
+1. **ENVI export** – Loads the NEON hyperspectral `.h5` flight line and
+   writes the uncorrected ENVI cube (`<flight_stem>_envi.img/.hdr`).
+2. **Correction JSON build** – Computes BRDF + topographic correction
+   parameters and saves them to `<flight_stem>_brdfandtopo_corrected_envi.json`.
+3. **BRDF + topographic correction** – Uses the correction JSON to produce the
+   canonical reflectance cube
+   (`<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`). All downstream work
+   consumes this corrected product.
+4. **Sensor convolution / resampling** – Reads ONLY the corrected ENVI cube to
+   generate per-sensor ENVI pairs named
+   `<flight_stem>_<sensor_name>_envi.img/.hdr`.
+
+Every persistent output (raw, corrected, and sensor-specific) is an ENVI
+pair. The pipeline no longer emits GeoTIFF products.
+
 ## Running the pipeline
 
 ```python
@@ -64,18 +86,13 @@ go_forth_and_multiply(
 )
 ```
 
-This will:
-
-1. Export the NEON hyperspectral `.h5` cube for each flightline into ENVI format.
-2. Generate a BRDF + topographic correction parameter JSON.
-3. Apply BRDF + topographic correction to produce:
-   `*_brdfandtopo_corrected_envi.img/.hdr`
-4. Convolve the corrected reflectance into a set of sensor-like products
-   (e.g. Landsat-style bands).
+This will execute the four stages above for every flight line and leave ENVI
+products in `base_folder` using the canonical naming patterns.
 
 ### Idempotent / restart-safe
 
-You can safely rerun the same command. The pipeline is stage-aware:
+You can safely rerun the same command. The pipeline is stage-aware and
+restart-safe:
 
 - If a stage already produced a valid output, that stage is skipped.
 - If an output is missing or looks corrupted/empty, only that stage is recomputed.
@@ -91,6 +108,7 @@ Typical log output on a rerun looks like:
 12:01:05 | INFO | ✅ BRDF+topo correction already complete for ..._brdfandtopo_corrected_envi.img/.hdr (skipping)
 12:01:06 | INFO | 🎯 Convolving corrected reflectance for ...
 12:01:06 | INFO | ✅ landsat_oli product already complete ... (skipping)
+12:01:06 | INFO | 📊 Sensor convolution summary for ... | succeeded=['landsat_oli'] skipped=['landsat_tm'] failed=[]
 12:01:06 | INFO | 🎉 Finished pipeline for NEON_D13_...
 ```
 
@@ -111,44 +129,21 @@ After a successful run you should see, for each flight line:
   (JSON parameters used for physical correction)
 - `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`
   (Corrected reflectance cube in ENVI format; used for all downstream work)
-- Per-sensor convolution/resample outputs (e.g. Landsat-like products). Each
+- Per-sensor convolution/resample outputs (e.g. Landsat-style bandstacks). Each
   sensor emits an ENVI pair named `<flight_stem>_<sensor>_envi.img` and
   `<flight_stem>_<sensor>_envi.hdr`, generated directly from the corrected ENVI
-  cube. GeoTIFF sensor exports are no longer produced.
+  cube. GeoTIFF sensor exports are no longer produced. Successful reruns may
+  log these as `skipped` when valid products already exist.
 
 The `_brdfandtopo_corrected_envi` suffix is now guaranteed and should be considered
 the canonical "final" reflectance for analysis and downstream comparisons.
 
 ### Pipeline stages
 
-The pipeline is now organized into four explicit stages that always run in order:
-
-1. **ENVI Export**  
-   Converts the NEON `.h5` directional reflectance cube to ENVI (`*_envi.img/.hdr`).  
-   Large and expensive. Skipped on rerun if valid output exists.
-
-2. **Correction JSON Build**  
-   Computes and writes `<flight_stem>_brdfandtopo_corrected_envi.json`, which contains
-   BRDF and topographic correction parameters.  
-   This file is required for the next step.
-
-3. **BRDF + Topographic Correction**  
-   Uses the correction JSON to generate physically corrected reflectance in ENVI format:  
-   `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`.  
-   These corrected products are now the "truth" for downstream use.
-
-4. **Sensor Convolution / Resampling**
-   Convolves the corrected reflectance cube to sensor-specific bandsets
-   (e.g. Landsat TM, Landsat OLI, MicaSense multispectral stacks).
-   Every sensor product is generated from the BRDF + topo corrected ENVI cube—never
-   from the raw `.h5`—and each target ENVI pair
-   (`<flight_stem>_<sensor>_envi.img/.hdr`) is checked before work begins.
-   If a valid ENVI pair already exists, the stage logs
-   `✅ <sensor> product already complete ... (skipping)` and moves on.
-   If a sensor definition is missing from the internal library, the pipeline logs
-   a warning and skips that sensor instead of aborting the run.
-   Successful resamples must produce non-empty ENVI pairs; invalid artifacts are
-   logged as failures and summarized at the end of the stage.
+Each stage uses `get_flightline_products()` to discover its inputs/outputs and
+performs a restart-safe validation before doing work. Valid ENVI pairs or JSON
+artifacts are reused rather than recomputed, ensuring reruns only fill in
+missing or corrupted pieces.
 
 #### Sensor convolution / resampling behavior
 
