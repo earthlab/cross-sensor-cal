@@ -407,6 +407,7 @@ from ..file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceResampledENVIFile,
 )
+from ..envi_download import download_neon_file
 from ..neon_to_envi import neon_to_envi_no_hytools
 from ..utils.naming import get_flightline_products
 from ..standard_resample import translate_to_other_sensors
@@ -1026,6 +1027,81 @@ def write_resampled_envi_cube(
             logger.exception("Failed to rename resampled header to %s", out_hdr_path)
             raise
 
+
+def stage_download_h5(
+    base_folder: Path,
+    site_code: str,
+    year_month: str,
+    product_code: str,
+    flight_stem: str,
+) -> Path:
+    """Ensure ``<base_folder>/<flight_stem>.h5`` exists and is non-empty."""
+
+    base_path = Path(base_folder)
+    base_path.mkdir(parents=True, exist_ok=True)
+    h5_path = base_path / f"{flight_stem}.h5"
+
+    try:
+        if h5_path.exists() and h5_path.stat().st_size > 0:
+            logger.info(
+                "⏭️  Skipped download for %s (already present: %s)",
+                flight_stem,
+                h5_path.name,
+            )
+            return h5_path
+    except OSError as exc:  # pragma: no cover - filesystem permission issues
+        raise FileNotFoundError(
+            f"Unable to access existing HDF5 file {h5_path}: {exc}"
+        ) from exc
+
+    logger.info(
+        "🌐 Downloading %s (%s, %s) into %s ...",
+        flight_stem,
+        site_code,
+        year_month,
+        h5_path,
+    )
+
+    try:
+        downloaded_path, _ = download_neon_file(
+            site_code=site_code,
+            product_code=product_code,
+            year_month=year_month,
+            flight_line=flight_stem,
+            out_dir=base_path,
+            output_path=h5_path,
+        )
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            "Could not locate NEON flight line "
+            f"{flight_stem} ({product_code}, {site_code}, {year_month})."
+        ) from exc
+    except Exception as exc:  # pragma: no cover - network/filesystem errors
+        raise FileNotFoundError(
+            f"Failed to download NEON HDF5 for {flight_stem}: {exc}"
+        ) from exc
+
+    if downloaded_path != h5_path and downloaded_path.exists():
+        try:
+            if h5_path.exists():
+                h5_path.unlink()
+            downloaded_path.replace(h5_path)
+        except Exception as exc:  # pragma: no cover - rename failure
+            raise FileNotFoundError(
+                f"Unable to move downloaded file into {h5_path}: {exc}"
+            ) from exc
+
+    if (not h5_path.exists()) or h5_path.stat().st_size <= 0:
+        raise FileNotFoundError(
+            "Download step did not produce a valid HDF5: "
+            f"{h5_path}\nExpected NEON flight line {flight_stem} "
+            f"({product_code}, {site_code}, {year_month})."
+        )
+
+    logger.info("✅ Download complete for %s → %s", flight_stem, h5_path.name)
+    return h5_path
+
+
 def stage_export_envi_from_h5(
     base_folder: Path,
     product_code: str,
@@ -1579,16 +1655,16 @@ def go_forth_and_multiply(
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
 ) -> None:
-    """
-    Top-level driver that users call.
-    This now:
-      - ensures correct stage order,
-      - uses canonical naming everywhere,
-      - skips work when outputs are already valid,
-      - regenerates any missing/partial work safely,
-      - supports resample_method ("convolution", "legacy", etc.)
-        and brightness_offset passthrough.
-      - exports Parquet sidecars for reflectance ENVI products once sensor cubes exist.
+    """High-level orchestrator for processing multiple flight lines.
+
+    For each ``flight_stem`` this function performs the following steps:
+
+      1. Ensure the NEON ``.h5`` is present locally via :func:`stage_download_h5`.
+      2. Run the per-flightline pipeline (ENVI export → corrections → resample →
+         Parquet) by delegating to :func:`process_one_flightline`.
+
+    The function maintains canonical naming, idempotent stage behavior, and
+    optional legacy resample translation.
     """
 
     base_path = Path(base_folder)
@@ -1597,6 +1673,14 @@ def go_forth_and_multiply(
     method_norm = (resample_method or "convolution").lower()
 
     for flight_stem in flight_lines:
+        stage_download_h5(
+            base_folder=base_path,
+            site_code=site_code,
+            year_month=year_month,
+            product_code=product_code,
+            flight_stem=flight_stem,
+        )
+
         process_one_flightline(
             base_folder=base_path,
             product_code=product_code,
