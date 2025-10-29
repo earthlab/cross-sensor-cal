@@ -277,13 +277,31 @@ def _silence_noise(enabled: bool):
         except Exception:  # pragma: no cover - flush best effort
             pass
 
+def is_valid_envi_pair(img_path: Path, hdr_path: Path) -> bool:
+    """Return ``True`` when both ENVI files exist and are non-empty."""
+
+    try:
+        img = Path(img_path)
+        hdr = Path(hdr_path)
+        if not (img.exists() and img.is_file()):
+            return False
+        if not (hdr.exists() and hdr.is_file()):
+            return False
+        if img.stat().st_size <= 0:
+            return False
+        if hdr.stat().st_size <= 0:
+            return False
+        return True
+    except Exception:
+        return False
+
 from cross_sensor_cal.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
 from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.utils import get_package_data_path
-from cross_sensor_cal.utils_checks import _nonempty_file, is_valid_envi_pair, is_valid_json
+from cross_sensor_cal.utils_checks import is_valid_json
 
 from ..file_types import (
     NEONReflectanceBRDFCorrectedENVIFile,
@@ -862,6 +880,49 @@ def write_resampled_product(
         out_stem_resampled=out_stem,
     )
 
+
+def write_resampled_envi_cube(
+    bandstack_array: dict[str, np.ndarray],
+    img_path: Path,
+    hdr_path: Path,
+    *,
+    corrected_hdr_path: Path,
+) -> None:
+    """Persist a resampled sensor bandstack to ENVI ``.img``/``.hdr`` files."""
+
+    out_img_path = Path(img_path)
+    out_hdr_path = Path(hdr_path)
+    out_img_path.parent.mkdir(parents=True, exist_ok=True)
+    out_hdr_path.parent.mkdir(parents=True, exist_ok=True)
+
+    out_stem = out_img_path.with_suffix("")
+    convolve_resample_product(
+        corrected_hdr_path=corrected_hdr_path,
+        sensor_srf=bandstack_array,
+        out_stem_resampled=out_stem,
+    )
+
+    expected_img = out_stem.with_suffix(".img")
+    expected_hdr = out_stem.with_suffix(".hdr")
+
+    if expected_img != out_img_path and expected_img.exists():
+        try:
+            if out_img_path.exists():
+                out_img_path.unlink()
+            expected_img.replace(out_img_path)
+        except Exception:
+            logger.exception("Failed to rename resampled image to %s", out_img_path)
+            raise
+
+    if expected_hdr != out_hdr_path and expected_hdr.exists():
+        try:
+            if out_hdr_path.exists():
+                out_hdr_path.unlink()
+            expected_hdr.replace(out_hdr_path)
+        except Exception:
+            logger.exception("Failed to rename resampled header to %s", out_hdr_path)
+            raise
+
 def stage_export_envi_from_h5(
     base_folder: Path,
     product_code: str,
@@ -1120,33 +1181,32 @@ def stage_convolve_all_sensors(
     base_folder: Path,
     product_code: str,
     flight_stem: str,
-    corrected_img_path: Path,
-    corrected_hdr_path: Path,
+    corrected_img_path: Path | None = None,
+    corrected_hdr_path: Path | None = None,
     resample_method: str | None = "convolution",
 ):
-    """
-    Convolve/resample ONLY the corrected BRDF+topo ENVI to target sensors.
-
-    Uses canonical sensor output paths from get_flightline_products().
-    Skips any sensor product that already exists and is non-empty.
-
-    Logs failures in terms of the corrected product, not the .h5.
-    """
+    """Convolve the BRDF+topo corrected ENVI cube into sensor bandstacks."""
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
+
     corrected_img = Path(paths["corrected_img"])
     corrected_hdr = Path(paths["corrected_hdr"])
-    corrected_img_arg = Path(corrected_img_path)
-    corrected_hdr_arg = Path(corrected_hdr_path)
-    if corrected_img_arg != corrected_img or corrected_hdr_arg != corrected_hdr:
-        corrected_img = corrected_img_arg
-        corrected_hdr = corrected_hdr_arg
-    sensor_products = paths.get("sensor_products", {})
+
+    if corrected_img_path is not None:
+        corrected_img = Path(corrected_img_path)
+    if corrected_hdr_path is not None:
+        corrected_hdr = Path(corrected_hdr_path)
+
+    sensor_products_raw = paths.get("sensor_products", {})
+    sensor_products: dict[str, dict[str, Path]] = {}
+    if isinstance(sensor_products_raw, dict):
+        for key, value in sensor_products_raw.items():
+            if isinstance(value, dict):
+                sensor_products[key] = value
 
     if not is_valid_envi_pair(corrected_img, corrected_hdr):
         raise FileNotFoundError(
-            f"Corrected ENVI missing or invalid for {flight_stem}: "
-            f"{corrected_img}, {corrected_hdr}"
+            f"Corrected ENVI missing or invalid for {flight_stem}: {corrected_img}, {corrected_hdr}"
         )
 
     logger.info("🎯 Convolving corrected reflectance for %s", flight_stem)
@@ -1166,16 +1226,29 @@ def stage_convolve_all_sensors(
     skipped: list[str] = []
     failed: list[str] = []
 
-    for sensor_name, out_path in sensor_products.items():
-        out_path = Path(out_path)
-        out_hdr_path = out_path.with_suffix(".hdr")
+    for sensor_name, out_pair in sensor_products.items():
+        out_img_path = out_pair.get("img")
+        out_hdr_path = out_pair.get("hdr")
 
-        if _nonempty_file(out_path) and _nonempty_file(out_hdr_path):
-            logger.info(
-                "✅ %s product already complete for %s -> %s (skipping)",
+        if out_img_path is None or out_hdr_path is None:
+            logger.warning(
+                "⚠️  Sensor %s output paths are undefined; skipping for %s",
                 sensor_name,
                 flight_stem,
-                out_path.name,
+            )
+            failed.append(sensor_name)
+            continue
+
+        out_img = Path(out_img_path)
+        out_hdr = Path(out_hdr_path)
+
+        if is_valid_envi_pair(out_img, out_hdr):
+            logger.info(
+                "✅ %s product already complete for %s -> %s / %s (skipping)",
+                sensor_name,
+                flight_stem,
+                out_img.name,
+                out_hdr.name,
             )
             skipped.append(sensor_name)
             continue
@@ -1191,7 +1264,7 @@ def stage_convolve_all_sensors(
             continue
 
         try:
-            srfs = resample_to_sensor_bands(
+            bandstack_array = resample_to_sensor_bands(
                 corrected_img_path=corrected_img,
                 corrected_hdr_path=corrected_hdr,
                 sensor_name=resolved_name,
@@ -1201,38 +1274,39 @@ def stage_convolve_all_sensors(
                 sensor_library=sensor_library,
             )
 
-            write_resampled_product(
-                arr=srfs,
-                out_path=out_path,
-                sensor_name=sensor_name,
-                flight_stem=flight_stem,
+            write_resampled_envi_cube(
+                bandstack_array,
+                out_img,
+                out_hdr,
                 corrected_hdr_path=corrected_hdr,
             )
 
-            if not (_nonempty_file(out_path) and _nonempty_file(out_hdr_path)):
+            if not is_valid_envi_pair(out_img, out_hdr):
                 logger.error(
-                    "⚠️  %s resample produced empty file for %s: %s",
+                    "⚠️  %s resample produced invalid ENVI pair for %s: %s / %s",
                     sensor_name,
                     flight_stem,
-                    out_path,
+                    out_img,
+                    out_hdr,
                 )
                 failed.append(sensor_name)
-                continue
-
-            logger.info(
-                "✅ Wrote %s product for %s -> %s",
-                sensor_name,
-                flight_stem,
-                out_path.name,
-            )
-            succeeded.append(sensor_name)
+            else:
+                logger.info(
+                    "✅ Wrote %s product for %s -> %s / %s",
+                    sensor_name,
+                    flight_stem,
+                    out_img.name,
+                    out_hdr.name,
+                )
+                succeeded.append(sensor_name)
 
         except Exception:  # noqa: BLE001 - want to log full traceback
             logger.exception(
-                "⚠️  Resample failed for %s (%s) -> expected %s",
+                "⚠️  Resample threw for %s (%s) -> intended %s / %s",
                 flight_stem,
                 sensor_name,
-                out_path,
+                out_img,
+                out_hdr,
             )
             failed.append(sensor_name)
 
@@ -1244,7 +1318,7 @@ def stage_convolve_all_sensors(
         failed,
     )
 
-    if not succeeded and not skipped:
+    if len(succeeded) == 0 and len(skipped) == 0:
         raise RuntimeError(
             f"All sensor resamples failed or were undefined for {flight_stem}. Failed sensors: {failed}"
         )

@@ -67,12 +67,19 @@ def get_flightline_products(
     corrected_hdr = base_folder / f"{flight_stem}_brdfandtopo_corrected_envi.hdr"
     correction_json = base_folder / f"{flight_stem}_brdfandtopo_corrected_envi.json"
 
-    sensor_products: Dict[str, Path] = {
-        "landsat_tm": base_folder / f"{flight_stem}_landsat_tm.tif",
-        "landsat_etm+": base_folder / f"{flight_stem}_landsat_etm+.tif",
-        "landsat_oli": base_folder / f"{flight_stem}_landsat_oli.tif",
-        "landsat_oli2": base_folder / f"{flight_stem}_landsat_oli2.tif",
-        "micasense": base_folder / f"{flight_stem}_micasense.tif",
+    def _sensor_pair(sensor_name: str) -> Dict[str, Path]:
+        stem = f"{flight_stem}_{sensor_name}_envi"
+        return {
+            "img": base_folder / f"{stem}.img",
+            "hdr": base_folder / f"{stem}.hdr",
+        }
+
+    sensor_products: Dict[str, Dict[str, Path]] = {
+        "landsat_tm": _sensor_pair("landsat_tm"),
+        "landsat_etm+": _sensor_pair("landsat_etm+"),
+        "landsat_oli": _sensor_pair("landsat_oli"),
+        "landsat_oli2": _sensor_pair("landsat_oli2"),
+        "micasense": _sensor_pair("micasense"),
     }
 
     return {
