@@ -9,6 +9,11 @@ from typing import Tuple
 
 import numpy as np
 
+try:  # pragma: no cover - tqdm is optional in minimal environments
+    from tqdm import tqdm
+except Exception:  # pragma: no cover - fall back to no progress bar
+    tqdm = None
+
 from .corrections import (
     apply_brdf_correct,
     apply_topo_correct,
@@ -186,8 +191,25 @@ def apply_brdf_topo_core(
 
     writer = EnviWriter(out_img_path.with_suffix(""), header)
 
+    chunk_y = 100
+    chunk_x = 100
+    total_chunks = cube.chunk_count(chunk_y=chunk_y, chunk_x=chunk_x)
+    bar = None
+
     try:
-        for ys, ye, xs, xe, raw_chunk in cube.iter_chunks():
+        if tqdm is not None:
+            total_for_bar = total_chunks if total_chunks > 0 else None
+            bar = tqdm(
+                total=total_for_bar,
+                desc="BRDF+topo correction",
+                unit="tile",
+                disable=False,
+            )
+
+        processed_chunks = 0
+        for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(
+            chunk_y=chunk_y, chunk_x=chunk_x
+        ):
             chunk = np.asarray(raw_chunk, dtype=np.float32)
             corrected_chunk = apply_topo_correct(cube, chunk, ys, ye, xs, xe)
             corrected_chunk = apply_brdf_correct(
@@ -201,8 +223,15 @@ def apply_brdf_topo_core(
             )
             corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
             writer.write_chunk(corrected_chunk, ys, xs)
+            processed_chunks += 1
+            if bar is not None:
+                bar.update(1)
+        if bar is not None and processed_chunks == 0:
+            bar.refresh()
     finally:
         writer.close()
+        if bar is not None:
+            bar.close()
 
     if not is_valid_envi_pair(out_img_path, out_hdr_path):
         raise RuntimeError(f"BRDF/topo correction failed for {out_img_path}")
