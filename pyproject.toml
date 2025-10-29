@@ -43,6 +43,7 @@ full = [
 [project.scripts]
 cscal-download = "cross_sensor_cal.cli:download_main"
 cscal-pipeline = "cross_sensor_cal.cli:pipeline_main"
+cscal-qa = "cross_sensor_cal.cli:qa_main"
 
 [project.urls]
 Homepage = "https://github.com/earthlab/cross-sensor-cal"
