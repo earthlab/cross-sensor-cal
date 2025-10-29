@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from .pipelines.pipeline import _parse_envi_header
+from .pipelines.pipeline import _coerce_scalar, _parse_envi_header
 
 
 _ENVI_DTYPE_MAP: dict[int, np.dtype] = {
@@ -30,9 +30,152 @@ _ENVI_DTYPE_MAP: dict[int, np.dtype] = {
 }
 
 
-def _load_envi_header(hdr_path: Path) -> dict:
-    header = _parse_envi_header(hdr_path)
+def _parse_wavelength_list(val: str | None) -> list[float] | None:
+    """Parse an ENVI wavelength block into floats or return ``None``."""
+
+    if val is None:
+        return None
+    s = val.strip()
+    if not s:
+        return None
+    s = s.strip("{}[]()")
+    s = s.replace("\n", " ")
+    parts = [part.strip() for part in s.replace("\t", " ").split(",")]
+    # Allow whitespace separated lists where commas are absent.
+    tokens: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        tokens.extend(token for token in part.split() if token)
+
+    nums: list[float] = []
+    for token in tokens:
+        try:
+            nums.append(float(token))
+        except ValueError:
+            return None
+    return nums if nums else None
+
+
+def _split_envi_block(value: str) -> list[str]:
+    inner = value.strip()
+    if inner.startswith("{"):
+        inner = inner[1:]
+    if inner.endswith("}"):
+        inner = inner[:-1]
+    inner = inner.replace("\n", " ")
+    tokens = [token.strip() for token in inner.split(",") if token.strip()]
+    return tokens
+
+
+def _parse_envi_header_tolerant(hdr_path: Path) -> dict:
+    if not hdr_path.exists():
+        raise FileNotFoundError(hdr_path)
+
+    raw_entries: dict[str, str] = {}
+    collecting_key: str | None = None
+    collecting_value: list[str] = []
+
+    with hdr_path.open("r", encoding="utf-8") as fp:
+        for raw_line in fp:
+            stripped = raw_line.strip()
+            if not stripped or stripped.upper() == "ENVI":
+                continue
+
+            if collecting_key is not None:
+                collecting_value.append(stripped)
+                if "}" in stripped:
+                    value = " ".join(collecting_value)
+                    raw_entries[collecting_key] = value
+                    collecting_key = None
+                    collecting_value = []
+                continue
+
+            if "=" not in stripped:
+                continue
+
+            key_part, value_part = stripped.split("=", 1)
+            key = key_part.strip().lower()
+            value = value_part.strip()
+
+            if value.startswith("{") and "}" not in value:
+                collecting_key = key
+                collecting_value = [value]
+                continue
+
+            raw_entries[key] = value
+
+    list_float_keys = {"fwhm"}
+    list_string_keys = {"map info", "band names"}
+    int_scalar_keys = {"samples", "lines", "bands", "data type", "byte order"}
+
+    processed: dict[str, object] = {}
+    for key, raw_value in raw_entries.items():
+        if raw_value.startswith("{") and raw_value.endswith("}"):
+            if key == "wavelength":
+                processed[key] = _parse_wavelength_list(raw_value)
+                continue
+
+            tokens = _split_envi_block(raw_value)
+            if key in list_float_keys:
+                processed[key] = [float(token) for token in tokens]
+            elif key in list_string_keys:
+                processed[key] = [token.strip('"').strip("'") for token in tokens]
+            else:
+                processed[key] = [
+                    _coerce_scalar(token.strip('"').strip("'")) for token in tokens
+                ]
+            continue
+
+        cleaned = raw_value.strip().strip('"').strip("'")
+        if key in int_scalar_keys:
+            try:
+                processed[key] = int(cleaned)
+            except ValueError as exc:  # pragma: no cover - malformed header unexpected
+                raise RuntimeError(f"Header value for '{key}' is not an integer") from exc
+            continue
+
+        processed[key] = _coerce_scalar(cleaned)
+
+    if "wavelength" not in processed:
+        processed["wavelength"] = None
+
+    return processed
+
+
+def hdr_to_dict(hdr_path: Path) -> dict:
+    try:
+        header = _parse_envi_header(hdr_path)
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "Could not parse numeric list for 'wavelength'" not in msg:
+            raise
+        header = _parse_envi_header_tolerant(hdr_path)
+
+    wavelength = header.get("wavelength")
+    if wavelength is None:
+        header["wavelength"] = None
+    elif isinstance(wavelength, list) and not wavelength:
+        header["wavelength"] = None
+
     return header
+
+
+def _load_envi_header(hdr_path: Path) -> dict:
+    return hdr_to_dict(hdr_path)
+
+
+def _wavelength_array(header_dict: dict) -> np.ndarray | None:
+    wavs = header_dict.get("wavelength")
+    if wavs is None:
+        return None
+    try:
+        wavs_arr = np.asarray(wavs, dtype=float)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return None
+    if wavs_arr.size == 0:
+        return None
+    return wavs_arr
 
 
 def _dtype_from_header(header: dict, hdr_path: Path) -> np.dtype:
@@ -65,19 +208,19 @@ def _memmap_bsq(img_path: Path, header: dict) -> np.memmap:
 
 def _pick_rgb_bands_for_raw(header_dict: dict) -> tuple[int, int, int]:
     target_wavs = [650, 560, 470]
-    wavs = np.asarray([float(w) for w in header_dict.get("wavelength", [])], dtype=float)
-    if wavs.size == 0:
+    wavs_arr = _wavelength_array(header_dict)
+    if wavs_arr is None:
         return (0, 0, 0)
-    idxs = [int(np.argmin(np.abs(wavs - tw))) for tw in target_wavs]
+    idxs = [int(np.argmin(np.abs(wavs_arr - tw))) for tw in target_wavs]
     return tuple(idxs)  # type: ignore[return-value]
 
 
 def _pick_preview_band_for_corrected(header_dict: dict) -> int:
     target = 800
-    wavs = np.asarray([float(w) for w in header_dict.get("wavelength", [])], dtype=float)
-    if wavs.size == 0:
+    wavs_arr = _wavelength_array(header_dict)
+    if wavs_arr is None:
         return 0
-    idx = int(np.argmin(np.abs(wavs - target)))
+    idx = int(np.argmin(np.abs(wavs_arr - target)))
     return idx
 
 
@@ -107,6 +250,22 @@ def _make_rgb_composite(mm: np.memmap, band_indices: Sequence[int]) -> np.ndarra
         bands.append(bands[-1])
     rgb = np.stack(bands[:3], axis=-1)
     return rgb
+
+
+def _safe_band_indices(header_dict: dict, desired: Sequence[int] = (0, 1, 2)) -> tuple[int, int, int]:
+    nb_raw = header_dict.get("bands", 0)
+    try:
+        nb = int(nb_raw)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        nb = 0
+
+    if nb >= 3:
+        return tuple(int(i) for i in desired[:3])  # type: ignore[return-value]
+    if nb == 2:
+        return (0, 1, 1)
+    if nb == 1:
+        return (0, 0, 0)
+    raise ValueError("ENVI header reports zero bands.")
 
 
 def _sensor_label(img_path: Path, flight_stem: str) -> str:
@@ -188,6 +347,19 @@ def summarize_flightline_outputs(
         ax.axis("off")
         ax.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
 
+    def _skip_spectra_panel(message: str) -> None:
+        warnings.warn(message)
+        ax_spectra.clear()
+        ax_spectra.axis("off")
+        ax_spectra.set_title("Patch spectra (skipped: missing wavelengths)")
+        ax_spectra.text(
+            0.5,
+            0.5,
+            "Wavelength metadata unavailable",
+            ha="center",
+            va="center",
+        )
+
     # Panel A: Raw RGB
     if raw_img.exists() and raw_hdr.exists():
         try:
@@ -244,50 +416,84 @@ def summarize_flightline_outputs(
         nir_band = None
 
     # Panel B: Spectral correction effect
-    ax_spectra.set_title("Patch-mean spectrum before vs after BRDF+topo correction")
-    ax_spectra.set_xlabel("Wavelength (nm)")
-    ax_spectra.set_ylabel("Reflectance")
-
-    if raw_header is not None and corrected_header is not None and raw_mm is not None and corrected_mm is not None:
-        raw_wavs = np.asarray(raw_header.get("wavelength", []), dtype=float)
-        corr_wavs = np.asarray(corrected_header.get("wavelength", []), dtype=float)
-        if raw_wavs.size and corr_wavs.size and raw_wavs.shape == corr_wavs.shape:
-            bands = min(raw_mm.shape[0], corrected_mm.shape[0])
-            if nir_band is not None:
-                h, w = nir_band.shape
-            else:
-                h, w = raw_mm.shape[1], raw_mm.shape[2]
-            cy, cx = h // 2, w // 2
-            half = 12
-            y0, y1 = max(0, cy - half), min(h, cy + half)
-            x0, x1 = max(0, cx - half), min(w, cx + half)
-
-            raw_means = []
-            corr_means = []
-            for idx in range(bands):
-                raw_patch = np.asarray(raw_mm[idx, y0:y1, x0:x1], dtype=np.float32)
-                corr_patch = np.asarray(corrected_mm[idx, y0:y1, x0:x1], dtype=np.float32)
-                raw_means.append(float(np.nanmean(raw_patch)))
-                corr_means.append(float(np.nanmean(corr_patch)))
-
-            raw_means_arr = np.asarray(raw_means)
-            corr_means_arr = np.asarray(corr_means)
-            diff_arr = corr_means_arr - raw_means_arr
-
-            ax_spectra.plot(raw_wavs[:bands], raw_means_arr, label="raw export")
-            ax_spectra.plot(raw_wavs[:bands], corr_means_arr, label="corrected (BRDF+topo)")
-            ax_spectra.legend(loc="upper right")
-            ax_diff = ax_spectra.twinx()
-            ax_diff.plot(raw_wavs[:bands], diff_arr, color="tab:gray", linestyle="--", label="difference")
-            ax_diff.set_ylabel("Corrected - raw")
-            ax_diff.legend(loc="lower right")
-        else:
-            warnings.warn(
-                f"Wavelength metadata missing or mismatched for {flight_stem}; skipping spectra panel"
+    if (
+        raw_header is not None
+        and corrected_header is not None
+        and raw_mm is not None
+        and corrected_mm is not None
+    ):
+        raw_wavs_arr = _wavelength_array(raw_header)
+        corr_wavs_arr = _wavelength_array(corrected_header)
+        if (
+            raw_wavs_arr is None
+            or corr_wavs_arr is None
+            or raw_wavs_arr.shape != corr_wavs_arr.shape
+        ):
+            _skip_spectra_panel(
+                "Skipping spectra panel: missing numeric wavelengths in raw or corrected header."
             )
-            ax_spectra.text(0.5, 0.5, "Wavelength metadata unavailable", ha="center", va="center")
+        else:
+            bands = min(raw_mm.shape[0], corrected_mm.shape[0], raw_wavs_arr.shape[0])
+            if bands == 0:
+                _skip_spectra_panel(
+                    "Skipping spectra panel: no overlapping bands between raw and corrected cubes."
+                )
+            else:
+                if nir_band is not None:
+                    h, w = nir_band.shape
+                else:
+                    h, w = raw_mm.shape[1], raw_mm.shape[2]
+                cy, cx = h // 2, w // 2
+                half = 12
+                y0, y1 = max(0, cy - half), min(h, cy + half)
+                x0, x1 = max(0, cx - half), min(w, cx + half)
+
+                raw_means = []
+                corr_means = []
+                for idx in range(bands):
+                    raw_patch = np.asarray(raw_mm[idx, y0:y1, x0:x1], dtype=np.float32)
+                    corr_patch = np.asarray(
+                        corrected_mm[idx, y0:y1, x0:x1], dtype=np.float32
+                    )
+                    raw_means.append(float(np.nanmean(raw_patch)))
+                    corr_means.append(float(np.nanmean(corr_patch)))
+
+                raw_means_arr = np.asarray(raw_means)
+                corr_means_arr = np.asarray(corr_means)
+                diff_arr = corr_means_arr - raw_means_arr
+
+                ax_spectra.set_title(
+                    "Patch-mean spectrum before vs after BRDF+topo correction"
+                )
+                ax_spectra.set_xlabel("Wavelength (nm)")
+                ax_spectra.set_ylabel("Reflectance")
+                ax_spectra.plot(
+                    raw_wavs_arr[:bands], raw_means_arr, label="raw export"
+                )
+                ax_spectra.plot(
+                    raw_wavs_arr[:bands], corr_means_arr, label="corrected (BRDF+topo)"
+                )
+                ax_spectra.legend(loc="upper right")
+                ax_diff = ax_spectra.twinx()
+                ax_diff.plot(
+                    raw_wavs_arr[:bands],
+                    diff_arr,
+                    color="tab:gray",
+                    linestyle="--",
+                    label="difference",
+                )
+                ax_diff.set_ylabel("Corrected - raw")
+                ax_diff.legend(loc="lower right")
     else:
-        ax_spectra.text(0.5, 0.5, "Raw or corrected data unavailable", ha="center", va="center")
+        ax_spectra.axis("off")
+        ax_spectra.set_title("Patch spectra (skipped: data unavailable)")
+        ax_spectra.text(
+            0.5,
+            0.5,
+            "Raw or corrected data unavailable",
+            ha="center",
+            va="center",
+        )
 
     # Panel D: Thumbnails of sensor products
     sensor_imgs = _gather_sensor_products(work_dir, flight_stem)
@@ -307,19 +513,13 @@ def summarize_flightline_outputs(
             try:
                 header = _load_envi_header(hdr_path)
                 mm = _memmap_bsq(img_path, header)
-                bands = mm.shape[0]
-                if bands >= 3:
-                    idxs = (0, 1, 2)
-                elif bands == 2:
-                    idxs = (0, 1, 1)
-                else:
-                    idxs = (0, 0, 0)
+                idxs = _safe_band_indices(header)
                 rgb = _make_rgb_composite(mm, idxs)
                 rgb_small = _downsample_rgb(rgb)
                 ax.imshow(rgb_small)
                 ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
             except Exception as exc:  # pragma: no cover - defensive
-                warnings.warn(f"Failed to plot sensor thumbnail {img_path}: {exc}")
+                warnings.warn(f"Thumbnail failed for {img_path.name}: {exc}")
                 ax.text(0.5, 0.5, "Unavailable", ha="center", va="center")
                 ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
     else:
