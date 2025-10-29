@@ -106,6 +106,8 @@ def get_flightline_products(
         "landsat_oli": _sensor_pair("landsat_oli"),
         "landsat_oli2": _sensor_pair("landsat_oli2"),
         "micasense": _sensor_pair("micasense"),
+        "micasense_to_match_tm_etm+": _sensor_pair("micasense_to_match_tm_etm+"),
+        "micasense_to_match_oli_oli2": _sensor_pair("micasense_to_match_oli_oli2"),
     }
 
     return {

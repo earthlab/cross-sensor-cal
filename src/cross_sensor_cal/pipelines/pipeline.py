@@ -905,6 +905,10 @@ def _safe_resolve_sensor_entry(
         "micasense": "MicaSense",
         "micasense_tm": "MicaSense-to-match TM and ETM+",
         "micasense_oli": "MicaSense-to-match OLI and OLI-2",
+        "micasense_to_match_tm_etm+": "MicaSense-to-match TM and ETM+",
+        "micasense_to_match_tm_etm_plus": "MicaSense-to-match TM and ETM+",
+        "micasense_to_match_oli_oli2": "MicaSense-to-match OLI and OLI-2",
+        "micasense_to_match_oli_and_oli2": "MicaSense-to-match OLI and OLI-2",
     }
 
     alias_key = alias_map.get(lowered)
@@ -1134,7 +1138,7 @@ def stage_export_envi_from_h5(
 
     Behavior
     --------
-    1. Ask get_flightline_products() where the raw ENVI should live.
+    1. Compute the canonical raw ENVI paths inside the per-flightline work directory.
     2. If those paths already exist and validate, SKIP heavy export immediately.
        This prevents re-loading huge (>20 GB) hyperspectral cubes on reruns.
     3. Otherwise, run neon_to_envi_no_hytools() ONE TIME to generate ENVI.
@@ -1143,12 +1147,19 @@ def stage_export_envi_from_h5(
        correct get_flightline_products(), so on the next run we really will skip.
     """
 
-    paths = get_flightline_products(base_folder, product_code, flight_stem)
+    flight_paths = get_flight_paths(base_folder, flight_stem)
+    base_folder = Path(flight_paths["base"])
 
-    h5_path = Path(paths["h5"])
-    work_dir = Path(paths.get("work_dir", Path(base_folder) / flight_stem))
-    raw_img_path = Path(paths["raw_envi_img"])
-    raw_hdr_path = Path(paths["raw_envi_hdr"])
+    work_dir = Path(flight_paths["work_dir"])
+    h5_path = Path(flight_paths["h5_path"])
+    raw_img_path = work_dir / f"{flight_stem}_envi.img"
+    raw_hdr_path = work_dir / f"{flight_stem}_envi.hdr"
+
+    assert raw_img_path.suffix == ".img"
+    assert raw_hdr_path.suffix == ".hdr"
+    raw_name_lower = raw_img_path.name.lower()
+    assert "landsat" not in raw_name_lower
+    assert "micasense" not in raw_name_lower
 
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1159,6 +1170,15 @@ def stage_export_envi_from_h5(
         raw_img_path.name,
         raw_hdr_path.name,
     )
+
+    corrected_img = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
+    if corrected_img.exists() and not raw_img_path.exists():
+        raise FileNotFoundError(
+            "Raw ENVI missing for {stem} but corrected exists. "
+            "A prior cleanup or naming bug likely removed/overwrote the raw export.".format(
+                stem=flight_stem
+            )
+        )
 
     # FAST SKIP: if canonical raw ENVI already looks valid, avoid
     # calling neon_to_envi_no_hytools() entirely. This is critical to
@@ -1208,10 +1228,6 @@ def stage_export_envi_from_h5(
     )
 
     # Now that export has run, re-check the canonical expected outputs.
-    paths = get_flightline_products(base_folder, product_code, flight_stem)
-    raw_img_path = Path(paths["raw_envi_img"])
-    raw_hdr_path = Path(paths["raw_envi_hdr"])
-
     if _looks_valid(raw_img_path, raw_hdr_path):
         logger.info(
             "✅ ENVI export completed for %s -> %s / %s",
@@ -1431,8 +1447,8 @@ def stage_convolve_all_sensors(
 
     method_norm = (resample_method or "convolution").lower()
 
-    succeeded: list[str] = []
-    skipped: list[str] = []
+    created: list[str] = []
+    existing: list[str] = []
     failed: list[str] = []
 
     for sensor_name, out_pair in sensor_products.items():
@@ -1459,7 +1475,7 @@ def stage_convolve_all_sensors(
                 out_img.name,
                 out_hdr.name,
             )
-            skipped.append(sensor_name)
+            existing.append(sensor_name)
             continue
 
         resolved_name, sensor_entry = _safe_resolve_sensor_entry(sensor_name, sensor_library)
@@ -1509,7 +1525,7 @@ def stage_convolve_all_sensors(
                     out_img.name,
                     out_hdr.name,
                 )
-                succeeded.append(sensor_name)
+                created.append(sensor_name)
 
         except Exception:  # noqa: BLE001 - want to log full traceback
             logger.exception(
@@ -1530,19 +1546,25 @@ def stage_convolve_all_sensors(
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
     logger.info(
-        "📊 Sensor convolution summary for %s | succeeded=%s skipped=%s failed=%s",
+        "📊 Sensor convolution summary for %s | created=%s existing=%s failed=%s",
         flight_stem,
-        succeeded,
-        skipped,
+        created,
+        existing,
         failed,
     )
 
-    if len(succeeded) == 0 and len(skipped) == 0:
+    if len(created) == 0 and len(existing) == 0:
         raise RuntimeError(
             f"All sensor resamples failed or were undefined for {flight_stem}. Failed sensors: {failed}"
         )
 
     logger.info("🎉 Finished pipeline for %s", flight_stem)
+
+    return {
+        "created": created,
+        "existing": existing,
+        "failed": failed,
+    }
 
 
 def process_one_flightline(
@@ -1622,6 +1644,20 @@ def process_one_flightline(
         resample_method=resample_method,
         parallel_mode=parallel_mode,
     )
+
+    from ..qa_plots import summarize_flightline_outputs
+
+    work_dir = Path(flight_paths["work_dir"])
+    qa_png = work_dir / f"{flight_stem}_qa.png"
+    try:
+        summarize_flightline_outputs(
+            base_folder=base_folder,
+            flight_stem=flight_stem,
+            out_png=qa_png,
+        )
+        logger.info("🖼️  Wrote QA panel for %s -> %s", flight_stem, qa_png.name)
+    except Exception as exc:  # pragma: no cover - QA best effort
+        logger.warning("⚠️  QA panel generation failed for %s: %s", flight_stem, exc)
 
 
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
