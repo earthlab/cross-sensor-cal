@@ -210,12 +210,13 @@ def _memmap_bsq(img_path: Path, header: dict) -> np.memmap:
     return np.memmap(img_path, mode="r", dtype=dtype, shape=shape, order="C")
 
 
-def _to_unitless_reflectance(arr: np.ndarray) -> np.ndarray:
+def _unitless(arr: np.ndarray) -> np.ndarray:
     """Convert scaled reflectance values to the unitless 0–1 range heuristically."""
 
     med = float(np.nanmedian(arr))
     if np.isnan(med):
         return arr
+    # If median > 1.5, treat as scaled-int reflectance (0–10000)
     return arr / 10000.0 if med > 1.5 else arr
 
 
@@ -352,7 +353,9 @@ def summarize_flightline_outputs(
 
     ax_raw = fig.add_subplot(gs[0, 0])
     ax_spectra = fig.add_subplot(gs[0, 1:])
-    ax_corrected = fig.add_subplot(gs[1, 0])
+    corrected_spec = gs[1, 0].subgridspec(2, 1, height_ratios=[2, 1], hspace=0.08)
+    ax_corrected = fig.add_subplot(corrected_spec[0])
+    ax_ratio_map = fig.add_subplot(corrected_spec[1])
     ax_parquet = fig.add_subplot(gs[2, 0])
 
     thumb_spec = gs[1:, 1:].subgridspec(1, 1)
@@ -405,11 +408,57 @@ def summarize_flightline_outputs(
             ax_corrected.imshow(nir_preview, cmap="gray")
             ax_corrected.set_title("Corrected cube (BRDF+topo) — NIR band preview")
             ax_corrected.axis("off")
+
+            if raw_mm is not None and raw_mm.shape[0] > 0:
+                ratio_idx = int(min(raw_mm.shape[0] - 1, nir_idx))
+                raw_ratio_band = np.asarray(raw_mm[ratio_idx], dtype=np.float32)
+                corr_unit_band = _unitless(nir_band.astype(np.float32, copy=False))
+                raw_unit_band = _unitless(raw_ratio_band.astype(np.float32, copy=False))
+                ratio_map = np.full_like(corr_unit_band, np.nan, dtype=np.float32)
+                valid_mask = (
+                    np.isfinite(corr_unit_band)
+                    & np.isfinite(raw_unit_band)
+                    & (raw_unit_band != 0)
+                )
+                ratio_map[valid_mask] = corr_unit_band[valid_mask] / raw_unit_band[valid_mask]
+
+                clipped_ratio = np.clip(ratio_map, 0.5, 1.5)
+                ax_ratio_map.imshow(clipped_ratio, cmap="coolwarm", vmin=0.5, vmax=1.5)
+                ax_ratio_map.set_title("Corrected/raw ratio (NIR)")
+                ax_ratio_map.axis("off")
+
+                valid_count = int(np.count_nonzero(~np.isnan(ratio_map)))
+                if valid_count > 0:
+                    outside = int(
+                        np.count_nonzero((ratio_map < 0.2) | (ratio_map > 2.0))
+                    )
+                    if outside / valid_count > 0.10:
+                        ax_ratio_map.text(
+                            0.5,
+                            0.08,
+                            "Wide ratio spread — check geometry/offset",
+                            transform=ax_ratio_map.transAxes,
+                            ha="center",
+                            color="crimson",
+                            fontsize=9,
+                            bbox=dict(facecolor="white", alpha=0.7),
+                        )
+            else:
+                _fail_axis(
+                    ax_ratio_map,
+                    "Corrected/raw ratio (NIR)",
+                    "Raw preview unavailable",
+                )
         except Exception as exc:  # pragma: no cover - defensive
             warnings.warn(f"Failed to plot corrected preview for {flight_stem}: {exc}")
             _fail_axis(
                 ax_corrected,
                 "Corrected cube (BRDF+topo) — NIR band preview",
+                "Unavailable",
+            )
+            _fail_axis(
+                ax_ratio_map,
+                "Corrected/raw ratio (NIR)",
                 "Unavailable",
             )
             corrected_header = None
@@ -419,6 +468,11 @@ def summarize_flightline_outputs(
         _fail_axis(
             ax_corrected,
             "Corrected cube (BRDF+topo) — NIR band preview",
+            "Missing corrected ENVI cube",
+        )
+        _fail_axis(
+            ax_ratio_map,
+            "Corrected/raw ratio (NIR)",
             "Missing corrected ENVI cube",
         )
         corrected_header = None
@@ -449,10 +503,89 @@ def summarize_flightline_outputs(
                 h, w = nir_band.shape
             else:
                 h, w = raw_mm.shape[1], raw_mm.shape[2]
+
             cy, cx = h // 2, w // 2
             half = 12
-            y0, y1 = max(0, cy - half), min(h, cy + half)
-            x0, x1 = max(0, cx - half), min(w, cx + half)
+            min_valid_pixels = 200
+            mask_band_idx = int(min(max(0, bands - 1), nir_idx if nir_band is not None else 0))
+
+            def _bounds(center_y: int, center_x: int) -> tuple[int, int, int, int]:
+                y0_i = max(0, center_y - half)
+                y1_i = min(h, center_y + half)
+                x0_i = max(0, center_x - half)
+                x1_i = min(w, center_x + half)
+                return y0_i, y1_i, x0_i, x1_i
+
+            def _valid_counts_for_patch(y0_i: int, y1_i: int, x0_i: int, x1_i: int) -> tuple[int, int]:
+                raw_band_idx = int(min(raw_mm.shape[0] - 1, mask_band_idx))
+                corr_band_idx = int(min(corrected_mm.shape[0] - 1, mask_band_idx))
+                raw_patch_band = np.asarray(
+                    raw_mm[raw_band_idx, y0_i:y1_i, x0_i:x1_i], dtype=np.float32
+                )
+                corr_patch_band = np.asarray(
+                    corrected_mm[corr_band_idx, y0_i:y1_i, x0_i:x1_i], dtype=np.float32
+                )
+                raw_mask = np.isfinite(raw_patch_band) & (raw_patch_band != 0)
+                corr_mask = np.isfinite(corr_patch_band) & (corr_patch_band != 0)
+                return int(raw_mask.sum()), int(corr_mask.sum())
+
+            grid_fracs = np.linspace(0.25, 0.75, num=3)
+            candidate_centers: list[tuple[int, int]] = [(cy, cx)]
+            for frac_y in grid_fracs:
+                for frac_x in grid_fracs:
+                    y_cand = int(np.clip(round(frac_y * (h - 1)), 0, h - 1))
+                    x_cand = int(np.clip(round(frac_x * (w - 1)), 0, w - 1))
+                    cand = (y_cand, x_cand)
+                    if cand not in candidate_centers:
+                        candidate_centers.append(cand)
+
+            selected_bounds: tuple[int, int, int, int] | None = None
+            selected_counts: tuple[int, int] = (0, 0)
+            best_candidate: tuple[int, int, int, int] | None = None
+            best_counts: tuple[int, int] = (0, 0)
+            best_score = -1
+
+            for center_y, center_x in candidate_centers:
+                y0_i, y1_i, x0_i, x1_i = _bounds(center_y, center_x)
+                raw_valid, corr_valid = _valid_counts_for_patch(y0_i, y1_i, x0_i, x1_i)
+                score = min(raw_valid, corr_valid)
+                if score > best_score:
+                    best_score = score
+                    best_candidate = (y0_i, y1_i, x0_i, x1_i)
+                    best_counts = (raw_valid, corr_valid)
+                if raw_valid >= min_valid_pixels and corr_valid >= min_valid_pixels:
+                    selected_bounds = (y0_i, y1_i, x0_i, x1_i)
+                    selected_counts = (raw_valid, corr_valid)
+                    break
+
+            if selected_bounds is None:
+                if best_candidate is not None:
+                    selected_bounds = best_candidate
+                    selected_counts = best_counts
+                else:
+                    selected_bounds = _bounds(cy, cx)
+                    selected_counts = (0, 0)
+
+            y0, y1, x0, x1 = selected_bounds
+            raw_valid_count, corr_valid_count = selected_counts
+            insufficient_pixels = (
+                raw_valid_count < min_valid_pixels or corr_valid_count < min_valid_pixels
+            )
+
+            if insufficient_pixels:
+                logger.warning(
+                    "Spectra patch had limited valid pixels (raw=%d, corrected=%d; threshold=%d)",
+                    raw_valid_count,
+                    corr_valid_count,
+                    min_valid_pixels,
+                )
+
+            logger.info(
+                "Spectra patch valid pixels (>= %d required): raw=%d corrected=%d",
+                min_valid_pixels,
+                raw_valid_count,
+                corr_valid_count,
+            )
 
             raw_means: list[float] = []
             corr_means: list[float] = []
@@ -461,14 +594,38 @@ def summarize_flightline_outputs(
                 corr_patch = np.asarray(
                     corrected_mm[idx, y0:y1, x0:x1], dtype=np.float32
                 )
+
+                raw_mask = np.isfinite(raw_patch) & (raw_patch != 0)
+                corr_mask = np.isfinite(corr_patch) & (corr_patch != 0)
+                raw_patch = np.where(raw_mask, raw_patch, np.nan)
+                corr_patch = np.where(corr_mask, corr_patch, np.nan)
+
                 raw_means.append(float(np.nanmean(raw_patch)))
                 corr_means.append(float(np.nanmean(corr_patch)))
 
-            raw_means_arr = _to_unitless_reflectance(np.asarray(raw_means, dtype=np.float32))
-            corr_means_arr = _to_unitless_reflectance(
-                np.asarray(corr_means, dtype=np.float32)
+            raw_arr = np.asarray(raw_means, dtype=np.float32)
+            corr_arr = np.asarray(corr_means, dtype=np.float32)
+            raw_s = _unitless(raw_arr)
+            corr_s = _unitless(corr_arr)
+
+            diff_arr = corr_s - raw_s
+            ratio_arr = np.divide(
+                corr_s,
+                np.maximum(raw_s, 1e-6),
+                out=np.full_like(corr_s, np.nan),
+                where=~np.isnan(raw_s) & ~np.isnan(corr_s),
             )
-            diff_arr = corr_means_arr - raw_means_arr
+
+            raw_med = float(np.nanmedian(raw_s)) if raw_s.size else float("nan")
+            corr_med = float(np.nanmedian(corr_s)) if corr_s.size else float("nan")
+            ratio_med = float(np.nanmedian(ratio_arr)) if ratio_arr.size else float("nan")
+
+            logger.info(
+                "Spectra medians (unitless): raw=%.3f corrected=%.3f ratio=%.3f",
+                raw_med,
+                corr_med,
+                ratio_med,
+            )
 
             use_wavelengths = (
                 raw_wavs_arr is not None
@@ -490,12 +647,12 @@ def summarize_flightline_outputs(
             ax_spectra.set_ylabel("Reflectance (unitless, 0–1)")
             line_raw, = ax_spectra.plot(
                 x_vals,
-                raw_means_arr,
+                raw_s,
                 label="raw export (uncorrected)",
             )
             line_corr, = ax_spectra.plot(
                 x_vals,
-                corr_means_arr,
+                corr_s,
                 label="corrected (BRDF+topo)",
             )
 
@@ -503,7 +660,25 @@ def summarize_flightline_outputs(
                 for start, end in ((400, 700), (700, 1300), (1300, 2500)):
                     ax_spectra.axvspan(start, end, alpha=0.08, color="tab:blue", zorder=0)
 
+            ax_ratio = ax_spectra.twinx()
+            line_ratio, = ax_ratio.plot(
+                x_vals,
+                ratio_arr,
+                color="lightgray",
+                linewidth=1.2,
+                label="corrected/raw ratio",
+            )
+            ax_ratio.set_ylabel("Corrected/Raw ratio")
+            ax_ratio.set_ylim(0.5, 1.5)
+            ax_ratio.axhline(1.0, color="gray", linestyle=":", linewidth=0.8)
+            ax_ratio.spines["right"].set_color("gray")
+            ax_ratio.tick_params(axis="y", colors="dimgray")
+            ax_ratio.yaxis.label.set_color("dimgray")
+
             ax_diff = ax_spectra.twinx()
+            ax_diff.spines["right"].set_position(("axes", 1.12))
+            ax_diff.spines["right"].set_visible(True)
+            ax_diff.patch.set_visible(False)
             line_diff, = ax_diff.plot(
                 x_vals,
                 diff_arr,
@@ -512,22 +687,63 @@ def summarize_flightline_outputs(
                 label="difference (corrected − raw)",
             )
             ax_diff.set_ylabel("Difference (unitless)")
+            ax_diff.tick_params(axis="y", colors="tab:gray")
+            ax_diff.yaxis.label.set_color("tab:gray")
 
-            handles = [line_raw, line_corr, line_diff]
+            handles = [line_raw, line_corr, line_diff, line_ratio]
             ax_spectra.legend(handles, [h.get_label() for h in handles], loc="upper right")
 
             note = (
                 "Correction reduces angular/illumination bias;\n"
                 "smoother, lower curve expected."
             )
-            ax_spectra.text(
-                0.02,
-                0.95,
-                note,
-                transform=ax_spectra.transAxes,
-                fontsize=9,
-                va="top",
-            )
+            ax_spectra.text(0.02, 0.95, note, transform=ax_spectra.transAxes, fontsize=9, va="top")
+
+            if (
+                (np.isfinite(raw_med) and raw_med < 1e-6)
+                or (np.isfinite(corr_med) and corr_med < 1e-6)
+                or (
+                    np.isfinite(raw_med)
+                    and np.isfinite(corr_med)
+                    and raw_med < 0.005
+                    and corr_med < 0.005
+                )
+            ):
+                ax_spectra.text(
+                    0.5,
+                    0.92,
+                    "WARNING: spectra nearly zero — check units / double-apply / offset",
+                    transform=ax_spectra.transAxes,
+                    ha="center",
+                    color="crimson",
+                    fontsize=9,
+                    bbox=dict(facecolor="white", alpha=0.7),
+                )
+
+            if np.isfinite(ratio_med) and (ratio_med < 0.2 or ratio_med > 1.8):
+                ax_spectra.text(
+                    0.5,
+                    0.84,
+                    f"Suspicious correction magnitude (median ratio={ratio_med:.2f})",
+                    transform=ax_spectra.transAxes,
+                    ha="center",
+                    color="crimson",
+                    fontsize=9,
+                    bbox=dict(facecolor="white", alpha=0.7),
+                )
+
+            if insufficient_pixels:
+                ax_spectra.text(
+                    0.5,
+                    0.1,
+                    "Insufficient valid pixels for representative patch.",
+                    transform=ax_spectra.transAxes,
+                    ha="center",
+                    color="darkorange",
+                    fontsize=9,
+                    bbox=dict(facecolor="white", alpha=0.7),
+                )
+
             mad = float(np.nanmean(np.abs(diff_arr)))
             ax_spectra.text(
                 0.01,
@@ -603,11 +819,11 @@ def summarize_flightline_outputs(
     if out_png is not None:
         out_png = Path(out_png)
         out_png.parent.mkdir(parents=True, exist_ok=True)
-        if out_png.exists() and not overwrite:
-            logger.info("🖼️  Skipping QA panel (overwrite=%s) -> %s", overwrite, out_png)
+        if out_png.exists():
+            logger.info("🖼️  Overwriting QA panel -> %s", out_png)
         else:
-            logger.info("🖼️  Writing QA panel (overwrite=%s) -> %s", overwrite, out_png)
-            fig.savefig(out_png, dpi=200, bbox_inches="tight")
+            logger.info("🖼️  Writing QA panel -> %s", out_png)
+        fig.savefig(out_png, dpi=200, bbox_inches="tight")
 
     return fig
 
