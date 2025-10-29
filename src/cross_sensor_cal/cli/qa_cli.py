@@ -23,6 +23,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional directory for writing QA PNGs. Defaults to each flight folder.",
     )
+    parser.add_argument(
+        "--overwrite",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overwrite existing QA PNGs (use --no-overwrite to keep existing files).",
+    )
     return parser
 
 
@@ -30,7 +36,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    summarize_all_flightlines(base_folder=args.base_folder, out_dir=args.out_dir)
+    summarize_all_flightlines(
+        base_folder=args.base_folder,
+        out_dir=args.out_dir,
+        overwrite=args.overwrite,
+    )
 
     target = args.out_dir if args.out_dir is not None else args.base_folder
     print(f"[cscal-qa] ✅ QA panels written to: {target.resolve()}")

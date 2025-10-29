@@ -4,6 +4,10 @@ The `cscal-qa` command generates a summary PNG for each processed flight line. I
 combines visual checks and lightweight metadata to confirm that every stage of the
 pipeline completed successfully.
 
+QA figures are re-generated on every run so they always reflect the current pipeline
+settings. The spectral comparison panel converts reflectance to a unitless 0–1 scale and
+shades VIS/NIR/SWIR regions to make interpretation easier.
+
 ```bash
 cscal-qa --base-folder output_demo
 # Optional: write all PNGs to a separate location
@@ -18,7 +22,8 @@ Each panel validates a specific part of the workflow:
 - **Panel A – Raw ENVI RGB:** Verifies that the uncorrected ENVI export opens and renders
   with sensible colors and geospatial orientation.
 - **Panel B – Patch-mean spectrum:** Overlays raw vs. BRDF+topo corrected spectra for a
-  central patch and plots their difference to confirm the correction stage ran.
+  central patch, highlights VIS/NIR/SWIR wavelength ranges, and plots the difference to
+  confirm the correction stage ran.
 - **Panel C – Corrected NIR preview:** Displays a high-NIR band from the corrected cube to
   spot striping, nodata gaps, or other artifacts.
 - **Panel D – Sensor thumbnails:** Shows downsampled previews of each convolved sensor

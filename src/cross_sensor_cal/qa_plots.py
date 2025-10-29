@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import warnings
 from pathlib import Path
@@ -16,6 +17,9 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from .pipelines.pipeline import _coerce_scalar, _parse_envi_header
+
+
+logger = logging.getLogger(__name__)
 
 
 _ENVI_DTYPE_MAP: dict[int, np.dtype] = {
@@ -206,6 +210,15 @@ def _memmap_bsq(img_path: Path, header: dict) -> np.memmap:
     return np.memmap(img_path, mode="r", dtype=dtype, shape=shape, order="C")
 
 
+def _to_unitless_reflectance(arr: np.ndarray) -> np.ndarray:
+    """Convert scaled reflectance values to the unitless 0–1 range heuristically."""
+
+    med = float(np.nanmedian(arr))
+    if np.isnan(med):
+        return arr
+    return arr / 10000.0 if med > 1.5 else arr
+
+
 def _pick_rgb_bands_for_raw(header_dict: dict) -> tuple[int, int, int]:
     target_wavs = [650, 560, 470]
     wavs_arr = _wavelength_array(header_dict)
@@ -313,6 +326,9 @@ def summarize_flightline_outputs(
     base_folder: Path,
     flight_stem: str,
     out_png: Path | None = None,
+    *,
+    shaded_regions: bool = True,
+    overwrite: bool = True,
 ) -> Figure:
     base_folder = Path(base_folder)
     work_dir = base_folder / flight_stem
@@ -351,14 +367,8 @@ def summarize_flightline_outputs(
         warnings.warn(message)
         ax_spectra.clear()
         ax_spectra.axis("off")
-        ax_spectra.set_title("Patch spectra (skipped: missing wavelengths)")
-        ax_spectra.text(
-            0.5,
-            0.5,
-            "Wavelength metadata unavailable",
-            ha="center",
-            va="center",
-        )
+        ax_spectra.set_title("Patch spectra (skipped)")
+        ax_spectra.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
 
     # Panel A: Raw RGB
     if raw_img.exists() and raw_hdr.exists():
@@ -424,66 +434,109 @@ def summarize_flightline_outputs(
     ):
         raw_wavs_arr = _wavelength_array(raw_header)
         corr_wavs_arr = _wavelength_array(corrected_header)
-        if (
-            raw_wavs_arr is None
-            or corr_wavs_arr is None
-            or raw_wavs_arr.shape != corr_wavs_arr.shape
-        ):
+        bands = min(raw_mm.shape[0], corrected_mm.shape[0])
+        if raw_wavs_arr is not None:
+            bands = min(bands, raw_wavs_arr.shape[0])
+        if corr_wavs_arr is not None:
+            bands = min(bands, corr_wavs_arr.shape[0])
+
+        if bands == 0:
             _skip_spectra_panel(
-                "Skipping spectra panel: missing numeric wavelengths in raw or corrected header."
+                "Skipping spectra panel: no overlapping bands between raw and corrected cubes."
             )
         else:
-            bands = min(raw_mm.shape[0], corrected_mm.shape[0], raw_wavs_arr.shape[0])
-            if bands == 0:
-                _skip_spectra_panel(
-                    "Skipping spectra panel: no overlapping bands between raw and corrected cubes."
-                )
+            if nir_band is not None:
+                h, w = nir_band.shape
             else:
-                if nir_band is not None:
-                    h, w = nir_band.shape
-                else:
-                    h, w = raw_mm.shape[1], raw_mm.shape[2]
-                cy, cx = h // 2, w // 2
-                half = 12
-                y0, y1 = max(0, cy - half), min(h, cy + half)
-                x0, x1 = max(0, cx - half), min(w, cx + half)
+                h, w = raw_mm.shape[1], raw_mm.shape[2]
+            cy, cx = h // 2, w // 2
+            half = 12
+            y0, y1 = max(0, cy - half), min(h, cy + half)
+            x0, x1 = max(0, cx - half), min(w, cx + half)
 
-                raw_means = []
-                corr_means = []
-                for idx in range(bands):
-                    raw_patch = np.asarray(raw_mm[idx, y0:y1, x0:x1], dtype=np.float32)
-                    corr_patch = np.asarray(
-                        corrected_mm[idx, y0:y1, x0:x1], dtype=np.float32
-                    )
-                    raw_means.append(float(np.nanmean(raw_patch)))
-                    corr_means.append(float(np.nanmean(corr_patch)))
-
-                raw_means_arr = np.asarray(raw_means)
-                corr_means_arr = np.asarray(corr_means)
-                diff_arr = corr_means_arr - raw_means_arr
-
-                ax_spectra.set_title(
-                    "Patch-mean spectrum before vs after BRDF+topo correction"
+            raw_means: list[float] = []
+            corr_means: list[float] = []
+            for idx in range(bands):
+                raw_patch = np.asarray(raw_mm[idx, y0:y1, x0:x1], dtype=np.float32)
+                corr_patch = np.asarray(
+                    corrected_mm[idx, y0:y1, x0:x1], dtype=np.float32
                 )
+                raw_means.append(float(np.nanmean(raw_patch)))
+                corr_means.append(float(np.nanmean(corr_patch)))
+
+            raw_means_arr = _to_unitless_reflectance(np.asarray(raw_means, dtype=np.float32))
+            corr_means_arr = _to_unitless_reflectance(
+                np.asarray(corr_means, dtype=np.float32)
+            )
+            diff_arr = corr_means_arr - raw_means_arr
+
+            use_wavelengths = (
+                raw_wavs_arr is not None
+                and corr_wavs_arr is not None
+                and raw_wavs_arr.shape == corr_wavs_arr.shape
+                and raw_wavs_arr.shape[0] >= bands
+            )
+
+            if use_wavelengths:
+                x_vals = raw_wavs_arr[:bands]
                 ax_spectra.set_xlabel("Wavelength (nm)")
-                ax_spectra.set_ylabel("Reflectance")
-                ax_spectra.plot(
-                    raw_wavs_arr[:bands], raw_means_arr, label="raw export"
-                )
-                ax_spectra.plot(
-                    raw_wavs_arr[:bands], corr_means_arr, label="corrected (BRDF+topo)"
-                )
-                ax_spectra.legend(loc="upper right")
-                ax_diff = ax_spectra.twinx()
-                ax_diff.plot(
-                    raw_wavs_arr[:bands],
-                    diff_arr,
-                    color="tab:gray",
-                    linestyle="--",
-                    label="difference",
-                )
-                ax_diff.set_ylabel("Corrected - raw")
-                ax_diff.legend(loc="lower right")
+            else:
+                x_vals = np.arange(bands)
+                ax_spectra.set_xlabel("Band index")
+
+            ax_spectra.set_title(
+                "Patch-mean spectrum before vs after BRDF+topo correction"
+            )
+            ax_spectra.set_ylabel("Reflectance (unitless, 0–1)")
+            line_raw, = ax_spectra.plot(
+                x_vals,
+                raw_means_arr,
+                label="raw export (uncorrected)",
+            )
+            line_corr, = ax_spectra.plot(
+                x_vals,
+                corr_means_arr,
+                label="corrected (BRDF+topo)",
+            )
+
+            if shaded_regions and use_wavelengths:
+                for start, end in ((400, 700), (700, 1300), (1300, 2500)):
+                    ax_spectra.axvspan(start, end, alpha=0.08, color="tab:blue", zorder=0)
+
+            ax_diff = ax_spectra.twinx()
+            line_diff, = ax_diff.plot(
+                x_vals,
+                diff_arr,
+                color="tab:gray",
+                linestyle="--",
+                label="difference (corrected − raw)",
+            )
+            ax_diff.set_ylabel("Difference (unitless)")
+
+            handles = [line_raw, line_corr, line_diff]
+            ax_spectra.legend(handles, [h.get_label() for h in handles], loc="upper right")
+
+            note = (
+                "Correction reduces angular/illumination bias;\n"
+                "smoother, lower curve expected."
+            )
+            ax_spectra.text(
+                0.02,
+                0.95,
+                note,
+                transform=ax_spectra.transAxes,
+                fontsize=9,
+                va="top",
+            )
+            mad = float(np.nanmean(np.abs(diff_arr)))
+            ax_spectra.text(
+                0.01,
+                0.02,
+                f"Mean |Δ| = {mad:.3f}",
+                transform=ax_spectra.transAxes,
+                fontsize=9,
+                va="bottom",
+            )
     else:
         ax_spectra.axis("off")
         ax_spectra.set_title("Patch spectra (skipped: data unavailable)")
@@ -539,12 +592,22 @@ def summarize_flightline_outputs(
         text = "No Parquet outputs found"
     ax_parquet.text(0, 1, text, va="top")
 
-    fig.suptitle(f"QA Summary: {flight_stem}", fontsize=14)
+    fig.suptitle(
+        (
+            f"QA Summary: {flight_stem}\n"
+            "(Reflectance scaled to 0–1; BRDF+topo reduces angular bias)"
+        ),
+        fontsize=14,
+    )
 
     if out_png is not None:
         out_png = Path(out_png)
         out_png.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out_png, dpi=150, bbox_inches="tight")
+        if out_png.exists() and not overwrite:
+            logger.info("🖼️  Skipping QA panel (overwrite=%s) -> %s", overwrite, out_png)
+        else:
+            logger.info("🖼️  Writing QA panel (overwrite=%s) -> %s", overwrite, out_png)
+            fig.savefig(out_png, dpi=200, bbox_inches="tight")
 
     return fig
 
@@ -552,6 +615,9 @@ def summarize_flightline_outputs(
 def summarize_all_flightlines(
     base_folder: Path,
     out_dir: Path | None = None,
+    *,
+    shaded_regions: bool = True,
+    overwrite: bool = True,
 ):
     base_folder = Path(base_folder)
     if out_dir is not None:
@@ -570,7 +636,13 @@ def summarize_all_flightlines(
         else:
             out_png = child / f"{flight_stem}_qa.png"
         try:
-            summarize_flightline_outputs(base_folder, flight_stem, out_png=out_png)
+            summarize_flightline_outputs(
+                base_folder,
+                flight_stem,
+                out_png=out_png,
+                shaded_regions=shaded_regions,
+                overwrite=overwrite,
+            )
         except Exception as exc:  # pragma: no cover - defensive
             warnings.warn(
                 f"Failed to summarize {flight_stem}: {exc}",

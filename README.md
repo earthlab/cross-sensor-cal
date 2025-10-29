@@ -150,7 +150,9 @@ output_fresh/
   later if you only want corrected/derived products.
 - **QA panels:** After processing, `cscal-qa` generates a multi-panel summary figure per
   flight line, to visually confirm that each step (export, correction, convolution,
-  parquet) completed successfully.
+  parquet) completed successfully. QA figures are re-generated on every run to reflect
+  the current pipeline settings. The spectral panel uses unitless reflectance (0–1) and
+  shades VIS/NIR/SWIR regions for readability.
 
 ### Parallel Execution
 
