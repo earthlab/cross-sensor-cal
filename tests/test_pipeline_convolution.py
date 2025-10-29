@@ -52,6 +52,10 @@ if "matplotlib" not in sys.modules:  # pragma: no cover - dependency shim for un
     fake_pyplot.imshow = _noop
     fake_pyplot.title = _noop
     fake_pyplot.savefig = _noop
+    fake_matplotlib.use = _noop
+    fake_matplotlib_figure = types.ModuleType("matplotlib.figure")
+    fake_matplotlib_figure.Figure = _FakeFigure
+    sys.modules["matplotlib.figure"] = fake_matplotlib_figure
     sys.modules["matplotlib"] = fake_matplotlib
     sys.modules["matplotlib.pyplot"] = fake_pyplot
 
@@ -106,7 +110,15 @@ def test_pipeline_idempotence_skip_behavior(
     correction_json = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.json"
     correction_json.write_text(json.dumps({"ok": True}))
 
-    sensors = ["landsat_tm", "landsat_etm+", "landsat_oli", "landsat_oli2", "micasense"]
+    sensors = [
+        "landsat_tm",
+        "landsat_etm+",
+        "landsat_oli",
+        "landsat_oli2",
+        "micasense",
+        "micasense_to_match_tm_etm+",
+        "micasense_to_match_oli_oli2",
+    ]
     sensor_pairs = []
     for sensor in sensors:
         sensor_img = _write_nonempty(work_dir / f"{flight_stem}_{sensor}_envi.img")
