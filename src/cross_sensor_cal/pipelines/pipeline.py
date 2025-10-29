@@ -320,10 +320,6 @@ from ..file_types import (
 )
 from ..parquet_export import ensure_parquet_for_envi
 from ..utils.naming import get_flightline_products
-from ..standard_resample import translate_to_other_sensors
-from ..mask_raster import mask_raster_with_polygons
-from ..polygon_extraction import control_function_for_extraction
-from ..file_sort import generate_file_move_list
 
 
 if TYPE_CHECKING:  # pragma: no cover - only for static analyzers
@@ -1359,12 +1355,14 @@ def process_one_flightline(
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
     """
     Generate file sorting list and optionally sync files to iRODS using gocmd.
-    
+
     Parameters:
     - base_folder: Base directory containing processed files
     - remote_prefix: Optional custom path to add after i:/iplant/ for remote paths
     - sync_files: Whether to actually sync files (True) or just generate the list (False)
     """
+    from ..file_sort import generate_file_move_list
+
     print("\n=== Starting file sorting and syncing ===")
     
     # Generate the file move list
@@ -1463,6 +1461,8 @@ def go_forth_and_multiply(
 
 def resample_translation_to_other_sensors(base_folder: Path):
     # List all subdirectories in the base folder
+    from ..standard_resample import translate_to_other_sensors
+
     brdf_corrected_header_files = NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_folder, 'envi')
     print("Starting translation to other sensors")
     for brdf_corrected_header_file in brdf_corrected_header_files:
@@ -1475,6 +1475,9 @@ def process_base_folder(base_folder: Path, polygon_layer: str, **kwargs):
     """
     Processes subdirectories in a base folder, finding raster files and applying analysis.
     """
+    from ..mask_raster import mask_raster_with_polygons
+    from ..polygon_extraction import control_function_for_extraction
+
     # Get list of subdirectories
     raster_files = (NEONReflectanceENVIFile.find_in_directory(Path(base_folder)) +
                     NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(Path(base_folder), 'envi') +
