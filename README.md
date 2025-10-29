@@ -181,6 +181,17 @@ missing or corrupted pieces.
 
 This enforced order prevents earlier bugs where convolution could run on uncorrected data.
 
+#### Parquet export sidecars
+
+- After resampling, every corrected and resampled ENVI cube gains a companion
+  `<stem>.parquet` table containing pixel-level spectra (`x`, `y`, `band`,
+  `wavelength_nm`, `reflectance`).
+- The Parquet files live in the same directory as their source ENVI pairs and
+  reuse the same filename stem. If a valid Parquet already exists the export
+  stage logs a skip and leaves it untouched.
+- These tabular sidecars make it straightforward to drive validation notebooks
+  and downstream analytics without re-reading large ENVI cubes.
+
 ### Developer notes
 
 - `process_one_flightline()` is now the canonical per-flightline workflow.

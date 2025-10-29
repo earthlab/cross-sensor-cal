@@ -12,6 +12,7 @@ for NEON hyperspectral flight lines. The pipeline is now:
     2. BRDF/topo correction parameter JSON build
     3. BRDF + topographic correction
     4. Sensor convolution/resampling
+    5. Parquet export for corrected + resampled ENVI cubes
 
 Key guarantees:
 - The stages ALWAYS run in the order above.
@@ -303,117 +304,19 @@ from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.utils import get_package_data_path
 from cross_sensor_cal.utils_checks import is_valid_json
 
+from ..envi_header import _parse_envi_header
 from ..file_types import (
     NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceENVIFile,
     NEONReflectanceResampledENVIFile,
 )
+from ..parquet_export import ensure_parquet_for_envi
 from ..neon_to_envi import neon_to_envi_no_hytools
 from ..utils.naming import get_flightline_products
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
 from ..file_sort import generate_file_move_list
-
-
-
-def _coerce_scalar(value: str):
-    token = value.strip().strip('"').strip("'")
-    if not token:
-        return ""
-    lowered = token.lower()
-    if lowered == "nan":
-        return float("nan")
-    for caster in (int, float):
-        try:
-            return caster(token)
-        except (TypeError, ValueError):
-            continue
-    return token
-
-
-def _parse_envi_header(hdr_path: Path) -> dict:
-    if not hdr_path.exists():
-        raise FileNotFoundError(hdr_path)
-
-    raw_entries: dict[str, str] = {}
-    collecting_key: str | None = None
-    collecting_value: list[str] = []
-
-    with hdr_path.open("r", encoding="utf-8") as fp:
-        for raw_line in fp:
-            stripped = raw_line.strip()
-            if not stripped or stripped.upper() == "ENVI":
-                continue
-
-            if collecting_key is not None:
-                collecting_value.append(stripped)
-                if "}" in stripped:
-                    value = " ".join(collecting_value)
-                    raw_entries[collecting_key] = value
-                    collecting_key = None
-                    collecting_value = []
-                continue
-
-            if "=" not in stripped:
-                continue
-
-            key_part, value_part = stripped.split("=", 1)
-            key = key_part.strip().lower()
-            value = value_part.strip()
-
-            if value.startswith("{") and "}" not in value:
-                collecting_key = key
-                collecting_value = [value]
-                continue
-
-            raw_entries[key] = value
-
-    def _split_block(value: str) -> list[str]:
-        inner = value.strip()
-        if inner.startswith("{"):
-            inner = inner[1:]
-        if inner.endswith("}"):
-            inner = inner[:-1]
-        # Replace newlines with spaces before splitting.
-        inner = inner.replace("\n", " ")
-        # Avoid empty tokens from double commas.
-        return [token.strip() for token in inner.split(",") if token.strip()]
-
-    list_float_keys = {"wavelength", "fwhm"}
-    list_string_keys = {"map info", "band names"}
-    int_scalar_keys = {"samples", "lines", "bands", "data type", "byte order"}
-
-    processed: dict[str, object] = {}
-    for key, raw_value in raw_entries.items():
-        if raw_value.startswith("{") and raw_value.endswith("}"):
-            tokens = _split_block(raw_value)
-            if key in list_float_keys:
-                try:
-                    processed[key] = [float(token) for token in tokens]
-                except ValueError as exc:
-                    raise RuntimeError(
-                        f"Could not parse numeric list for '{key}' from ENVI header"
-                    ) from exc
-            elif key in list_string_keys:
-                processed[key] = [token.strip('"').strip("'") for token in tokens]
-            else:
-                processed[key] = [
-                    _coerce_scalar(token.strip('"').strip("'")) for token in tokens
-                ]
-            continue
-
-        cleaned = raw_value.strip().strip('"').strip("'")
-        if key in int_scalar_keys:
-            try:
-                processed[key] = int(cleaned)
-            except ValueError as exc:  # pragma: no cover - malformed headers unexpected
-                raise RuntimeError(f"Header value for '{key}' is not an integer") from exc
-            continue
-
-        processed[key] = _coerce_scalar(cleaned)
-
-    return processed
 
 
 def _format_envi_scalar(value: object) -> str:
@@ -1326,6 +1229,37 @@ def stage_convolve_all_sensors(
     logger.info("🎉 Finished pipeline for %s", flight_stem)
 
 
+def _export_parquet_stage(*, base_folder: Path, flight_stem: str) -> None:
+    """Stage 6: ensure Parquet sidecars exist for corrected and resampled ENVI cubes."""
+
+    base_path = Path(base_folder)
+    corrected = [
+        prod
+        for prod in NEONReflectanceBRDFCorrectedENVIFile.find_in_directory(base_path)
+        if _belongs_to(flight_stem, prod.path)
+    ]
+    resampled = [
+        prod
+        for prod in NEONReflectanceResampledENVIFile.find_in_directory(base_path)
+        if _belongs_to(flight_stem, prod.path) and not getattr(prod, "is_masked", False)
+    ]
+
+    if not corrected and not resampled:
+        logger.info(
+            "⏭️  Skipped: No reflectance ENVI products found for %s to export as Parquet",
+            flight_stem,
+        )
+        return
+
+    seen: set[Path] = set()
+    for product in corrected + resampled:
+        if product.path in seen:
+            continue
+        seen.add(product.path)
+        hdr_path = product.hdr_path()
+        ensure_parquet_for_envi(product.path, hdr_path, logger)
+
+
 def process_one_flightline(
     *,
     base_folder: Path,
@@ -1341,6 +1275,7 @@ def process_one_flightline(
       2) build correction JSON
       3) apply BRDF + topographic correction
       4) convolve / resample to target sensors
+      5) export Parquet summaries for corrected and resampled cubes
 
     Each stage:
       - uses get_flightline_products() for canonical file naming
@@ -1394,6 +1329,10 @@ def process_one_flightline(
         corrected_hdr_path=corrected_hdr_path,
         resample_method=resample_method,
     )
+
+    logger.info("📦 Ensuring Parquet exports for %s", flight_stem)
+    _export_parquet_stage(base_folder=base_folder, flight_stem=flight_stem)
+    logger.info("✅ Parquet export stage complete for %s", flight_stem)
 
 
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
@@ -1477,7 +1416,8 @@ def go_forth_and_multiply(
       - skips work when outputs are already valid,
       - regenerates any missing/partial work safely,
       - supports resample_method ("convolution", "legacy", etc.)
-        and brightness_offset passthrough.
+        and brightness_offset passthrough,
+      - exports Parquet sidecars for every corrected and resampled ENVI cube.
     """
 
     base_path = Path(base_folder)

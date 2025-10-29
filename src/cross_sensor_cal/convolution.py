@@ -16,7 +16,8 @@ from .file_types import (
     NEONReflectanceResampledENVIFile,
     NEONReflectanceResampledHDRFile,
 )
-from .pipelines.pipeline import convolve_resample_product, _parse_envi_header
+from .envi_header import _parse_envi_header
+from .pipelines.pipeline import convolve_resample_product
 from .utils import get_package_data_path
 from .utils_checks import is_valid_envi_pair
 

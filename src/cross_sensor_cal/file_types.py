@@ -709,6 +709,11 @@ class NEONReflectanceBRDFCorrectedENVIFile(MaskedFileMixin, DataFile):
             filtered.append(path)
         return [cls(path=p) for p in sorted(filtered)]
 
+    def hdr_path(self) -> Path:
+        """Return the companion ENVI header path for this corrected cube."""
+
+        return self.path.with_suffix(".hdr")
+
 
 @dataclass
 class NEONReflectanceBRDFCorrectedENVIHDRFile(MaskedFileMixin, DataFile):
@@ -1140,6 +1145,11 @@ class NEONReflectanceResampledENVIFile(MaskedFileMixin, DataFile):
     ) -> List["NEONReflectanceResampledENVIFile"]:
         files = super().find_in_directory(directory)
         return [f for f in files if (suffix is None or f.suffix == suffix)]
+
+    def hdr_path(self) -> Path:
+        """Return the companion ENVI header path for this resampled cube."""
+
+        return self.path.with_suffix(".hdr")
 
 
 class NEONReflectanceResampledHDRFile(DataFile):
