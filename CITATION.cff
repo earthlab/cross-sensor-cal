@@ -1,32 +1,22 @@
 # DO NOT EDIT OUTSIDE MARKERS
 # FILLME:START
 cff-version: 1.2.0
-message: >-
-  If you use Cross-Sensor Calibration in your work, please cite the software using
-  the metadata below.
-title: Cross-Sensor Calibration
+message: "If you use cross-sensor-cal in your research, please cite it as below."
+title: "cross-sensor-cal: NEON hyperspectral cross-sensor harmonization pipeline"
+version: "2.2.0"
+date-released: "2025-10-29"
 type: software
 authors:
-  - name: Earth Lab Data Innovation Team
-    affiliation: University of Colorado Boulder
+  - family-names: "Earth Lab"
+    given-names: "Data Innovation Team"
+    affiliation: "University of Colorado Boulder"
+    # TODO: Replace with individual author names and ORCIDs when available.
+repository-code: "https://github.com/earthlab/cross-sensor-cal"
 keywords:
-  - hyperspectral
-  - NEON
-  - remote sensing
-  - spectral analysis
-  - cross sensor calibration
-repository-code: https://github.com/earthlab/cross-sensor-cal
+  - "NEON"
+  - "hyperspectral"
+  - "BRDF correction"
+  - "cross-sensor calibration"
+  - "remote sensing"
 license: GPL-3.0-or-later
-version: 0.1.0
-abstract: >-
-  Cross-Sensor Calibration provides a reproducible Python pipeline for downloading,
-  correcting, and resampling NEON Airborne Observation Platform flight lines to
-  emulate alternate sensors and generate analysis-ready spectral products.
-preferred-citation:
-  type: manual
-  title: Cross-Sensor Calibration User Guide
-  authors:
-    - name: Earth Lab Data Innovation Team
-  year: 2025
-  url: https://earthlab.github.io/cross-sensor-cal
 # FILLME:END

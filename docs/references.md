@@ -7,7 +7,7 @@
 - Claverie, M., Ju, J., Masek, J.G., et al. (2018). The Harmonized Landsat and Sentinel-2 surface reflectance data set. *Remote Sensing of Environment*.
 
 ### Citing this project
-- Earth Lab Data Innovation Team. (2025). *Cross-Sensor Calibration* (Version 0.1.0) [Software]. University of Colorado Boulder. https://github.com/earthlab/cross-sensor-cal
+- Earth Lab Data Innovation Team. (2025). *Cross-Sensor Calibration* (Version 2.2.0) [Software]. University of Colorado Boulder. https://github.com/earthlab/cross-sensor-cal
 
 ### Spectral libraries
 - Baldridge, A.M., Hook, S.J., Grove, C.I., & Rivera, G. (2009). The ASTER spectral library version 2.0. *Remote Sensing of Environment*.

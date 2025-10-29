@@ -9,6 +9,17 @@ The documentation is organized around the production pipeline and is intended
 for researchers, analysts, and developers who need reproducible spectral
 processing workflows.
 
+> **Current release:** 2.2.0 (2025-10-29)
+
+## What's new in 2.2.0
+
+- [Parallel execution](pipeline.md#parallel-processing) with `--max-workers` for
+  per-flightline workers and prefixed logs.
+- Organized [per-flightline subdirectories](pipeline.md#file-layout) that keep raw `.h5`
+  files separate from derived outputs.
+- [QA panels and the `cscal-qa` CLI](qa.md) for quick visual validation of exports,
+  corrections, sensor convolution, and Parquet sidecars.
+
 ## What you will find here
 
 - **Quickstarts** to help you install the tooling and run the pipeline on a test
@@ -44,6 +55,14 @@ Each stage emits tqdm-style progress bars, prefixes logs with the flightline ID,
 and writes outputs into `<base>/<flight_stem>/` while leaving the `.h5` at the
 workspace root for easy cleanup. Dive into the dedicated pages in the pipeline
 section for detailed instructions, expected inputs, and generated products.
+
+### Parallel processing tips
+
+- `--max-workers N` (default `2`) runs that many flight lines in parallel via the
+  Python API or `cscal-pipeline` CLI.
+- Each worker processes a single flight line in isolation so outputs never clash.
+- Logs are automatically prefixed with the flight line ID.
+- Large hyperspectral cubes can use tens of GB of RAM; size your concurrency accordingly.
 
 ## Need help?
 

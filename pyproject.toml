@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cross_sensor_cal"
-version = "0.1.0"
+version = "2.2.0"
 description = "Cross-sensor calibration pipeline."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{ name = "Earth Lab" }]
 license = { file = "LICENSE" }
 classifiers = [
@@ -16,12 +16,19 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "numpy>=1.22",
-    "pandas>=1.5",
-    "scipy>=1.10",
-    "pyarrow>=12",
-    "requests>=2.31",
-    "tqdm>=4.65",
+    "numpy",
+    "scipy",
+    "pandas",
+    "pyarrow",
+    "h5py",
+    "requests",
+    "tqdm",
+    "matplotlib",
+    "rasterio",
+    "shapely",
+    "geopandas",
+    "spectral>=0.23",
+    "ray[default]>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -29,21 +36,16 @@ tests = [
     "pytest>=7.4",
     "pytest-xdist>=3.5",
     "pytest-cov>=4.1",
-    "rasterio>=1.3",
-    "scipy>=1.10",
 ]
 full = [
-    "rasterio>=1.3",
-    "geopandas>=0.13",
     "spectral>=0.23",
     "ray[default]>=2.2",
-    "h5py>=3.8",
 ]
 
 [project.scripts]
 cscal-download = "cross_sensor_cal.cli:download_main"
-cscal-pipeline = "cross_sensor_cal.cli:pipeline_main"
-cscal-qa = "cross_sensor_cal.cli:qa_main"
+cscal-pipeline = "cross_sensor_cal.cli.pipeline_cli:main"
+cscal-qa = "cross_sensor_cal.cli.qa_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/earthlab/cross-sensor-cal"
