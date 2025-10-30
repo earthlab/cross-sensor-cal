@@ -10,6 +10,14 @@ import pandas as pd
 from tqdm import tqdm
 import numpy as np
 
+from cross_sensor_cal.exports.schema_utils import (
+    SENSOR_WAVELENGTHS_NM,
+    ensure_coord_columns,
+    infer_stage_from_name,
+    parse_envi_wavelengths_nm,
+    sort_and_rename_spectral_columns,
+)
+
 from ._optional import require_geopandas, require_rasterio
 
 
@@ -72,7 +80,18 @@ def validate_bands_in_dir(
     value_range: tuple | None = (0.0, 1.0),
     eps_all_zero: float = 1e-12,
     show_preview: bool = True,
-    meta_cols=("Raster_File", "CRS", "Chunk_Number", "Pixel_X", "Pixel_Y"),
+    meta_cols=(
+        "raster_file",
+        "crs",
+        "chunk",
+        "x",
+        "y",
+        "Raster_File",
+        "CRS",
+        "Chunk_Number",
+        "Pixel_X",
+        "Pixel_Y",
+    ),
 ):
     """Validate band layout and sample values for each Parquet file in ``directory``."""
 
@@ -620,6 +639,21 @@ def process_raster_in_chunks(
             return
     hdr_path = raster_path.with_suffix(".hdr")
 
+    stage_key = infer_stage_from_name(output_parquet_path.name)
+    wavelengths_nm: Optional[List[int]] = None
+    if hdr_path.exists():
+        try:
+            hdr_text = hdr_path.read_text(encoding="utf-8", errors="ignore")
+            wavelengths_nm = parse_envi_wavelengths_nm(hdr_text)
+        except OSError as exc:
+            print(f"[WARN] Failed to read wavelengths from {hdr_path}: {exc}")
+    if wavelengths_nm is None:
+        lower_name = output_parquet_path.name.lower()
+        for sensor_key, centers in SENSOR_WAVELENGTHS_NM.items():
+            if sensor_key in lower_name:
+                wavelengths_nm = centers
+                break
+
     rasterio = require_rasterio()
 
     with rasterio.open(raster_path) as src:
@@ -630,6 +664,24 @@ def process_raster_in_chunks(
         dataset_crs = src.crs if src.crs is not None else crs_from_hdr
         if src.crs is None and crs_from_hdr is not None:
             print(f"[INFO] Using CRS from .hdr file: {crs_from_hdr}")
+
+        transform = src.transform
+        crs_epsg: Optional[int | str] = None
+        if dataset_crs is not None:
+            try:
+                crs_epsg = dataset_crs.to_epsg()
+            except Exception:
+                crs_epsg = None
+            if crs_epsg is None:
+                try:
+                    crs_epsg = dataset_crs.to_string()
+                except Exception:
+                    crs_epsg = None
+        if crs_epsg is None and crs_from_hdr is not None:
+            try:
+                crs_epsg = crs_from_hdr.to_epsg() or crs_from_hdr.to_string()
+            except Exception:
+                crs_epsg = crs_from_hdr.to_string()
 
         polygons = None
         polygon_values = None
@@ -654,11 +706,25 @@ def process_raster_in_chunks(
                 dtype="int32"
             ).ravel()
 
-            polygon_attributes = polygons.reset_index().rename(columns={'index': 'Polygon_ID'})
+            polygon_attributes = polygons.reset_index().rename(columns={'index': 'polygon_id'})
+            if "polygon_id" in polygon_attributes.columns:
+                polygon_attributes["polygon_id"] = polygon_attributes["polygon_id"] + 1
 
         total_bands = src.count
         height, width = src.height, src.width
         num_chunks = (height * width // chunk_size) + (1 if (height * width) % chunk_size else 0)
+
+        if wavelengths_nm:
+            band_wavelengths: List[int] = []
+            for idx in range(total_bands):
+                if idx < len(wavelengths_nm):
+                    band_wavelengths.append(int(round(wavelengths_nm[idx])))
+                elif band_wavelengths:
+                    band_wavelengths.append(band_wavelengths[-1] + 1)
+                else:
+                    band_wavelengths.append(idx + 1)
+        else:
+            band_wavelengths = [idx + 1 for idx in range(total_bands)]
 
         # Smart prefixing
         if getattr(raster_file, "is_masked", False):
@@ -680,12 +746,16 @@ def process_raster_in_chunks(
                     row_end = min(((i + 1) * chunk_size) // width + 1, height)
 
                     data = src.read(window=((row_start, row_end), (0, width)))
+                    if data.size == 0:
+                        pbar.update(1)
+                        continue
+
                     data_chunk = data.reshape(total_bands, -1).T
 
                     row_indices, col_indices = np.meshgrid(
                         np.arange(row_start, row_end),
                         np.arange(width),
-                        indexing='ij'
+                        indexing="ij",
                     )
                     row_indices_flat = row_indices.flatten()
                     col_indices_flat = col_indices.flatten()
@@ -697,34 +767,61 @@ def process_raster_in_chunks(
                     valid_cols = col_indices_flat[valid_mask]
                     pixel_ids = valid_rows * width + valid_cols
 
-                    transform = src.transform
-                    x_coords = transform.a * valid_cols + transform.b * valid_rows + transform.c
-                    y_coords = transform.d * valid_cols + transform.e * valid_rows + transform.f
-
+                    polygon_chunk = None
                     if polygon_values is not None:
-                        polygon_chunk = polygon_values[row_start * width:row_end * width][valid_mask]
-                    else:
-                        polygon_chunk = None
+                        polygon_slice = polygon_values[row_start * width:row_end * width]
+                        polygon_chunk = polygon_slice[valid_mask]
 
-                    chunk_df = pd.DataFrame(data_chunk, columns=[f'Band_{b + 1}' for b in range(total_bands)])
-                    chunk_df["Raster_File"] = raster_path.name
-                    chunk_df["Polygon_File"] = str(polygon_path) if polygon_path is not None else None
-                    chunk_df["Chunk_Number"] = i
-                    chunk_df["Pixel_ID"] = pixel_ids
-                    chunk_df["Pixel_X"] = x_coords
-                    chunk_df["Pixel_Y"] = y_coords
+                    chunk_df = pd.DataFrame(
+                        data_chunk,
+                        columns=[f"Band_{b + 1}" for b in range(total_bands)],
+                    )
+                    chunk_df["pixel_id"] = pixel_ids
+                    chunk_df["row"] = valid_rows
+                    chunk_df["col"] = valid_cols
+                    chunk_df["raster_file"] = raster_path.name
+                    chunk_df["polygon_file"] = (
+                        str(polygon_path) if polygon_path is not None else None
+                    )
+                    chunk_df["chunk"] = i
                     if polygon_chunk is not None:
-                        chunk_df["Polygon_ID"] = pd.Series(polygon_chunk, dtype="Int64")
+                        chunk_df["polygon_id"] = pd.Series(polygon_chunk, dtype="Int64")
                     else:
-                        chunk_df["Polygon_ID"] = pd.Series(pd.NA, index=chunk_df.index, dtype="Int64")
+                        chunk_df["polygon_id"] = pd.Series(
+                            pd.NA, index=chunk_df.index, dtype="Int64"
+                        )
                     if dataset_crs:
-                        chunk_df["CRS"] = dataset_crs.to_string()
+                        try:
+                            chunk_df["crs"] = dataset_crs.to_string()
+                        except Exception:
+                            chunk_df["crs"] = None
 
-                    chunk_df.rename(columns={f"Band_{b + 1}": f"{band_prefix}{b + 1}" for b in range(total_bands)},
-                                    inplace=True)
+                    rename_initial = {
+                        f"Band_{b + 1}": f"{band_prefix}{b + 1}"
+                        for b in range(total_bands)
+                    }
+                    chunk_df.rename(columns=rename_initial, inplace=True)
+
+                    wl_rename = {
+                        f"{band_prefix}{idx + 1}": f"wl{band_wavelengths[idx]:04d}"
+                        for idx in range(total_bands)
+                    }
+                    chunk_df.rename(columns=wl_rename, inplace=True)
+
+                    chunk_df = ensure_coord_columns(
+                        chunk_df,
+                        transform=transform,
+                        crs_epsg=crs_epsg,
+                    )
 
                     if polygon_attributes is not None:
-                        chunk_df = pd.merge(chunk_df, polygon_attributes, on='Polygon_ID', how='left')
+                        chunk_df = pd.merge(chunk_df, polygon_attributes, on="polygon_id", how="left")
+
+                    chunk_df = sort_and_rename_spectral_columns(
+                        chunk_df,
+                        stage_key=stage_key,
+                        wavelengths_nm=band_wavelengths,
+                    )
 
                     table = pa_module.Table.from_pandas(chunk_df, preserve_index=False)
                     if pq_writer is None:

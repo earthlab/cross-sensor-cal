@@ -28,79 +28,31 @@ def parquet_exists_and_valid(parquet_path: Path) -> bool:
         return False
 
 
-def _extract_wavelengths(envi_hdr: Path, band_count: int) -> list[float] | None:
-    """Parse ``wavelength`` metadata from an ENVI header, if present."""
+def _crs_from_header_text(header_text: str) -> int | str | None:
+    match = re.search(
+        r"coordinate system string\s*=\s*(.+)",
+        header_text,
+        re.IGNORECASE,
+    )
+    if match:
+        return match.group(1).strip()
 
-    try:
-        text = Path(envi_hdr).read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-    match = re.search(r"wavelength\s*=\s*\{([^}]*)\}", text, re.IGNORECASE | re.DOTALL)
+    match = re.search(r"map info\s*=\s*\{([^}]*)\}", header_text, re.IGNORECASE)
     if not match:
         return None
 
-    raw_block = match.group(1).replace("\n", " ")
-    tokens = [token.strip() for token in raw_block.split(",") if token.strip()]
-    wavelengths: list[float] = []
-    for token in tokens:
-        try:
-            wavelengths.append(float(token))
-        except ValueError:
-            return None
-
-    if len(wavelengths) != band_count:
+    parts = [part.strip() for part in match.group(1).split(",")]
+    try:
+        utm_zone = int(parts[7])
+        hemisphere = parts[8].lower()
+    except (IndexError, ValueError):
         return None
 
-    return wavelengths
-
-
-def _chunk_to_dataframe(
-    *,
-    chunk,
-    row_offset: int,
-    col_offset: int,
-    wavelengths: list[float] | None,
-):
-    """Convert a chunked raster block into a pandas DataFrame."""
-
-    import numpy as np
-    import pandas as pd
-
-    if chunk.size == 0:
-        return pd.DataFrame(columns=["y", "x", "band", "wavelength_nm", "reflectance"])
-
-    chunk = np.moveaxis(chunk, 0, -1)  # (rows, cols, bands)
-    rows, cols, bands = chunk.shape
-    if rows == 0 or cols == 0 or bands == 0:
-        return pd.DataFrame(columns=["y", "x", "band", "wavelength_nm", "reflectance"])
-
-    yy = np.arange(row_offset, row_offset + rows, dtype=np.int32)
-    xx = np.arange(col_offset, col_offset + cols, dtype=np.int32)
-    grid_y, grid_x = np.meshgrid(yy, xx, indexing="ij")
-
-    pixel_count = rows * cols
-    band_indices = np.arange(bands, dtype=np.int32)
-
-    y_vals = np.repeat(grid_y.reshape(-1), bands)
-    x_vals = np.repeat(grid_x.reshape(-1), bands)
-    band_vals = np.tile(band_indices, pixel_count)
-    reflectance_vals = chunk.reshape(-1, bands).reshape(-1).astype("float32", copy=False)
-
-    if wavelengths is not None:
-        wl_array = np.asarray(wavelengths, dtype="float32")
-        wavelength_vals = wl_array[band_vals]
-    else:
-        wavelength_vals = np.full(reflectance_vals.shape, np.nan, dtype="float32")
-
-    data = {
-        "y": y_vals.astype("int32", copy=False),
-        "x": x_vals.astype("int32", copy=False),
-        "band": band_vals.astype("int32", copy=False),
-        "wavelength_nm": wavelength_vals,
-        "reflectance": reflectance_vals,
-    }
-    return pd.DataFrame(data)
+    if "north" in hemisphere:
+        return 32600 + utm_zone
+    if "south" in hemisphere:
+        return 32700 + utm_zone
+    return None
 
 
 def build_parquet_from_envi(
@@ -109,12 +61,22 @@ def build_parquet_from_envi(
     parquet_path: Path,
     chunk_size: int = 2048,
 ) -> None:
-    """Read an ENVI cube and emit a long-form Parquet table."""
+    """Read an ENVI cube and emit a wide per-pixel Parquet table."""
 
+    import numpy as np
+    import pandas as pd
     import rasterio
     from rasterio.windows import Window
     import pyarrow as pa
     import pyarrow.parquet as pq
+
+    from cross_sensor_cal.exports.schema_utils import (
+        SENSOR_WAVELENGTHS_NM,
+        ensure_coord_columns,
+        infer_stage_from_name,
+        parse_envi_wavelengths_nm,
+        sort_and_rename_spectral_columns,
+    )
 
     envi_img = Path(envi_img)
     envi_hdr = Path(envi_hdr)
@@ -123,12 +85,43 @@ def build_parquet_from_envi(
     if parquet_path.exists():
         parquet_path.unlink()
 
+    stage_key = infer_stage_from_name(parquet_path.name)
+
+    header_text: str | None = None
+    wavelengths_nm: list[int] | None = None
+    try:
+        header_text = envi_hdr.read_text(encoding="utf-8", errors="ignore")
+        wavelengths_nm = parse_envi_wavelengths_nm(header_text)
+    except OSError:
+        header_text = None
+
+    if wavelengths_nm is None:
+        for sensor_key, centers in SENSOR_WAVELENGTHS_NM.items():
+            if sensor_key in parquet_path.name.lower():
+                wavelengths_nm = centers
+                break
+
     with rasterio.open(envi_img) as src:
         band_count = src.count
         height = src.height
         width = src.width
+        transform = src.transform
 
-        wavelengths = _extract_wavelengths(envi_hdr, band_count)
+        crs_candidate: int | str | None = None
+        if src.crs is not None:
+            try:
+                crs_candidate = src.crs.to_epsg()
+            except Exception:
+                crs_candidate = None
+            if crs_candidate is None:
+                try:
+                    crs_candidate = src.crs.to_string()
+                except Exception:
+                    crs_candidate = None
+        if crs_candidate is None and header_text:
+            crs_candidate = _crs_from_header_text(header_text)
+        if crs_candidate is None:
+            raise ValueError(f"Cannot determine CRS for {envi_img}")
 
         if src.block_shapes:
             block_y, block_x = src.block_shapes[0]
@@ -143,25 +136,90 @@ def build_parquet_from_envi(
         block_y = max(1, min(chunk_size, block_y))
         block_x = max(1, min(chunk_size, block_x))
 
+        if wavelengths_nm:
+            band_wavelengths: list[int] = []
+            for idx in range(band_count):
+                if idx < len(wavelengths_nm):
+                    band_wavelengths.append(int(round(wavelengths_nm[idx])))
+                elif band_wavelengths:
+                    band_wavelengths.append(band_wavelengths[-1] + 1)
+                else:
+                    band_wavelengths.append(idx + 1)
+        else:
+            band_wavelengths = [idx + 1 for idx in range(band_count)]
+
+        nodata = src.nodata
         writer: pq.ParquetWriter | None = None
+        wrote_rows = False
         try:
             for row_start in range(0, height, block_y):
                 row_end = min(row_start + block_y, height)
                 for col_start in range(0, width, block_x):
                     col_end = min(col_start + block_x, width)
                     window = Window(col_start, row_start, col_end - col_start, row_end - row_start)
-                    chunk = src.read(window=window)
-                    if chunk.size == 0:
+                    block = src.read(window=window)
+                    if block.size == 0:
                         continue
-                    df = _chunk_to_dataframe(
-                        chunk=chunk,
-                        row_offset=row_start,
-                        col_offset=col_start,
-                        wavelengths=wavelengths,
+
+                    rows = row_end - row_start
+                    cols = col_end - col_start
+                    spectra = block.reshape(band_count, -1).T
+
+                    mask = np.zeros(spectra.shape[0], dtype=bool)
+                    if nodata is not None:
+                        mask |= np.any(spectra == nodata, axis=1)
+                    mask |= ~np.isfinite(spectra).all(axis=1)
+                    valid_mask = ~mask
+                    if not valid_mask.any():
+                        continue
+
+                    spectra = spectra[valid_mask].astype("float32", copy=False)
+                    row_indices = np.repeat(np.arange(row_start, row_end), cols)[valid_mask]
+                    col_indices = np.tile(np.arange(col_start, col_end), rows)[valid_mask]
+
+                    df_chunk = pd.DataFrame(
+                        spectra,
+                        columns=[f"wl{band_wavelengths[idx]:04d}" for idx in range(band_count)],
                     )
-                    if df.empty:
-                        continue
-                    table = pa.Table.from_pandas(df, preserve_index=False)
+                    df_chunk["row"] = row_indices.astype("int32", copy=False)
+                    df_chunk["col"] = col_indices.astype("int32", copy=False)
+                    df_chunk["pixel_id"] = (
+                        row_indices.astype("int64", copy=False) * width
+                        + col_indices.astype("int64", copy=False)
+                    )
+                    df_chunk["source_image"] = pd.Series(
+                        envi_img.name, index=df_chunk.index, dtype="string"
+                    )
+                    if isinstance(crs_candidate, int):
+                        df_chunk["epsg"] = pd.Series(
+                            crs_candidate, index=df_chunk.index, dtype="Int64"
+                        )
+                        df_chunk["crs"] = pd.Series(pd.NA, index=df_chunk.index, dtype="string")
+                    else:
+                        df_chunk["epsg"] = pd.Series(pd.NA, index=df_chunk.index, dtype="Int64")
+                        df_chunk["crs"] = pd.Series(
+                            str(crs_candidate) if crs_candidate else pd.NA,
+                            index=df_chunk.index,
+                            dtype="string",
+                        )
+
+                    df_chunk = ensure_coord_columns(
+                        df_chunk,
+                        transform=transform,
+                        crs_epsg=crs_candidate,
+                    )
+
+                    if "lon" not in df_chunk or "lat" not in df_chunk:
+                        raise ValueError(f"Unable to compute lon/lat for {parquet_path}")
+
+                    df_chunk = sort_and_rename_spectral_columns(
+                        df_chunk,
+                        stage_key=stage_key,
+                        wavelengths_nm=band_wavelengths,
+                    )
+
+                    wrote_rows = True
+                    table = pa.Table.from_pandas(df_chunk, preserve_index=False)
                     if writer is None:
                         writer = pq.ParquetWriter(parquet_path, table.schema)
                     writer.write_table(table)
@@ -169,16 +227,27 @@ def build_parquet_from_envi(
             if writer is not None:
                 writer.close()
 
-    if not parquet_path.exists():
-        schema = pa.schema(
-            [
-                ("y", pa.int32()),
-                ("x", pa.int32()),
-                ("band", pa.int32()),
-                ("wavelength_nm", pa.float32()),
-                ("reflectance", pa.float32()),
-            ]
-        )
+    if not parquet_path.exists() or not wrote_rows:
+        meta_fields = [
+            ("pixel_id", pa.int64()),
+            ("row", pa.int32()),
+            ("col", pa.int32()),
+            ("x", pa.float64()),
+            ("y", pa.float64()),
+            ("lon", pa.float64()),
+            ("lat", pa.float64()),
+            ("source_image", pa.string()),
+            ("epsg", pa.int32()),
+            ("crs", pa.string()),
+        ]
+        spectral_fields = [
+            (
+                f"{stage_key}_b{idx + 1:03d}_wl{band_wavelengths[idx]:04d}nm",
+                pa.float32(),
+            )
+            for idx in range(len(band_wavelengths))
+        ]
+        schema = pa.schema(meta_fields + spectral_fields)
         empty_table = pa.Table.from_arrays(
             [pa.array([], type=field.type) for field in schema],
             names=[field.name for field in schema],

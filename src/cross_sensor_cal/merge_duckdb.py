@@ -31,7 +31,7 @@ to support custom workflows.
 
 from __future__ import annotations
 
-import os, sys, traceback
+import os, sys, traceback, re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -132,14 +132,27 @@ def _quote_identifier(identifier: str) -> str:
 def _list_spectral_columns(columns: Iterable[str]) -> List[str]:
     spectral: List[str] = []
     for col in columns:
-        if col.isdigit():
+        if "_wl" in col:
             spectral.append(col)
         elif col.startswith("wl") and col[2:].isdigit():
             spectral.append(col)
-    return sorted(
-        spectral,
-        key=lambda name: int("".join(ch for ch in name if ch.isdigit()) or 0),
-    )
+        elif col.isdigit():
+            spectral.append(col)
+
+    def _sort_key(name: str) -> int:
+        match = re.search(r"wl(\d+)", name)
+        if match:
+            return int(match.group(1))
+        digits = "".join(ch for ch in name if ch.isdigit())
+        return int(digits) if digits else 0
+
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for col in sorted(spectral, key=_sort_key):
+        if col not in seen:
+            ordered.append(col)
+            seen.add(col)
+    return ordered
 
 
 def _quote_path(path: str) -> str:
@@ -282,9 +295,12 @@ def _register_union(
     select_final: List[str] = []
     for col in wide_columns:
         if col in spectral_final:
-            nm = col[2:] if col.startswith("wl") else col
-            alias = _quote_identifier(f"{name}_wl{nm}")
-            select_final.append(f"{_quote_identifier(col)} AS {alias}")
+            if "_wl" in col:
+                select_final.append(_quote_identifier(col))
+            else:
+                nm = col[2:] if col.startswith("wl") else col
+                alias = _quote_identifier(f"{name}_wl{nm}")
+                select_final.append(f"{_quote_identifier(col)} AS {alias}")
         else:
             select_final.append(_quote_identifier(col))
 
@@ -403,9 +419,9 @@ def merge_flightline(
                     selects.append(f"{table_alias}.{ident} AS {ident}")
                 return selects
 
-            orig_spectral = [c for c in orig_cols if c.startswith("orig_wl")]
-            corr_spectral = [c for c in corr_cols if c.startswith("corr_wl")]
-            resamp_spectral = [c for c in resamp_cols if c.startswith("resamp_wl")]
+            orig_spectral = [c for c in orig_cols if "_wl" in c]
+            corr_spectral = [c for c in corr_cols if "_wl" in c]
+            resamp_spectral = [c for c in resamp_cols if "_wl" in c]
 
             select_clause = meta_selects + _spectral_select("o", orig_spectral)
             select_clause += _spectral_select("c", corr_spectral)

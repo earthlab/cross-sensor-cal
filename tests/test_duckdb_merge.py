@@ -56,28 +56,26 @@ def test_duckdb_merge_smoke(tmp_path: Path) -> None:
             "row": idx,
             "col": idx + 10,
         }
-        for wl in wavelengths:
-            record[f"wl{wl:04d}"] = (wl + idx) / 2000.0
+        for band_idx, wl in enumerate(wavelengths, 1):
+            record[f"corr_b{band_idx:03d}_wl{wl:04d}nm"] = (wl + idx) / 2000.0
         wide_records.append(record)
     wide_df = pd.DataFrame(wide_records)
     _write_parquet(wide_df, flight_dir / "corr" / "test_corrected_table.parquet")
 
     # Long layout with micrometer wavelengths (resampled)
-    resamp_rows = []
+    resamp_records = []
     resamp_wavelengths = np.arange(500, 520)
     for idx, pid in enumerate(pixel_ids):
-        for wl in resamp_wavelengths:
-            resamp_rows.append(
-                {
-                    "pixel_id": pid,
-                    "wavelength_um": wl / 1000.0,
-                    "reflectance": (wl + idx) / 3000.0,
-                    "site": "TEST",
-                    "domain": "D00",
-                    "flightline": "FLIGHT",
-                }
-            )
-    resamp_df = pd.DataFrame(resamp_rows)
+        record = {
+            "pixel_id": pid,
+            "site": "TEST",
+            "domain": "D00",
+            "flightline": "FLIGHT",
+        }
+        for band_idx, wl in enumerate(resamp_wavelengths, 1):
+            record[f"resamp_b{band_idx:03d}_wl{wl:04d}nm"] = (wl + idx) / 3000.0
+        resamp_records.append(record)
+    resamp_df = pd.DataFrame(resamp_records)
     _write_parquet(resamp_df, flight_dir / "resamp" / "test_resampled_table.parquet")
 
     output_path = merge_flightline(flight_dir, emit_qa_panel=False)
@@ -86,8 +84,8 @@ def test_duckdb_merge_smoke(tmp_path: Path) -> None:
     assert merged["pixel_id"].is_unique
 
     orig_cols = [c for c in merged.columns if c.startswith("orig_wl")]
-    corr_cols = [c for c in merged.columns if c.startswith("corr_wl")]
-    resamp_cols = [c for c in merged.columns if c.startswith("resamp_wl")]
+    corr_cols = [c for c in merged.columns if c.startswith("corr_") and "_wl" in c]
+    resamp_cols = [c for c in merged.columns if c.startswith("resamp_") and "_wl" in c]
 
     assert len(orig_cols) == 426
     assert len(corr_cols) == 426
@@ -117,7 +115,7 @@ def test_master_parquet_naming(tmp_path):
     corr_df = pd.DataFrame(
         {
             "pixel_id": ["p0"],
-            "wl0500": [0.2],
+            "corr_b001_wl0500nm": [0.2],
         }
     )
     _write_parquet(corr_df, fl / "corr" / "dummy_corrected.parquet")
@@ -125,8 +123,7 @@ def test_master_parquet_naming(tmp_path):
     resamp_df = pd.DataFrame(
         {
             "pixel_id": ["p0"],
-            "wavelength_um": [0.5],
-            "reflectance": [0.3],
+            "resamp_b001_wl0500nm": [0.3],
         }
     )
     _write_parquet(resamp_df, fl / "resamp" / "dummy_resampled.parquet")
