@@ -396,6 +396,23 @@ def _export_parquet_stage(
         if parquet_path is not None:
             parquet_outputs.append(Path(parquet_path))
 
+    if parquet_outputs:
+        validator = Path(__file__).resolve().parents[3] / "bin" / "validate_parquets"
+        if validator.exists():
+            try:
+                subprocess.run(
+                    [sys.executable, str(validator), str(work_dir)],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                logger.warning(
+                    "⚠️ Parquet validation reported an issue for %s: %s",
+                    flight_stem,
+                    exc,
+                )
+        else:
+            logger.debug("Validator script not found at %s", validator)
+
     return parquet_outputs
 
 

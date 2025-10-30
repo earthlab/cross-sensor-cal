@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+from pathlib import Path
+import re
+import sys
+
+import pyarrow.parquet as pq
+
+
+def is_ok_columns(cols):
+    # non-spectral can be anything; spectral must match <stage>_b###_wl####nm ascending within each stage
+    spec = [c for c in cols if "_wl" in c]
+    last = -1
+    for c in spec:
+        m = re.search(r"wl(\d+)nm$", c)
+        if not m:
+            return False
+        wl = int(m.group(1))
+        if wl < last:
+            return False
+        last = wl
+    return True
+
+
+def main(p: str):
+    root = Path(p)
+    bad = []
+    for q in root.glob("*.parquet"):
+        table = pq.read_table(q, columns=["lat", "lon"])
+        cols = table.schema.names
+        lat_idx = cols.index("lat") if "lat" in cols else -1
+        lon_idx = cols.index("lon") if "lon" in cols else -1
+        if lat_idx < 0 or lon_idx < 0:
+            bad.append((q.name, "missing lat/lon"))
+            continue
+        if not is_ok_columns(cols):
+            bad.append((q.name, "spectral columns unsorted or misnamed"))
+    if bad:
+        print("❌ Issues found:")
+        for name, msg in bad:
+            print(" -", name, "→", msg)
+        sys.exit(1)
+    print("✅ All parquet files look consistent.")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else ".")
