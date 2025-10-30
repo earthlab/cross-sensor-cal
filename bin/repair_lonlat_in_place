@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+from pathlib import Path
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = REPO_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+import pandas as pd
+import pyarrow.parquet as pq
+
+from cross_sensor_cal.exports.geo_utils import load_geo_from_hdr, add_lonlat_inplace
+
+
+def main(folder: str):
+    root = Path(folder)
+    if not root.exists():
+        print(f"⚠️ missing folder: {root}")
+        return
+    for q in sorted(root.glob("*.parquet")):
+        hdr = q.with_suffix(".hdr")
+        geo = load_geo_from_hdr(hdr) if hdr.exists() else None
+        df = pq.read_table(q).to_pandas()
+        before = set(df.columns)
+        df = add_lonlat_inplace(df, geo)
+        added = set(df.columns) - before
+        if added:
+            df.to_parquet(q, index=False)
+            print("🔧 added columns", sorted(added), "→", q.name)
+        else:
+            print("→ no change:", q.name)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else ".")

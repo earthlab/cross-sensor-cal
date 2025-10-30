@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from cross_sensor_cal.exports.geo_utils import write_parquet_with_lonlat
+
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +167,7 @@ def main(argv: Iterable[str] | None = None) -> None:
     out_png = args.out_png or default_png
 
     out_parquet.parent.mkdir(parents=True, exist_ok=True)
-    df_summary.to_parquet(out_parquet, index=False)
+    write_parquet_with_lonlat(df_summary, out_parquet, hdr_path=None)
     logger.info("\N{floppy disk} Wrote aggregated QA summary → %s", out_parquet)
 
     try:
