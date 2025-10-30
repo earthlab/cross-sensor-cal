@@ -1,2 +1,5 @@
 .Rproj.user
+# QA artifacts
+*_qa_metrics.json
+*_qa_metrics.parquet
 tlm_check_spectra/data

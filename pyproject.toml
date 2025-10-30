@@ -47,6 +47,7 @@ cscal-download = "cross_sensor_cal.cli:download_main"
 cscal-pipeline = "cross_sensor_cal.cli.pipeline_cli:main"
 cscal-qa = "cross_sensor_cal.cli.qa_cli:main"
 cscal-recover-raw = "cross_sensor_cal.cli.recover_cli:main"
+cscal-qa-metrics = "cross_sensor_cal.qa_metrics:main"
 
 [project.urls]
 Homepage = "https://github.com/earthlab/cross-sensor-cal"
