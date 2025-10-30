@@ -10,20 +10,20 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-# Try to reuse qa_plots utilities for ENVI IO
+# Try to reuse shared ENVI utilities without pulling in heavy plotting deps
 try:
-    from cross_sensor_cal.qa_plots import (
+    from cross_sensor_cal.envi import (
+        band_axis_from_header,
         hdr_to_dict,
         read_envi_cube,
-        _band_axis_from_header,
-        _to_unitless_reflectance,
+        to_unitless_reflectance,
     )
 except Exception:
     hdr_to_dict = None
     read_envi_cube = None
-    _band_axis_from_header = None
+    band_axis_from_header = None
 
-    def _to_unitless_reflectance(arr: np.ndarray) -> np.ndarray:
+    def to_unitless_reflectance(arr: np.ndarray) -> np.ndarray:
         med = float(np.nanmedian(arr))
         return arr / 10000.0 if med > 1.5 else arr
 
@@ -62,11 +62,11 @@ def _load_envi(img_path: Path) -> Tuple[np.ndarray, Dict[str, Any]]:
 
 
 def _band_axis(arr: np.ndarray, hdr: Dict[str, Any]) -> int:
-    if _band_axis_from_header is None:
+    if band_axis_from_header is None:
         nb = int(hdr.get("bands", 0) or 0)
         cands = [i for i, d in enumerate(arr.shape) if d == nb]
         return cands[0] if cands else (2 if arr.ndim == 3 else 0)
-    return _band_axis_from_header(arr, hdr)
+    return band_axis_from_header(arr, hdr)
 
 
 def _pick_band_index_for_nm(hdr: Dict[str, Any], target_nm: float = 860.0) -> int:
@@ -126,8 +126,8 @@ def ratio_sanity(corrected: np.ndarray, raw: np.ndarray, ref_hdr: Dict[str, Any]
     bi = _pick_band_index_for_nm(ref_hdr, 860.0)
     corr_band = _extract_band(corrected, ref_hdr, bi)
     raw_band = _extract_band(raw, ref_hdr, bi)
-    corr_u = _to_unitless_reflectance(corr_band)
-    raw_u = _to_unitless_reflectance(raw_band)
+    corr_u = to_unitless_reflectance(corr_band)
+    raw_u = to_unitless_reflectance(raw_band)
     denom = np.maximum(raw_u, 1e-6)
     ratio = corr_u / denom
     m = _safe_mask(ratio)
@@ -174,7 +174,7 @@ def aspect_contrast_band(
     m_sha = np.isfinite(band) & np.isfinite(aspect_deg) & shade_mask
     if m_sun.sum() < 100 or m_sha.sum() < 100:
         return np.nan
-    band_u = _to_unitless_reflectance(band)
+    band_u = to_unitless_reflectance(band)
     return float(np.nanmean(band_u[m_sun]) - np.nanmean(band_u[m_sha]))
 
 
@@ -182,7 +182,7 @@ def brdf_view_zenith_cv_band(
     refl: np.ndarray, hdr: Dict[str, Any], vza_deg: np.ndarray, band_idx: int
 ) -> float:
     band = _extract_band(refl, hdr, band_idx)
-    band_u = _to_unitless_reflectance(band)
+    band_u = to_unitless_reflectance(band)
     vals = []
     for lo, hi in zip(VIEW_ZENITH_BINS[:-1], VIEW_ZENITH_BINS[1:]):
         m = np.isfinite(band_u) & np.isfinite(vza_deg) & (vza_deg >= lo) & (vza_deg < hi)
@@ -243,8 +243,8 @@ def compute_metrics_for_flightline(
 
     for bi in band_indices:
         wl_nm = float(wl_arr[bi]) if wl_arr is not None else None
-        raw_b = _to_unitless_reflectance(_extract_band(raw, raw_hdr, bi))
-        cor_b = _to_unitless_reflectance(_extract_band(cor, cor_hdr, bi))
+        raw_b = to_unitless_reflectance(_extract_band(raw, raw_hdr, bi))
+        cor_b = to_unitless_reflectance(_extract_band(cor, cor_hdr, bi))
         denom = np.maximum(raw_b, 1e-6)
         ratio = cor_b / denom
         m = _safe_mask(ratio)
