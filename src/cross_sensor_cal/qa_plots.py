@@ -368,8 +368,8 @@ def summarize_flightline_outputs(
         raw_band_axis: int | None = None
         corr_band_axis: int | None = None
         try:
-            raw_band_axis = _band_axis_from_header(raw_mm, raw_header)
-            corr_band_axis = _band_axis_from_header(corrected_mm, corrected_header)
+            raw_band_axis = band_axis_from_header(raw_mm, raw_header)
+            corr_band_axis = band_axis_from_header(corrected_mm, corrected_header)
         except ValueError as exc:
             _skip_spectra_panel(f"Skipping spectra panel: {exc}")
             raw_band_axis = corr_band_axis = None
