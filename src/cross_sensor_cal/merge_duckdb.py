@@ -58,6 +58,12 @@ def _table_columns(con: duckdb.DuckDBPyConnection, table: str) -> List[str]:
     return [r[0] for r in rows]
 
 
+def _quote_identifier(identifier: str) -> str:
+    """Return a DuckDB-safe identifier."""
+
+    return '"' + identifier.replace('"', '""') + '"'
+
+
 def _list_spectral_columns(columns: Iterable[str]) -> List[str]:
     spectral: List[str] = []
     for col in columns:
@@ -81,16 +87,16 @@ def _register_union(
     paths: List[str],
     meta_candidates: Sequence[str],
 ) -> None:
-    escaped_name = duckdb.escape_identifier(f"{name}_raw")
+    escaped_name = _quote_identifier(f"{name}_raw")
     if not paths:
         # Create an empty view with expected metadata so downstream SQL succeeds.
         select_cols = ["NULL::VARCHAR AS pixel_id"]
         for col in meta_candidates:
             if col == "pixel_id":
                 continue
-            select_cols.append(f"NULL AS {duckdb.escape_identifier(col)}")
+            select_cols.append(f"NULL AS {_quote_identifier(col)}")
         con.execute(
-            f"CREATE OR REPLACE VIEW {duckdb.escape_identifier(name)} AS SELECT {', '.join(select_cols)} WHERE 0=1"
+            f"CREATE OR REPLACE VIEW {_quote_identifier(name)} AS SELECT {', '.join(select_cols)} WHERE 0=1"
         )
         return
 
@@ -147,9 +153,9 @@ def _register_union(
         if col == "pixel_id":
             continue
         if col in raw_column_set:
-            select_parts.append(duckdb.escape_identifier(col))
+            select_parts.append(_quote_identifier(col))
         else:
-            select_parts.append(f"NULL AS {duckdb.escape_identifier(col)}")
+            select_parts.append(f"NULL AS {_quote_identifier(col)}")
 
     select_parts.append(f"{wl_expr} AS wl_nm_int")
 
@@ -159,10 +165,10 @@ def _register_union(
         select_parts.append("NULL AS reflectance")
 
     for col in spectral_cols:
-        select_parts.append(duckdb.escape_identifier(col))
+        select_parts.append(_quote_identifier(col))
 
     con.execute(
-        f"CREATE OR REPLACE VIEW {duckdb.escape_identifier(name + '_aug')} AS SELECT "
+        f"CREATE OR REPLACE VIEW {_quote_identifier(name + '_aug')} AS SELECT "
         + ", ".join(select_parts)
         + f" FROM {escaped_name}"
     )
@@ -170,7 +176,7 @@ def _register_union(
     wl_values = [
         r[0]
         for r in con.execute(
-            f"SELECT DISTINCT wl_nm_int FROM {duckdb.escape_identifier(name + '_aug')} "
+            f"SELECT DISTINCT wl_nm_int FROM {_quote_identifier(name + '_aug')} "
             "WHERE wl_nm_int IS NOT NULL ORDER BY 1"
         ).fetchall()
     ]
@@ -181,16 +187,16 @@ def _register_union(
             if col == "pixel_id":
                 continue
             meta_selects.append(
-                f"ANY_VALUE({duckdb.escape_identifier(col)}) AS {duckdb.escape_identifier(col)}"
+                f"ANY_VALUE({_quote_identifier(col)}) AS {_quote_identifier(col)}"
             )
         spectral_selects = [
-            f"MAX(CASE WHEN wl_nm_int = {val} THEN reflectance END) AS {duckdb.escape_identifier(f'wl{val}') }"
+            f"MAX(CASE WHEN wl_nm_int = {val} THEN reflectance END) AS {_quote_identifier(f'wl{val}') }"
             for val in wl_values
         ]
         con.execute(
-            f"CREATE OR REPLACE VIEW {duckdb.escape_identifier(name + '_wide')} AS SELECT "
+            f"CREATE OR REPLACE VIEW {_quote_identifier(name + '_wide')} AS SELECT "
             + ", ".join(meta_selects + spectral_selects)
-            + f" FROM {duckdb.escape_identifier(name + '_aug')} GROUP BY pixel_id"
+            + f" FROM {_quote_identifier(name + '_aug')} GROUP BY pixel_id"
         )
     else:
         aug_columns = _table_columns(con, f"{name}_aug")
@@ -199,11 +205,11 @@ def _register_union(
             for col in aug_columns
             if col not in {"wl_nm_int", "reflectance"}
         ]
-        select_keep = ", ".join(duckdb.escape_identifier(col) for col in keep_cols)
+        select_keep = ", ".join(_quote_identifier(col) for col in keep_cols)
         con.execute(
-            f"CREATE OR REPLACE VIEW {duckdb.escape_identifier(name + '_wide')} AS SELECT "
+            f"CREATE OR REPLACE VIEW {_quote_identifier(name + '_wide')} AS SELECT "
             + select_keep
-            + f" FROM {duckdb.escape_identifier(name + '_aug')}"
+            + f" FROM {_quote_identifier(name + '_aug')}"
         )
 
     wide_columns = _table_columns(con, f"{name}_wide")
@@ -212,21 +218,19 @@ def _register_union(
     for col in wide_columns:
         if col in spectral_final:
             nm = col[2:] if col.startswith("wl") else col
-            alias = duckdb.escape_identifier(f"{name}_wl{nm}")
-            select_final.append(
-                f"{duckdb.escape_identifier(col)} AS {alias}"
-            )
+            alias = _quote_identifier(f"{name}_wl{nm}")
+            select_final.append(f"{_quote_identifier(col)} AS {alias}")
         else:
-            select_final.append(duckdb.escape_identifier(col))
+            select_final.append(_quote_identifier(col))
 
     for col in meta_candidates:
         if col not in wide_columns and col != "pixel_id":
-            select_final.append(f"NULL AS {duckdb.escape_identifier(col)}")
+            select_final.append(f"NULL AS {_quote_identifier(col)}")
 
     con.execute(
-        f"CREATE OR REPLACE VIEW {duckdb.escape_identifier(name)} AS SELECT "
+        f"CREATE OR REPLACE VIEW {_quote_identifier(name)} AS SELECT "
         + ", ".join(select_final)
-        + f" FROM {duckdb.escape_identifier(name + '_wide')}"
+        + f" FROM {_quote_identifier(name + '_wide')}"
     )
 
 
@@ -287,7 +291,7 @@ def merge_flightline(
         for col in present_meta:
             if col == "pixel_id":
                 continue
-            ident = duckdb.escape_identifier(col)
+            ident = _quote_identifier(col)
             meta_selects.append(
                 f"COALESCE(o.{ident}, c.{ident}, r.{ident}) AS {ident}"
             )
@@ -295,7 +299,7 @@ def merge_flightline(
         def _spectral_select(table_alias: str, columns: Iterable[str]) -> List[str]:
             selects: List[str] = []
             for col in columns:
-                ident = duckdb.escape_identifier(col)
+                ident = _quote_identifier(col)
                 selects.append(f"{table_alias}.{ident} AS {ident}")
             return selects
 
