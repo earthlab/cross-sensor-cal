@@ -24,7 +24,7 @@ import math
 import re
 import warnings
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 import numpy as np
 
@@ -80,22 +80,36 @@ def _discover_products_in_dir(flightline_dir: Path, prefix: str) -> list[Path]:
     Return a list of ENVI .img products for the QA panel, all inside
     ``flightline_dir``.
 
-    The discovery is prefix-based and only returns files that exist.
+    The discovery prefers explicit matches but also supports broader sensor
+    patterns so custom pipelines still surface in the panel.
     """
 
     flightline_dir = Path(flightline_dir)
-    candidates = [
-        flightline_dir / f"{prefix}_envi.img",
-        flightline_dir / f"{prefix}_brdfandtopo_corrected_envi.img",
-        flightline_dir / f"{prefix}_landsat_tm_envi.img",
-        flightline_dir / f"{prefix}_landsat_etm+_envi.img",
-        flightline_dir / f"{prefix}_landsat_oli_envi.img",
-        flightline_dir / f"{prefix}_landsat_oli2_envi.img",
-        flightline_dir / f"{prefix}_micasense_envi.img",
-        flightline_dir / f"{prefix}_micasense_to_match_tm_etm+_envi.img",
-        flightline_dir / f"{prefix}_micasense_to_match_oli_oli2_envi.img",
+
+    raw = [
+        p
+        for p in sorted(flightline_dir.glob(f"{prefix}*_envi.img"))
+        if "brdfandtopo_corrected" not in p.name
     ]
-    return [p for p in candidates if p.exists()]
+    corr = sorted(
+        flightline_dir.glob(f"{prefix}_brdfandtopo_corrected_envi.img")
+    )
+    sensors: list[Path] = []
+    for pat in [
+        f"{prefix}_landsat_*_envi.img",
+        f"{prefix}_micasense*_envi.img",
+    ]:
+        sensors.extend(sorted(flightline_dir.glob(pat)))
+    return [*raw, *corr, *sensors]
+
+
+def _center_crop(rgb: np.ndarray, frac: float = 0.6) -> np.ndarray:
+    h, w, _ = rgb.shape
+    side = int(min(h, w) * frac)
+    side = max(1, side)
+    y0 = max(0, (h - side) // 2)
+    x0 = max(0, (w - side) // 2)
+    return rgb[y0 : y0 + side, x0 : x0 + side, :]
 
 
 def _to_py(obj):
@@ -401,10 +415,101 @@ def _collect_parquet_summaries(files: Iterable[Path]) -> list[str]:
     return summaries
 
 
+def _infer_panel_prefix(
+    flightline_dir: Path,
+    panel_png: Path,
+    raw: Sequence[Path],
+    corr: Sequence[Path],
+    sensors: Sequence[Path],
+) -> str:
+    candidates: list[str] = []
+
+    def _strip(name: str) -> str:
+        stem = Path(name).stem
+        if stem.endswith("_envi"):
+            stem = stem[: -len("_envi")]
+        if stem.endswith("_brdfandtopo_corrected"):
+            stem = stem[: -len("_brdfandtopo_corrected")]
+        for token in ("_landsat_", "_micasense"):
+            if token in stem:
+                stem = stem.split(token, 1)[0]
+        return stem
+
+    for seq in (raw, corr, sensors):
+        for p in seq:
+            stem = _strip(p.name)
+            if stem:
+                candidates.append(stem)
+                break
+
+    stem = panel_png.stem
+    if stem.endswith("_qa"):
+        candidates.append(stem[:-3])
+    elif stem:
+        candidates.append(stem)
+
+    candidates.append(Path(flightline_dir).name)
+
+    for cand in candidates:
+        if cand:
+            return cand
+    return Path(flightline_dir).name
+
+
+def make_flightline_panel(
+    flightline_dir: Path, panel_png: Path
+) -> Optional[Path]:
+    flightline_dir = Path(flightline_dir)
+    if flightline_dir.is_file():
+        flightline_dir = flightline_dir.parent
+
+    panel_png = Path(panel_png)
+    if panel_png.suffix.lower() != ".png":
+        panel_png = panel_png.with_suffix(".png")
+
+    raw = [
+        p for p in sorted(flightline_dir.glob("*_envi.img")) if "brdfandtopo_corrected" not in p.name
+    ]
+    corr = sorted(flightline_dir.glob("*_brdfandtopo_corrected_envi.img"))
+    sensors: list[Path] = []
+    for pat in ["*_landsat_*_envi.img", "*_micasense*_envi.img"]:
+        sensors.extend(sorted(flightline_dir.glob(pat)))
+
+    logger.debug(
+        "QA find raw=%d corr=%d sensors=%d in %s",
+        len(raw),
+        len(corr),
+        len(sensors),
+        flightline_dir,
+    )
+
+    if not raw and not corr and not sensors:
+        return None
+
+    prefix = _infer_panel_prefix(flightline_dir, panel_png, raw, corr, sensors)
+
+    try:
+        _build_and_save_panel(
+            flightline_dir,
+            prefix,
+            out_png=panel_png,
+            raw_img_path=raw[0] if raw else None,
+            corrected_img_path=corr[0] if corr else None,
+            sensor_imgs=sensors,
+        )
+    except FileNotFoundError:
+        return None
+
+    return panel_png if panel_png.exists() else None
+
+
 def _build_and_save_panel(
     flightline_dir: Path,
     prefix: str,
     out_png: Path | None = None,
+    raw_img_path: Path | None = None,
+    corrected_img_path: Path | None = None,
+    sensor_imgs: Sequence[Path] | None = None,
     *,
     shaded_regions: bool = True,
     overwrite: bool = True,
@@ -414,16 +519,43 @@ def _build_and_save_panel(
     if not flightline_dir.is_dir():
         raise FileNotFoundError(f"Flightline folder missing: {flightline_dir}")
 
-    products = _discover_products_in_dir(flightline_dir, prefix)
-    if not products:
+    raw_img: Optional[Path] = Path(raw_img_path) if raw_img_path else None
+    if raw_img is not None and not raw_img.exists():
+        raw_img = None
+    if raw_img is None:
+        candidate = flightline_dir / f"{prefix}_envi.img"
+        raw_img = candidate if candidate.exists() else None
+    raw_hdr = raw_img.with_suffix(".hdr") if raw_img else None
+
+    corrected_img: Optional[Path] = (
+        Path(corrected_img_path) if corrected_img_path else None
+    )
+    if corrected_img is not None and not corrected_img.exists():
+        corrected_img = None
+    if corrected_img is None:
+        candidate_corr = flightline_dir / f"{prefix}_brdfandtopo_corrected_envi.img"
+        corrected_img = candidate_corr if candidate_corr.exists() else None
+    corrected_hdr = corrected_img.with_suffix(".hdr") if corrected_img else None
+
+    sensor_imgs_list: list[Path] = (
+        [Path(p) for p in sensor_imgs] if sensor_imgs is not None else []
+    )
+    if not sensor_imgs_list:
+        sensor_imgs_list = [
+            p
+            for p in _discover_products_in_dir(flightline_dir, prefix)
+            if p not in {raw_img, corrected_img}
+        ]
+
+    available_products = [
+        p for p in [raw_img, corrected_img] if p is not None and p.exists()
+    ]
+    available_products.extend([p for p in sensor_imgs_list if p.exists()])
+
+    if not available_products:
         raise FileNotFoundError(
             f"No ENVI products found for QA in {flightline_dir}"
         )
-
-    raw_img = flightline_dir / f"{prefix}_envi.img"
-    raw_hdr = raw_img.with_suffix(".hdr")
-    corrected_img = flightline_dir / f"{prefix}_brdfandtopo_corrected_envi.img"
-    corrected_hdr = corrected_img.with_suffix(".hdr")
 
     metrics_by_stage: dict[str, dict] = {}
     flags_by_stage: dict[str, list[str]] = {}
@@ -461,12 +593,14 @@ def _build_and_save_panel(
         ax_spectra.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
 
     # Panel A: Raw RGB
-    if raw_img.exists() and raw_hdr.exists():
+    if raw_img is not None and raw_hdr and raw_img.exists() and raw_hdr.exists():
         try:
             raw_header = _load_envi_header(raw_hdr)
             raw_mm = memmap_bsq(raw_img, raw_header)
             rgb_indices = _pick_rgb_bands_for_raw(raw_header)
             rgb = _make_rgb_composite(raw_mm, rgb_indices)
+            if min(rgb.shape[0], rgb.shape[1]) > 200:
+                rgb = _center_crop(rgb, 0.7)
             ax_raw.imshow(rgb)
             ax_raw.set_title("Raw ENVI export RGB (uncorrected)")
             ax_raw.axis("off")
@@ -505,7 +639,12 @@ def _build_and_save_panel(
         _log_stage_metrics("raw", metrics_by_stage["raw"], flags_by_stage["raw"])
 
     # Panel C requires corrected header/memmap for patch selection.
-    if corrected_img.exists() and corrected_hdr.exists():
+    if (
+        corrected_img is not None
+        and corrected_hdr
+        and corrected_img.exists()
+        and corrected_hdr.exists()
+    ):
         try:
             corrected_header = _load_envi_header(corrected_hdr)
             corrected_mm = memmap_bsq(corrected_img, corrected_header)
@@ -989,19 +1128,14 @@ def _build_and_save_panel(
         )
 
     # Panel D: Thumbnails of sensor products
-    sensor_imgs = [
-        p
-        for p in products
-        if p.name not in {raw_img.name, corrected_img.name}
-    ]
-    if sensor_imgs:
-        cols = min(3, max(1, int(math.ceil(math.sqrt(len(sensor_imgs))))))
-        rows = int(math.ceil(len(sensor_imgs) / cols))
+    if sensor_imgs_list:
+        cols = min(3, max(1, int(math.ceil(math.sqrt(len(sensor_imgs_list))))))
+        rows = int(math.ceil(len(sensor_imgs_list) / cols))
         thumb_spec = gs[1:, 1:].subgridspec(rows, cols, hspace=0.3, wspace=0.3)
         thumb_axes = [fig.add_subplot(thumb_spec[idx]) for idx in range(rows * cols)]
         for ax in thumb_axes:
             ax.axis("off")
-        for img_path, ax in zip(sensor_imgs, thumb_axes):
+        for img_path, ax in zip(sensor_imgs_list, thumb_axes):
             sensor_label = _sensor_label(img_path, prefix)
             hdr_path = img_path.with_suffix(".hdr")
             if not hdr_path.exists():
@@ -1010,6 +1144,8 @@ def _build_and_save_panel(
             header = _load_envi_header(hdr_path)
             mm = memmap_bsq(img_path, header)
             rgb = _make_rgb_composite(mm, (r, g, b))
+            if min(rgb.shape[0], rgb.shape[1]) > 200:
+                rgb = _center_crop(rgb, 0.7)
             rgb_small = _downsample_rgb(rgb)
             ax.imshow(rgb_small)
             ax.set_title(sensor_label, fontsize=9)
@@ -1104,16 +1240,10 @@ def render_flightline_panel(flightline_dir: Path, prefix: str) -> Path:
 
     flightline_dir = Path(flightline_dir)
     out_png = flightline_dir / f"{prefix}_qa.png"
-    _build_and_save_panel(
-        flightline_dir,
-        prefix,
-        out_png=out_png,
-        shaded_regions=True,
-        overwrite=True,
-    )
-    if not out_png.exists():
+    result = make_flightline_panel(flightline_dir, out_png)
+    if result is None:
         raise FileNotFoundError(f"QA panel did not materialize: {out_png}")
-    return out_png
+    return result
 
 
 def summarize_all_flightlines(
