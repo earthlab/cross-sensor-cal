@@ -8,12 +8,13 @@ import warnings
 from pathlib import Path
 from typing import Iterable, Sequence
 
+import numpy as np
+
 import matplotlib
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.figure import Figure
 
 from .envi import (
@@ -25,6 +26,122 @@ from .envi import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def _to_py(obj):
+    """Recursively convert numpy/Path objects to JSON-safe Python types."""
+
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _to_py(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_py(v) for v in obj]
+    return obj
+
+
+def _parse_wavelengths_or_bands(hdr_dict: dict) -> tuple[str, list]:
+    """Return (mode, values) for wavelength or band name metadata."""
+
+    wl = hdr_dict.get("wavelength") or hdr_dict.get("wavelengths")
+    if wl is not None:
+        if isinstance(wl, str):
+            parts = [
+                p.strip()
+                for p in wl.strip().strip("{}").replace("\n", " ").split(",")
+                if p.strip()
+            ]
+        else:
+            parts = list(wl)
+        vals: list[float] | None = []
+        for p in parts:
+            try:
+                vals.append(float(p))
+            except Exception:
+                vals = None
+                break
+        if vals:
+            units = (
+                hdr_dict.get("wavelength units")
+                or hdr_dict.get("wavelength_units")
+                or ""
+            ).lower()
+            if "micro" in units or "µ" in units or "um" in units:
+                vals = [int(round(v * 1000)) for v in vals]
+            else:
+                vals = [int(round(v)) for v in vals]
+            return "wavelength_nm", vals
+
+    bn = hdr_dict.get("band names") or hdr_dict.get("band_names")
+    if bn is not None:
+        if isinstance(bn, str):
+            names = [
+                p.strip()
+                for p in bn.strip().strip("{}").replace("\n", " ").split(",")
+                if p.strip()
+            ]
+        else:
+            names = [str(x) for x in bn]
+        return "band_names", names
+
+    n_bands = hdr_dict.get("bands")
+    if isinstance(n_bands, str):
+        try:
+            n_bands = int(n_bands.strip())
+        except Exception:
+            n_bands = None
+    if isinstance(n_bands, int) and n_bands > 0:
+        names = [f"band_{i:02d}" for i in range(1, n_bands + 1)]
+        return "band_names", names
+
+    return "unknown", []
+
+
+# Preferred RGB selections (1-based indices) when wavelengths are unavailable
+SENSOR_RGB_INDEX: dict[str, tuple[int, int, int]] = {
+    "landsat_tm": (3, 2, 1),
+    "landsat_etm+": (3, 2, 1),
+    "landsat_oli": (4, 3, 2),
+    "landsat_oli2": (4, 3, 2),
+    "micasense": (3, 2, 1),
+    "micasense_to_match_tm_etm+": (3, 2, 1),
+    "micasense_to_match_oli_oli2": (4, 3, 2),
+}
+
+RGB_WAVELENGTHS_NM = {"R": 660, "G": 560, "B": 480}
+
+
+def inferred_sensor_key_from_filename(name: str) -> str:
+    lower = name.lower()
+    for key in SENSOR_RGB_INDEX:
+        if key in lower:
+            return key
+    return "landsat_oli"
+
+
+def _select_rgb_bands(hdr_dict: dict, sensor_key: str) -> tuple[tuple[int, int, int], str]:
+    mode, vals = _parse_wavelengths_or_bands(hdr_dict)
+    if mode == "wavelength_nm" and vals:
+        arr = np.asarray(vals, dtype=float)
+
+        def nearest(target: float) -> int:
+            return int(np.argmin(np.abs(arr - target)))
+
+        r = nearest(RGB_WAVELENGTHS_NM["R"])
+        g = nearest(RGB_WAVELENGTHS_NM["G"])
+        b = nearest(RGB_WAVELENGTHS_NM["B"])
+        return (r, g, b), mode
+
+    indices = SENSOR_RGB_INDEX.get(sensor_key)
+    if indices is not None:
+        zero_based = tuple(max(0, i - 1) for i in indices)
+        return zero_based, "band_names"
+
+    return (0, 1, 2), "fallback"
 
 
 def _patch_mean_spectrum(
@@ -140,22 +257,6 @@ def _make_rgb_composite(mm: np.memmap, band_indices: Sequence[int]) -> np.ndarra
         bands.append(bands[-1])
     rgb = np.stack(bands[:3], axis=-1)
     return rgb
-
-
-def _safe_band_indices(header_dict: dict, desired: Sequence[int] = (0, 1, 2)) -> tuple[int, int, int]:
-    nb_raw = header_dict.get("bands", 0)
-    try:
-        nb = int(nb_raw)
-    except (TypeError, ValueError):  # pragma: no cover - defensive
-        nb = 0
-
-    if nb >= 3:
-        return tuple(int(i) for i in desired[:3])  # type: ignore[return-value]
-    if nb == 2:
-        return (0, 1, 1)
-    if nb == 1:
-        return (0, 0, 0)
-    raise ValueError("ENVI header reports zero bands.")
 
 
 def _sensor_label(img_path: Path, flight_stem: str) -> str:
@@ -701,16 +802,28 @@ def summarize_flightline_outputs(
                 ax.text(0.5, 0.5, "Missing HDR", ha="center", va="center")
                 ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
                 continue
+            sensor_key = inferred_sensor_key_from_filename(img_path.name)
+            mode = "unknown"
+            rgb_indices = (0, 1, 2)
             try:
                 header = _load_envi_header(hdr_path)
                 mm = memmap_bsq(img_path, header)
-                idxs = _safe_band_indices(header)
-                rgb = _make_rgb_composite(mm, idxs)
+                rgb_indices, mode = _select_rgb_bands(header, sensor_key)
+                rgb = _make_rgb_composite(mm, rgb_indices)
                 rgb_small = _downsample_rgb(rgb)
                 ax.imshow(rgb_small)
                 ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
             except Exception as exc:  # pragma: no cover - defensive
-                warnings.warn(f"Thumbnail failed for {img_path.name}: {exc}")
+                warnings.warn(
+                    "Thumbnail failed for %s: %s. Parsed mode=%s; sensor_key=%s; "
+                    "rgb_indices=%s" % (
+                        img_path.name,
+                        exc,
+                        mode,
+                        sensor_key,
+                        rgb_indices,
+                    )
+                )
                 ax.text(0.5, 0.5, "Unavailable", ha="center", va="center")
                 ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
     else:

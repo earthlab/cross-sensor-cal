@@ -30,6 +30,21 @@ except Exception:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
+def _to_py(obj: Any):
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _to_py(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_py(v) for v in obj]
+    return obj
+
+
 # -----------------------
 # Threshold definitions
 # -----------------------
@@ -363,7 +378,7 @@ def write_metrics(
     out_json = out_json or (work / f"{flight_stem}_qa_metrics.json")
     out_parquet = out_parquet or (work / f"{flight_stem}_qa_metrics.parquet")
     with open(out_json, "w") as f:
-        json.dump(asdict(ms), f, indent=2)
+        json.dump(_to_py(asdict(ms)), f, indent=2)
     rows = []
     for b in ms.bands:
         d = asdict(b)
