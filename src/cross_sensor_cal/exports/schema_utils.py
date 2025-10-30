@@ -8,6 +8,12 @@ import numpy as np
 import pandas as pd
 from pyproj import Transformer
 
+from cross_sensor_cal.exports.geo_utils import (
+    GeoContext,
+    add_lonlat_inplace,
+    write_parquet_with_lonlat,
+)
+
 # --- Known band centers (nm) for resampled products (adjust if your repo stores these elsewhere) ---
 SENSOR_WAVELENGTHS_NM = {
     "landsat_tm":    [485, 570, 660, 830, 1650, 2210],                       # TM 1–5,7 (omit TIR)
@@ -100,6 +106,29 @@ def compute_lonlat(xs: np.ndarray, ys: np.ndarray, src_epsg: int | str) -> Tuple
     lon, lat = transformer.transform(xs, ys)
     return np.asarray(lon), np.asarray(lat)
 
+def _maybe_epsg_int(value) -> Optional[int]:
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    if isinstance(value, str):
+        m = re.search(r"(\d{4,5})", value)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _geo_from_transform(transform, crs_epsg: int | str) -> Optional[GeoContext]:
+    if transform is None:
+        return None
+    try:
+        a = float(getattr(transform, "a"))
+        e = float(getattr(transform, "e"))
+        c = float(getattr(transform, "c"))
+        f = float(getattr(transform, "f"))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return GeoContext(crs_epsg=_maybe_epsg_int(crs_epsg), a=a, e=e, c=c, f=f)
+
+
 def ensure_coord_columns(df: pd.DataFrame, transform, crs_epsg: int | str) -> pd.DataFrame:
     """
     Make sure df has x, y, lon, lat columns. If missing, compute from row/col with affine transform and the CRS.
@@ -111,7 +140,11 @@ def ensure_coord_columns(df: pd.DataFrame, transform, crs_epsg: int | str) -> pd
         df["x"] = df["col"] * a + x0 + a/2.0
         df["y"] = df["row"] * e + y0 + e/2.0
 
-    if any(k not in df for k in ("lon","lat")) and all(k in df for k in ("x","y")) and crs_epsg:
+    geo = _geo_from_transform(transform, crs_epsg)
+    if geo is not None:
+        df = add_lonlat_inplace(df, geo)
+
+    if any(k not in df for k in ("lon", "lat")) and all(k in df for k in ("x", "y")) and crs_epsg:
         lon, lat = compute_lonlat(df["x"].to_numpy(), df["y"].to_numpy(), crs_epsg)
         df["lon"] = lon
         df["lat"] = lat
@@ -161,5 +194,5 @@ def write_parquet_standardized(
     if not spec_cols:
         raise ValueError(f"No spectral columns detected for export: {out_path}")
 
-    df.to_parquet(out_path, index=False)
+    write_parquet_with_lonlat(df, out_path, hdr_path)
     return out_path

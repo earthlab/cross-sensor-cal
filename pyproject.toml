@@ -20,6 +20,7 @@ dependencies = [
     "scipy",
     "pandas",
     "pyarrow",
+    "pyproj",
     "h5py",
     "requests",
     "tqdm",

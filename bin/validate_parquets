@@ -6,6 +6,11 @@ import sys
 import pyarrow.parquet as pq
 
 
+def has_lonlat(path: Path) -> bool:
+    cols = pq.read_schema(path).names
+    return "lon" in cols and "lat" in cols
+
+
 def is_ok_columns(cols):
     # non-spectral can be anything; spectral must match <stage>_b###_wl####nm ascending within each stage
     spec = [c for c in cols if "_wl" in c]
@@ -25,17 +30,20 @@ def main(p: str):
     root = Path(p)
     bad = []
     for q in root.glob("*.parquet"):
+        if not has_lonlat(q):
+            bad.append(
+                (
+                    q.name,
+                    f"missing lat/lon (try: bin/repair_lonlat_in_place {q.parent})",
+                )
+            )
+            continue
         try:
             schema = pq.read_schema(q)
         except Exception as exc:  # pragma: no cover - defensive, should rarely happen
             bad.append((q.name, f"unable to read schema: {exc}"))
             continue
         cols = list(schema.names)
-        lat_idx = cols.index("lat") if "lat" in cols else -1
-        lon_idx = cols.index("lon") if "lon" in cols else -1
-        if lat_idx < 0 or lon_idx < 0:
-            bad.append((q.name, "missing lat/lon"))
-            continue
         if not is_ok_columns(cols):
             bad.append((q.name, "spectral columns unsorted or misnamed"))
     if bad:

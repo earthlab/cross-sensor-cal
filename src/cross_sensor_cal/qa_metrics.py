@@ -10,6 +10,8 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from cross_sensor_cal.exports.geo_utils import write_parquet_with_lonlat
+
 # Try to reuse shared ENVI utilities without pulling in heavy plotting deps
 try:
     from cross_sensor_cal.envi import (
@@ -384,7 +386,9 @@ def write_metrics(
         d = asdict(b)
         d["flight_stem"] = ms.flight_stem
         rows.append(d)
-    pd.DataFrame(rows).to_parquet(out_parquet, index=False)
+    hdr_candidates = sorted(work.glob("*.hdr"))
+    hdr_path = hdr_candidates[0] if hdr_candidates else None
+    write_parquet_with_lonlat(pd.DataFrame(rows), out_parquet, hdr_path)
     logger.info(
         "📑 Wrote QA metrics → %s / %s", out_json.name, out_parquet.name
     )

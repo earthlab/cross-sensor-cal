@@ -31,7 +31,7 @@ to support custom workflows.
 
 from __future__ import annotations
 
-import os, sys, traceback, re
+import os, sys, traceback, re, glob, shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -39,6 +39,24 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import duckdb
+
+
+def _consolidate_parquet_dir_to_file(
+    con: duckdb.DuckDBPyConnection, dir_path: Path, out_file: Path
+):
+    dir_path = Path(dir_path)
+    if dir_path.is_dir():
+        parts = sorted(glob.glob(str(dir_path / "*.parquet")))
+        if parts:
+            tmp = out_file.with_suffix(".tmp.parquet")
+            con.execute(
+                f"""
+                COPY (SELECT * FROM read_parquet('{dir_path}/*.parquet'))
+                TO '{str(tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
+                """
+            )
+            tmp.replace(out_file)
+        shutil.rmtree(dir_path, ignore_errors=True)
 
 try:
     from tqdm import tqdm
@@ -370,23 +388,23 @@ def merge_flightline(
     if not any(inputs.values()):
         raise FileNotFoundError(f"No parquet inputs found in {flightline_dir}")
 
-    tmp_dir = (flightline_dir / ".duckdb_tmp").resolve()
-    tmp_dir.mkdir(exist_ok=True)
-
     con = duckdb.connect()
     try:
+        tmp_dir = (flightline_dir / ".duckdb_tmp").resolve()
+        tmp_dir.mkdir(exist_ok=True)
+
         con.execute("PRAGMA threads = " + str(os.cpu_count() or 4))
         try:
             con.execute("PRAGMA memory_limit = 'auto'")
         except duckdb.Error as exc:  # pragma: no cover - parser differences across DuckDB versions
             if "memory limit" not in str(exc).lower():
                 raise
+        con.execute("SET enable_progress_bar = true")
         con.execute(
             "PRAGMA temp_directory = '"
             + _quote_path(str(tmp_dir))
             + "'"
         )
-        con.execute("SET enable_progress_bar = true")
 
         with _progress("DuckDB: register + normalize"):
             _register_union(con, "orig", inputs["orig"], META_CANDIDATES)
@@ -451,6 +469,12 @@ def merge_flightline(
             )
 
         out_parquet.parent.mkdir(parents=True, exist_ok=True)
+        if out_parquet.exists():
+            if out_parquet.is_dir():
+                shutil.rmtree(out_parquet, ignore_errors=True)
+            else:
+                out_parquet.unlink()
+
         with _progress("DuckDB: write merged parquet"):
             con.execute(
                 f"""
@@ -458,11 +482,12 @@ def merge_flightline(
       (FORMAT PARQUET,
        COMPRESSION ZSTD,
        ROW_GROUP_SIZE 8388608,
-       PER_THREAD_OUTPUT true);
+       PER_THREAD_OUTPUT FALSE);
     """
             )
+        _consolidate_parquet_dir_to_file(con, Path(out_parquet), Path(out_parquet))
         print(
-            f"[merge] ✅ Wrote parquet: {out_parquet} (exists={out_parquet.exists()})"
+            f"[merge] ✅ Wrote parquet: {out_parquet} (exists={Path(out_parquet).exists()})"
         )
 
         if write_feather:
