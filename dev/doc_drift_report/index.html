@@ -901,15 +901,16 @@
 <h2 id="stage-markers-found-in-logs">Stage markers found in logs<a class="headerlink" href="#stage-markers-found-in-logs" title="Permanent link">&para;</a></h2>
 <ul>
 <li>[cscal-qa] ✅ QA panels written to: {target.resolve()}</li>
+<li>[merge] ⚠️ QA panel failed: {e}</li>
+<li>[merge] 🖼️  QA panel → {out_png} (exists={out_png.exists()})</li>
 <li>⏭️ Parquet already present for %s -&gt; %s (skipping)</li>
-<li>⚠️  QA panel generation failed for %s: %s</li>
 <li>⚠️ Cannot create Parquet work directory for %s: %s</li>
 <li>⚠️ Cannot export Parquet for %s because .hdr is missing or empty</li>
 <li>⚠️ Cannot export Parquet for %s because .img is missing or empty</li>
 <li>⚠️ Cannot locate work directory for Parquet export: %s</li>
 <li>⚠️ Failed Parquet export for %s: %s</li>
 <li>⚠️ Merge failed for {future_map[future]}: {exc}</li>
-<li>⚠️ QA panel after merge failed for {flightline_dir.name}: {e}</li>
+<li>⚠️ Skipping DuckDB merge for %s because no Parquet outputs were produced</li>
 <li>✅ BRDF+topo correction already complete for %s -&gt; %s / %s (skipping)</li>
 <li>✅ BRDF+topo correction already complete for %s, skipping</li>
 <li>✅ BRDF+topo correction completed for %s -&gt; %s / %s</li>
@@ -926,7 +927,6 @@
 <li>📦 Parquet export for %s ...</li>
 <li>🔎 ENVI export target for %s is %s / %s</li>
 <li>🖼️  Overwriting QA panel -&gt; %s</li>
-<li>🖼️  QA panel written → {prefix}_qa.png</li>
 <li>🖼️  Writing QA panel -&gt; %s</li>
 <li>🖼️  Wrote QA panel for %s -&gt; %s</li>
 </ul>

@@ -547,30 +547,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="render_flightline_panel">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.qa_plots.render_flightline_panel--parameters" class="md-nav__link">
-    <span class="md-ellipsis">
-      Parameters
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.qa_plots.render_flightline_panel--returns" class="md-nav__link">
-    <span class="md-ellipsis">
-      Returns
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
     </ul>
@@ -713,30 +689,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="render_flightline_panel">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.qa_plots.render_flightline_panel--parameters" class="md-nav__link">
-    <span class="md-ellipsis">
-      Parameters
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.qa_plots.render_flightline_panel--returns" class="md-nav__link">
-    <span class="md-ellipsis">
-      Returns
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
     </ul>
@@ -773,18 +725,8 @@
 <a id="cross_sensor_cal.qa_plots.render_flightline_panel"></a>
     <div class="doc doc-contents first">
 
-        <p>Build and save the standard QA panel for a flightline.</p>
-<p>This function reuses the same code path as the in-pipeline QA step,
-but can be called independently (e.g., after DuckDB merge) to ensure
-that each flightline has a visual summary panel.</p>
-<h3 id="cross_sensor_cal.qa_plots.render_flightline_panel--parameters">Parameters<a class="headerlink" href="#cross_sensor_cal.qa_plots.render_flightline_panel--parameters" title="Permanent link">&para;</a></h3>
-<p>flightline_dir : Path
-    Directory containing ENVI or parquet products for the flightline.
-prefix : str
-    The canonical scene prefix (same as other output files).</p>
-<h3 id="cross_sensor_cal.qa_plots.render_flightline_panel--returns">Returns<a class="headerlink" href="#cross_sensor_cal.qa_plots.render_flightline_panel--returns" title="Permanent link">&para;</a></h3>
-<p>Path
-    Path to the written PNG file (<prefix>_qa.png).</p>
+        <p>Build and save the standard QA panel (<prefix>_qa.png) in <code>flightline_dir</code>.</p>
+<p>Returns the PNG Path. Raises on failure (caller will log traceback).</p>
 
 
     </div>
