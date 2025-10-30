@@ -2,4 +2,6 @@
 # QA artifacts
 *_qa_metrics.json
 *_qa_metrics.parquet
+qa_dashboard_summary.parquet
+qa_dashboard_summary.png
 tlm_check_spectra/data
