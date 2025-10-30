@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import warnings
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -16,6 +17,53 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+
+
+def _load_envi_header_dict(hdr_path: Path) -> dict:
+    """Parse an ENVI header into a lowercase-keyed dictionary."""
+
+    hdr_path = Path(hdr_path)
+    data: dict[str, object] = {}
+    with open(hdr_path, "r", encoding="utf-8", errors="ignore") as fh:
+        text = fh.read()
+
+    pattern = re.compile(r"^\s*([^=]+?)\s*=\s*(.+?)\s*$", re.MULTILINE)
+    for match in pattern.finditer(text):
+        key = match.group(1).strip().lower()
+        value = match.group(2).strip()
+
+        if value.startswith("{") and value.endswith("}"):
+            inner = value[1:-1]
+            tokens = [tok.strip() for tok in re.split(r",\s*", inner) if tok.strip()]
+            numeric_values: list[float] = []
+            numeric_ok = True
+            for token in tokens:
+                try:
+                    numeric_values.append(float(token))
+                except Exception:
+                    numeric_ok = False
+                    break
+            if numeric_ok:
+                data[key] = numeric_values
+            else:
+                data[key] = tokens
+            continue
+
+        if key == "bands":
+            try:
+                data[key] = int(re.sub(r"[^\d]", "", value))
+            except Exception:
+                data[key] = value
+            continue
+
+        if (value.startswith('"') and value.endswith('"')) or (
+            value.startswith("'") and value.endswith("'")
+        ):
+            value = value[1:-1]
+
+        data[key] = value
+
+    return data
 
 from .envi import (
     band_axis_from_header,
@@ -44,26 +92,18 @@ def _to_py(obj):
     return obj
 
 
-def _parse_wavelengths_or_bands(hdr_dict: dict) -> tuple[str, list]:
-    """Return (mode, values) for wavelength or band name metadata."""
-
+def _parse_wavelengths_or_bands(hdr_dict):
     wl = hdr_dict.get("wavelength") or hdr_dict.get("wavelengths")
     if wl is not None:
         if isinstance(wl, str):
-            parts = [
-                p.strip()
-                for p in wl.strip().strip("{}").replace("\n", " ").split(",")
-                if p.strip()
-            ]
-        else:
-            parts = list(wl)
-        vals: list[float] | None = []
-        for p in parts:
+            s = wl.strip().strip("{}")
+            parts = [p.strip() for p in s.replace("\n", " ").split(",") if p.strip()]
             try:
-                vals.append(float(p))
+                vals = [float(p) for p in parts]
             except Exception:
                 vals = None
-                break
+        else:
+            vals = [float(x) for x in wl]
         if vals:
             units = (
                 hdr_dict.get("wavelength units")
@@ -79,24 +119,15 @@ def _parse_wavelengths_or_bands(hdr_dict: dict) -> tuple[str, list]:
     bn = hdr_dict.get("band names") or hdr_dict.get("band_names")
     if bn is not None:
         if isinstance(bn, str):
-            names = [
-                p.strip()
-                for p in bn.strip().strip("{}").replace("\n", " ").split(",")
-                if p.strip()
-            ]
+            s = bn.strip().strip("{}")
+            names = [p.strip() for p in s.replace("\n", " ").split(",") if p.strip()]
         else:
             names = [str(x) for x in bn]
         return "band_names", names
 
-    n_bands = hdr_dict.get("bands")
-    if isinstance(n_bands, str):
-        try:
-            n_bands = int(n_bands.strip())
-        except Exception:
-            n_bands = None
-    if isinstance(n_bands, int) and n_bands > 0:
-        names = [f"band_{i:02d}" for i in range(1, n_bands + 1)]
-        return "band_names", names
+    n = hdr_dict.get("bands")
+    if isinstance(n, int) and n > 0:
+        return "band_names", [f"band_{i:02d}" for i in range(1, n + 1)]
 
     return "unknown", []
 
@@ -123,25 +154,107 @@ def inferred_sensor_key_from_filename(name: str) -> str:
     return "landsat_oli"
 
 
-def _select_rgb_bands(hdr_dict: dict, sensor_key: str) -> tuple[tuple[int, int, int], str]:
+QA_THRESH = {
+    "negatives_pct_warn": 0.5,
+    "over_one_pct_warn": 0.5,
+    "ratio_min": 0.25,
+    "ratio_max": 4.0,
+}
+
+
+def _select_rgb_bands_from_hdr(hdr_path: Path, img_name: str) -> tuple[int, int, int]:
+    hdr_dict = _load_envi_header_dict(hdr_path)
     mode, vals = _parse_wavelengths_or_bands(hdr_dict)
+    sensor_key = inferred_sensor_key_from_filename(img_name)
+
     if mode == "wavelength_nm" and vals:
-        arr = np.asarray(vals, dtype=float)
+        arr = np.asarray(vals)
 
         def nearest(target: float) -> int:
             return int(np.argmin(np.abs(arr - target)))
 
-        r = nearest(RGB_WAVELENGTHS_NM["R"])
-        g = nearest(RGB_WAVELENGTHS_NM["G"])
-        b = nearest(RGB_WAVELENGTHS_NM["B"])
-        return (r, g, b), mode
+        return (
+            nearest(RGB_WAVELENGTHS_NM["R"]),
+            nearest(RGB_WAVELENGTHS_NM["G"]),
+            nearest(RGB_WAVELENGTHS_NM["B"]),
+        )
 
-    indices = SENSOR_RGB_INDEX.get(sensor_key)
-    if indices is not None:
-        zero_based = tuple(max(0, i - 1) for i in indices)
-        return zero_based, "band_names"
+    idx_1based = SENSOR_RGB_INDEX.get(sensor_key, (1, 2, 3))
+    n_bands = hdr_dict.get("bands")
+    if isinstance(n_bands, int) and n_bands > 0:
+        return tuple(max(0, min(n_bands, idx)) - 1 for idx in idx_1based)
 
-    return (0, 1, 2), "fallback"
+    return (0, 1, 2)
+
+
+def _scene_metrics_from_cube(arr: np.ndarray) -> tuple[dict[str, float], list[str]]:
+    neg = 0
+    over = 0
+    valid = 0
+    min_val = math.inf
+    max_val = -math.inf
+
+    for band_idx in range(int(arr.shape[0])):
+        band = np.asarray(arr[band_idx], dtype=np.float32)
+        band = _unitless(band)
+        mask = np.isfinite(band)
+        n_valid_band = int(mask.sum())
+        if n_valid_band == 0:
+            continue
+        valid += n_valid_band
+        band_vals = band[mask]
+        neg += int(np.count_nonzero(band_vals < 0))
+        over += int(np.count_nonzero(band_vals > 1))
+        min_val = min(min_val, float(np.nanmin(band_vals)))
+        max_val = max(max_val, float(np.nanmax(band_vals)))
+
+    metrics = {
+        "n_valid": valid,
+        "negatives": neg,
+        "over_one": over,
+        "pct_neg": float("nan"),
+        "pct_gt1": float("nan"),
+        "min": float("nan"),
+        "max": float("nan"),
+    }
+
+    flags: list[str] = []
+    if valid:
+        metrics["pct_neg"] = 100.0 * neg / valid
+        metrics["pct_gt1"] = 100.0 * over / valid
+        metrics["min"] = min_val
+        metrics["max"] = max_val
+        if metrics["pct_neg"] > QA_THRESH["negatives_pct_warn"]:
+            flags.append("scene_negatives_excess")
+        if metrics["pct_gt1"] > QA_THRESH["over_one_pct_warn"]:
+            flags.append("scene_over_one_excess")
+    else:
+        flags.append("scene_no_valid_pixels")
+
+    return metrics, flags
+
+
+def _log_stage_metrics(stage_label: str, metrics: dict[str, float], flags: Sequence[str]) -> None:
+    pct_neg = metrics.get("pct_neg")
+    pct_gt1 = metrics.get("pct_gt1")
+    n_valid = metrics.get("n_valid", 0)
+    if flags:
+        logger.warning(
+            "⚠️  Flags present: stage=%s flags=%s; pct_neg=%s%%, pct_gt1=%s%% (n=%s)",
+            stage_label,
+            list(flags),
+            f"{pct_neg:.2f}" if isinstance(pct_neg, (int, float)) and np.isfinite(pct_neg) else "nan",
+            f"{pct_gt1:.2f}" if isinstance(pct_gt1, (int, float)) and np.isfinite(pct_gt1) else "nan",
+            f"{int(n_valid):,}" if isinstance(n_valid, (int, float)) else n_valid,
+        )
+    else:
+        logger.info(
+            "Scene metrics [%s]: pct_neg=%s%% pct_gt1=%s%% (n=%s)",
+            stage_label,
+            f"{pct_neg:.2f}" if isinstance(pct_neg, (int, float)) and np.isfinite(pct_neg) else "nan",
+            f"{pct_gt1:.2f}" if isinstance(pct_gt1, (int, float)) and np.isfinite(pct_gt1) else "nan",
+            f"{int(n_valid):,}" if isinstance(n_valid, (int, float)) else n_valid,
+        )
 
 
 def _patch_mean_spectrum(
@@ -318,6 +431,9 @@ def summarize_flightline_outputs(
     corrected_img = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
     corrected_hdr = corrected_img.with_suffix(".hdr")
 
+    metrics_by_stage: dict[str, dict] = {}
+    flags_by_stage: dict[str, list[str]] = {}
+
     fig = plt.figure(figsize=(14, 10))
     gs = fig.add_gridspec(
         nrows=3,
@@ -360,11 +476,23 @@ def summarize_flightline_outputs(
             ax_raw.imshow(rgb)
             ax_raw.set_title("Raw ENVI export RGB (uncorrected)")
             ax_raw.axis("off")
+            raw_metrics, raw_flags = _scene_metrics_from_cube(raw_mm)
+            metrics_by_stage["raw"] = raw_metrics
+            flags_by_stage["raw"] = list(raw_flags)
+            _log_stage_metrics("raw", raw_metrics, raw_flags)
         except Exception as exc:  # pragma: no cover - defensive
             warnings.warn(f"Failed to plot raw RGB for {flight_stem}: {exc}")
             _fail_axis(ax_raw, "Raw ENVI export RGB (uncorrected)", "Unavailable")
             raw_header = None
             raw_mm = None
+            metrics_by_stage["raw"] = {
+                "available": False,
+                "n_valid": 0,
+                "pct_neg": float("nan"),
+                "pct_gt1": float("nan"),
+            }
+            flags_by_stage["raw"] = ["stage_unavailable"]
+            _log_stage_metrics("raw", metrics_by_stage["raw"], flags_by_stage["raw"])
     else:
         _fail_axis(
             ax_raw,
@@ -373,6 +501,14 @@ def summarize_flightline_outputs(
         )
         raw_header = None
         raw_mm = None
+        metrics_by_stage["raw"] = {
+            "available": False,
+            "n_valid": 0,
+            "pct_neg": float("nan"),
+            "pct_gt1": float("nan"),
+        }
+        flags_by_stage["raw"] = ["stage_missing"]
+        _log_stage_metrics("raw", metrics_by_stage["raw"], flags_by_stage["raw"])
 
     # Panel C requires corrected header/memmap for patch selection.
     if corrected_img.exists() and corrected_hdr.exists():
@@ -385,6 +521,11 @@ def summarize_flightline_outputs(
             ax_corrected.imshow(nir_preview, cmap="gray")
             ax_corrected.set_title("Corrected cube (BRDF+topo) — NIR band preview")
             ax_corrected.axis("off")
+
+            corrected_metrics, corrected_flags = _scene_metrics_from_cube(corrected_mm)
+            metrics_by_stage["corrected"] = corrected_metrics
+            flags_by_stage["corrected"] = list(corrected_flags)
+            _log_stage_metrics("corrected", corrected_metrics, corrected_flags)
 
             if raw_mm is not None and raw_mm.shape[0] > 0:
                 ratio_idx = int(min(raw_mm.shape[0] - 1, nir_idx))
@@ -404,22 +545,78 @@ def summarize_flightline_outputs(
                 ax_ratio_map.set_title("Corrected/raw ratio (NIR)")
                 ax_ratio_map.axis("off")
 
-                valid_count = int(np.count_nonzero(~np.isnan(ratio_map)))
-                if valid_count > 0:
+                ratio_valid_mask = np.isfinite(ratio_map)
+                ratio_valid = int(np.count_nonzero(ratio_valid_mask))
+                ratio_metrics = {
+                    "n_valid": ratio_valid,
+                    "ratio_min_thresh": QA_THRESH["ratio_min"],
+                    "ratio_max_thresh": QA_THRESH["ratio_max"],
+                    "outside": 0,
+                    "pct_outside": float("nan"),
+                }
+                ratio_flags: list[str] = []
+                if ratio_valid:
+                    ratio_vals = ratio_map[ratio_valid_mask]
                     outside = int(
-                        np.count_nonzero((ratio_map < 0.2) | (ratio_map > 2.0))
-                    )
-                    if outside / valid_count > 0.10:
-                        ax_ratio_map.text(
-                            0.5,
-                            0.08,
-                            "Wide ratio spread — check geometry/offset",
-                            transform=ax_ratio_map.transAxes,
-                            ha="center",
-                            color="crimson",
-                            fontsize=9,
-                            bbox=dict(facecolor="white", alpha=0.7),
+                        np.count_nonzero(
+                            (ratio_vals < QA_THRESH["ratio_min"])
+                            | (ratio_vals > QA_THRESH["ratio_max"])
                         )
+                    )
+                    ratio_metrics.update(
+                        outside=outside,
+                        pct_outside=(100.0 * outside / ratio_valid),
+                        median=float(np.nanmedian(ratio_vals)),
+                        min=float(np.nanmin(ratio_vals)),
+                        max=float(np.nanmax(ratio_vals)),
+                    )
+                    if outside > 0:
+                        ratio_flags.append("ratio_outside_expected_range")
+                else:
+                    ratio_metrics.update(
+                        median=float("nan"), min=float("nan"), max=float("nan")
+                    )
+
+                metrics_by_stage.setdefault("corrected", {}).update(
+                    {"nir_ratio": ratio_metrics}
+                )
+                if ratio_flags:
+                    flags_by_stage.setdefault("corrected", []).extend(ratio_flags)
+                    logger.warning(
+                        "⚠️  Flags present: stage=corrected_vs_raw flags=%s; ratio_pct_outside=%s%% (n=%s)",
+                        ratio_flags,
+                        (
+                            f"{ratio_metrics['pct_outside']:.2f}"
+                            if np.isfinite(ratio_metrics["pct_outside"])
+                            else "nan"
+                        ),
+                        f"{ratio_valid:,}",
+                    )
+                else:
+                    logger.info(
+                        "Ratio metrics [corrected/raw]: pct_outside=%s%% (n=%s)",
+                        (
+                            f"{ratio_metrics['pct_outside']:.2f}"
+                            if np.isfinite(ratio_metrics["pct_outside"])
+                            else "nan"
+                        ),
+                        f"{ratio_valid:,}",
+                    )
+
+                if (
+                    np.isfinite(ratio_metrics["pct_outside"])
+                    and ratio_metrics["pct_outside"] > 5.0
+                ):
+                    ax_ratio_map.text(
+                        0.5,
+                        0.08,
+                        "Wide ratio spread — check geometry/offset",
+                        transform=ax_ratio_map.transAxes,
+                        ha="center",
+                        color="crimson",
+                        fontsize=9,
+                        bbox=dict(facecolor="white", alpha=0.7),
+                    )
             else:
                 _fail_axis(
                     ax_ratio_map,
@@ -440,6 +637,16 @@ def summarize_flightline_outputs(
             )
             corrected_header = None
             corrected_mm = None
+            metrics_by_stage["corrected"] = {
+                "available": False,
+                "n_valid": 0,
+                "pct_neg": float("nan"),
+                "pct_gt1": float("nan"),
+            }
+            flags_by_stage["corrected"] = ["stage_unavailable"]
+            _log_stage_metrics(
+                "corrected", metrics_by_stage["corrected"], flags_by_stage["corrected"]
+            )
             nir_band = None
     else:
         _fail_axis(
@@ -797,35 +1004,58 @@ def summarize_flightline_outputs(
         for ax in thumb_axes:
             ax.axis("off")
         for img_path, ax in zip(sensor_imgs, thumb_axes):
+            sensor_label = _sensor_label(img_path, flight_stem)
             hdr_path = img_path.with_suffix(".hdr")
             if not hdr_path.exists():
                 ax.text(0.5, 0.5, "Missing HDR", ha="center", va="center")
-                ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
+                ax.set_title(sensor_label, fontsize=9)
+                stage_key = f"resampled:{sensor_label}"
+                metrics_by_stage[stage_key] = {
+                    "available": False,
+                    "n_valid": 0,
+                    "pct_neg": float("nan"),
+                    "pct_gt1": float("nan"),
+                }
+                flags_by_stage[stage_key] = ["hdr_missing"]
+                _log_stage_metrics(
+                    stage_key, metrics_by_stage[stage_key], flags_by_stage[stage_key]
+                )
                 continue
-            sensor_key = inferred_sensor_key_from_filename(img_path.name)
-            mode = "unknown"
-            rgb_indices = (0, 1, 2)
+            r, g, b = (0, 1, 2)
             try:
+                r, g, b = _select_rgb_bands_from_hdr(hdr_path, img_path.name)
                 header = _load_envi_header(hdr_path)
                 mm = memmap_bsq(img_path, header)
-                rgb_indices, mode = _select_rgb_bands(header, sensor_key)
-                rgb = _make_rgb_composite(mm, rgb_indices)
+                rgb = _make_rgb_composite(mm, (r, g, b))
                 rgb_small = _downsample_rgb(rgb)
                 ax.imshow(rgb_small)
-                ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
+                ax.set_title(sensor_label, fontsize=9)
+                stage_key = f"resampled:{sensor_label}"
+                stage_metrics, stage_flags = _scene_metrics_from_cube(mm)
+                metrics_by_stage[stage_key] = stage_metrics
+                flags_by_stage[stage_key] = list(stage_flags)
+                _log_stage_metrics(stage_key, stage_metrics, stage_flags)
             except Exception as exc:  # pragma: no cover - defensive
+                mode, _ = _parse_wavelengths_or_bands(
+                    _load_envi_header_dict(hdr_path)
+                )
                 warnings.warn(
-                    "Thumbnail failed for %s: %s. Parsed mode=%s; sensor_key=%s; "
-                    "rgb_indices=%s" % (
-                        img_path.name,
-                        exc,
-                        mode,
-                        sensor_key,
-                        rgb_indices,
-                    )
+                    f"Thumbnail failed for {img_path.name}: {exc}. Parsed mode={mode}; "
+                    f"r,g,b={(r, g, b)}"
                 )
                 ax.text(0.5, 0.5, "Unavailable", ha="center", va="center")
-                ax.set_title(_sensor_label(img_path, flight_stem), fontsize=9)
+                ax.set_title(sensor_label, fontsize=9)
+                stage_key = f"resampled:{sensor_label}"
+                metrics_by_stage[stage_key] = {
+                    "available": False,
+                    "n_valid": 0,
+                    "pct_neg": float("nan"),
+                    "pct_gt1": float("nan"),
+                }
+                flags_by_stage[stage_key] = ["stage_unavailable"]
+                _log_stage_metrics(
+                    stage_key, metrics_by_stage[stage_key], flags_by_stage[stage_key]
+                )
     else:
         thumb_spec = gs[1:, 1:].subgridspec(1, 1)
         ax_thumb = fig.add_subplot(thumb_spec[0])
@@ -842,6 +1072,12 @@ def summarize_flightline_outputs(
     else:
         text = "No Parquet outputs found"
     ax_parquet.text(0, 1, text, va="top")
+
+    flagged_summary = {stage: flags for stage, flags in flags_by_stage.items() if flags}
+    if flagged_summary:
+        logger.warning("⚠️  QA flag summary for %s: %s", flight_stem, flagged_summary)
+    else:
+        logger.info("QA flag summary for %s: none", flight_stem)
 
     fig.suptitle(
         (
