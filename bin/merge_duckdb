@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+from pathlib import Path
+
+from cross_sensor_cal.merge_duckdb import merge_all_flightlines
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Per-flightline DuckDB merge (original + corrected + resampled).",
+    )
+    parser.add_argument("--data-root", type=Path, required=True)
+    parser.add_argument("--flightline-glob", type=str, default="NEON_*")
+    parser.add_argument("--out-name", type=str, default="flightline_master.parquet")
+    parser.add_argument("--original-glob", type=str, default="**/*original*.parquet")
+    parser.add_argument("--corrected-glob", type=str, default="**/*corrected*.parquet")
+    parser.add_argument("--resampled-glob", type=str, default="**/*resampl*.parquet")
+    parser.add_argument("--write-feather", action="store_true")
+    args = parser.parse_args()
+
+    merge_all_flightlines(
+        data_root=args.data_root,
+        flightline_glob=args.flightline_glob,
+        out_name=args.out_name,
+        original_glob=args.original_glob,
+        corrected_glob=args.corrected_glob,
+        resampled_glob=args.resampled_glob,
+        write_feather=args.write_feather,
+    )
+
+
+if __name__ == "__main__":
+    main()

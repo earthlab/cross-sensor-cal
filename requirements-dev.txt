@@ -1,1 +1,2 @@
 pytest>=7,<9
+duckdb>=1.0.0
