@@ -4,58 +4,71 @@
     "sensors": [
       "micasense_to_match_oli_and_oli",
       "micasense_to_match_oli_oli",
-      "micasense_to_match_tm_etm_plus"
+      "micasense_to_match_tm_etm+"
     ]
   },
   "stale_in_docs": {
     "outputs": [
       "_brdfandtopo_corrected_envi.parquet",
+      "_landsat_etm+_envi.img",
       "_landsat_oli_envi.parquet",
       "_landsat_tm_envi.hdr",
       "_landsat_tm_envi.img",
+      "_micasense*_envi.img",
       "_micasense_envi.hdr",
-      "_micasense_envi.img"
+      "_micasense_envi.img",
+      "_qa.json"
     ],
     "sensors": [
+      "MicaSense",
       "MicaSense,",
       "MicaSense,,",
       "MicaSense,,,",
       "MicaSense,,,,",
       "MicaSense,,,,,",
+      "MicaSense,,,,,,",
       "Micasense,",
       "Micasense,,",
       "Micasense,,,",
       "Micasense,,,,",
       "Micasense,,,,,",
+      "Micasense,,,,,,",
       "micasense']",
       "micasense'],",
       "micasense'],,",
       "micasense'],,,",
       "micasense'],,,,",
+      "micasense'],,,,,",
+      "micasense*_envi.img`",
       "micasense_envi.hdr",
       "micasense_envi.hdr,",
       "micasense_envi.hdr,,",
       "micasense_envi.hdr,,,",
       "micasense_envi.hdr,,,,",
+      "micasense_envi.hdr,,,,,",
       "micasense_envi.img",
       "micasense_envi.img,",
       "micasense_envi.img,,",
       "micasense_envi.img,,,",
       "micasense_envi.img,,,,",
+      "micasense_envi.img,,,,,",
       "micasense_envi.img/.hdr/.parquet",
       "micasense_envi.img/.hdr/.parquet,",
       "micasense_envi.img/.hdr/.parquet,,",
       "micasense_envi.img/.hdr/.parquet,,,",
       "micasense_envi.img/.hdr/.parquet,,,,",
+      "micasense_envi.img/.hdr/.parquet,,,,,",
       "micasense_to_match_oli_and_oli,",
       "micasense_to_match_oli_and_oli,,",
       "micasense_to_match_oli_and_oli,,,",
       "micasense_to_match_oli_and_oli,,,,",
+      "micasense_to_match_oli_and_oli,,,,,",
       "micasense_to_match_oli_oli,",
       "micasense_to_match_oli_oli,,",
       "micasense_to_match_oli_oli,,,",
       "micasense_to_match_oli_oli,,,,",
-      "micasense_to_match_tm_etm+,,,,",
+      "micasense_to_match_oli_oli,,,,,",
+      "micasense_to_match_tm_etm+,,,,,",
       "micasense`)"
     ]
   },
@@ -105,16 +118,6 @@
     "topo_and_brdf_correction.py": [
       "--config_file"
     ],
-    "standard_resample.py": [
-      "--hdr_path",
-      "--json_file",
-      "--output_path",
-      "--resampling_file_path",
-      "--sensor_type"
-    ],
-    "neon_to_envi.py": [
-      "--brightness-offset"
-    ],
     "merge_duckdb.py": [
       "--corrected-glob",
       "--data-root",
@@ -125,14 +128,44 @@
       "--resampled-glob",
       "--write-feather"
     ],
+    "qa_metrics.py": [
+      "--base-folder",
+      "--flight-stem"
+    ],
+    "standard_resample.py": [
+      "--hdr_path",
+      "--json_file",
+      "--output_path",
+      "--resampling_file_path",
+      "--sensor_type"
+    ],
     "qa_dashboard.py": [
       "--base-folder",
       "--out-parquet",
       "--out-png"
     ],
-    "qa_metrics.py": [
+    "neon_to_envi.py": [
+      "--brightness-offset"
+    ],
+    "pipeline_cli.py": [
       "--base-folder",
-      "--flight-stem"
+      "--brightness-offset",
+      "--flight-lines",
+      "--max-workers",
+      "--product-code",
+      "--resample-method",
+      "--site-code",
+      "--year-month"
+    ],
+    "recover_cli.py": [
+      "--base-folder",
+      "--brightness-offset"
+    ],
+    "qa_cli.py": [
+      "--base-folder",
+      "--no-overwrite",
+      "--out-dir",
+      "--overwrite"
     ],
     "pipeline.py": [
       "--brightness-offset",
@@ -148,26 +181,6 @@
       "--output",
       "--product",
       "--year-month"
-    ],
-    "pipeline_cli.py": [
-      "--base-folder",
-      "--brightness-offset",
-      "--flight-lines",
-      "--max-workers",
-      "--product-code",
-      "--resample-method",
-      "--site-code",
-      "--year-month"
-    ],
-    "qa_cli.py": [
-      "--base-folder",
-      "--no-overwrite",
-      "--out-dir",
-      "--overwrite"
-    ],
-    "recover_cli.py": [
-      "--base-folder",
-      "--brightness-offset"
     ]
   }
 }
