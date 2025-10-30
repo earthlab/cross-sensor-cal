@@ -258,9 +258,33 @@ def _dtype_from_header(header: dict, hdr_path: Path) -> np.dtype:
     except KeyError as exc:  # pragma: no cover - malformed header unexpected
         raise RuntimeError(f"ENVI header missing 'data type': {hdr_path}") from exc
     try:
-        return np.dtype(_ENVI_DTYPE_MAP[code])
+        base_dtype = np.dtype(_ENVI_DTYPE_MAP[code])
     except KeyError as exc:  # pragma: no cover - unsupported dtype unexpected
         raise RuntimeError(f"Unsupported ENVI data type {code} for {hdr_path}") from exc
+
+    byte_order = header.get("byte order")
+    if byte_order is None:
+        return base_dtype
+
+    try:
+        bo_int = int(byte_order)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise RuntimeError(
+            f"Invalid ENVI 'byte order' value {byte_order!r} for {hdr_path}"
+        ) from exc
+
+    if base_dtype.byteorder == "|":
+        # Non-endian aware types such as uint8 do not require swapping.
+        return base_dtype
+
+    if bo_int == 0:
+        return base_dtype.newbyteorder("<")
+    if bo_int == 1:
+        return base_dtype.newbyteorder(">")
+
+    raise RuntimeError(
+        f"Unsupported ENVI byte order {bo_int} for {hdr_path}"
+    )
 
 
 def _memmap_bsq(img_path: Path, header: dict) -> np.memmap:
@@ -278,6 +302,41 @@ def _memmap_bsq(img_path: Path, header: dict) -> np.memmap:
     dtype = _dtype_from_header(header, img_path.with_suffix(".hdr"))
     shape = (bands, lines, samples)
     return np.memmap(img_path, mode="r", dtype=dtype, shape=shape, order="C")
+
+
+def read_envi_cube(img_path: Path, header: dict | None = None) -> np.ndarray:
+    """Read an ENVI hyperspectral cube into a NumPy array.
+
+    The implementation intentionally mirrors the light-weight reader used by the
+    QA plotting utilities.  Only BSQ-interleaved rasters are supported because
+    that is the layout written by this project.
+    """
+
+    hdr_path = img_path.with_suffix(".hdr")
+    if header is None:
+        header = hdr_to_dict(hdr_path)
+    else:
+        header = dict(header)
+
+    interleave = str(header.get("interleave", "")).lower()
+    if interleave and interleave != "bsq":
+        raise RuntimeError(
+            f"Only BSQ interleave supported for ENVI reader: {img_path}"
+        )
+
+    if not img_path.exists() or not hdr_path.exists():
+        missing = hdr_path if not hdr_path.exists() else img_path
+        raise FileNotFoundError(f"ENVI resource missing: {missing}")
+
+    cube = _memmap_bsq(img_path, header)
+
+    if not np.issubdtype(cube.dtype, np.floating):
+        return cube.astype(np.float32)
+
+    # ``astype`` with ``copy=False`` retains the memmap for float32 inputs while
+    # ensuring float64 data are represented in a manageable precision for
+    # downstream calculations.
+    return cube.astype(np.float32, copy=False)
 
 
 def _unitless(arr: np.ndarray) -> np.ndarray:
