@@ -21,11 +21,35 @@ builder (see `qa_plots.render_flightline_panel`) to produce:
 from __future__ import annotations
 
 import os
+import sys
+import traceback
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import duckdb
+
+from contextlib import contextmanager
+
+try:
+    from tqdm import tqdm
+except Exception:  # pragma: no cover - tqdm optional
+    tqdm = None
+
+
+@contextmanager
+def _progress(desc: str):
+    bar = None
+    try:
+        if tqdm:
+            bar = tqdm(total=1, desc=desc, leave=False, disable=not sys.stderr.isatty())
+        yield
+        if bar:
+            bar.update(1)
+    finally:
+        if bar:
+            bar.close()
 
 
 META_CANDIDATES: Sequence[str] = (
@@ -48,19 +72,16 @@ META_CANDIDATES: Sequence[str] = (
 
 
 def _derive_prefix(flightline_dir: Path) -> str:
-    """
-    Return the canonical scene/file prefix for this flightline (same as other artifacts).
-    Prefers any "*_envi.img" in the folder; strips the trailing "_envi" from the stem.
-    Falls back to the folder name.
-    """
-
     flightline_dir = Path(flightline_dir)
-    prefix = flightline_dir.name
-    candidates = sorted(flightline_dir.glob("*_envi.img"))
-    if candidates:
-        stem = candidates[0].stem
-        prefix = stem[:-5] if stem.endswith("_envi") else stem
-    return prefix
+    # Prefer *_envi.img to deduce prefix; else stem of first *.h5; else folder name
+    imgs = sorted(flightline_dir.glob("*_envi.img"))
+    if imgs:
+        stem = imgs[0].stem
+        return stem[:-5] if stem.endswith("_envi") else stem
+    h5s = sorted(flightline_dir.glob("*_directional_reflectance.h5"))
+    if h5s:
+        return h5s[0].stem
+    return flightline_dir.name
 
 
 @dataclass(frozen=True)
@@ -306,11 +327,14 @@ def merge_flightline(
         Path to the merged parquet file.
     """
 
-    flightline_dir = Path(flightline_dir)
+    flightline_dir = Path(flightline_dir).resolve()
     prefix = _derive_prefix(flightline_dir)
     if out_name is None:
         out_name = f"{prefix}_merged_pixel_extraction.parquet"
-    out_parquet = flightline_dir / out_name
+    out_parquet = (flightline_dir / out_name).resolve()
+
+    print(f"[merge] Start flightline={flightline_dir.name} prefix={prefix}")
+    print(f"[merge] Output parquet → {out_parquet}")
 
     inputs = MergeInputs(
         flightline_dir,
@@ -339,88 +363,114 @@ def merge_flightline(
             f"PRAGMA temp_directory='{_quote_path(str(tmp_dir.resolve()))}'"
         )
 
-        _register_union(con, "orig", inputs["orig"], META_CANDIDATES)
-        _register_union(con, "corr", inputs["corr"], META_CANDIDATES)
-        _register_union(con, "resamp", inputs["resamp"], META_CANDIDATES)
+        with _progress("DuckDB: register + normalize"):
+            _register_union(con, "orig", inputs["orig"], META_CANDIDATES)
+            _register_union(con, "corr", inputs["corr"], META_CANDIDATES)
+            _register_union(con, "resamp", inputs["resamp"], META_CANDIDATES)
 
-        orig_cols = set(_table_columns(con, "orig"))
-        corr_cols = set(_table_columns(con, "corr"))
-        resamp_cols = set(_table_columns(con, "resamp"))
+            orig_cols = set(_table_columns(con, "orig"))
+            corr_cols = set(_table_columns(con, "corr"))
+            resamp_cols = set(_table_columns(con, "resamp"))
 
-        present_meta = [
-            col
-            for col in META_CANDIDATES
-            if col in orig_cols or col in corr_cols or col in resamp_cols
-        ]
+            present_meta = [
+                col
+                for col in META_CANDIDATES
+                if col in orig_cols or col in corr_cols or col in resamp_cols
+            ]
 
-        meta_selects: List[str] = ["p.pixel_id AS pixel_id"]
-        for col in present_meta:
-            if col == "pixel_id":
-                continue
-            ident = _quote_identifier(col)
-            meta_selects.append(
-                f"COALESCE(o.{ident}, c.{ident}, r.{ident}) AS {ident}"
-            )
-
-        def _spectral_select(table_alias: str, columns: Iterable[str]) -> List[str]:
-            selects: List[str] = []
-            for col in columns:
+            meta_selects: List[str] = ["p.pixel_id AS pixel_id"]
+            for col in present_meta:
+                if col == "pixel_id":
+                    continue
                 ident = _quote_identifier(col)
-                selects.append(f"{table_alias}.{ident} AS {ident}")
-            return selects
+                meta_selects.append(
+                    f"COALESCE(o.{ident}, c.{ident}, r.{ident}) AS {ident}"
+                )
 
-        orig_spectral = [c for c in orig_cols if c.startswith("orig_wl")]
-        corr_spectral = [c for c in corr_cols if c.startswith("corr_wl")]
-        resamp_spectral = [c for c in resamp_cols if c.startswith("resamp_wl")]
+            def _spectral_select(table_alias: str, columns: Iterable[str]) -> List[str]:
+                selects: List[str] = []
+                for col in columns:
+                    ident = _quote_identifier(col)
+                    selects.append(f"{table_alias}.{ident} AS {ident}")
+                return selects
 
-        select_clause = meta_selects + _spectral_select("o", orig_spectral)
-        select_clause += _spectral_select("c", corr_spectral)
-        select_clause += _spectral_select("r", resamp_spectral)
+            orig_spectral = [c for c in orig_cols if c.startswith("orig_wl")]
+            corr_spectral = [c for c in corr_cols if c.startswith("corr_wl")]
+            resamp_spectral = [c for c in resamp_cols if c.startswith("resamp_wl")]
 
-        con.execute(
-            """
-            CREATE OR REPLACE VIEW all_pixels AS (
-                SELECT pixel_id FROM orig
-                UNION
-                SELECT pixel_id FROM corr
-                UNION
-                SELECT pixel_id FROM resamp
+            select_clause = meta_selects + _spectral_select("o", orig_spectral)
+            select_clause += _spectral_select("c", corr_spectral)
+            select_clause += _spectral_select("r", resamp_spectral)
+
+            con.execute(
+                """
+                CREATE OR REPLACE VIEW all_pixels AS (
+                    SELECT pixel_id FROM orig
+                    UNION
+                    SELECT pixel_id FROM corr
+                    UNION
+                    SELECT pixel_id FROM resamp
+                )
+                """
             )
-            """
-        )
 
-        con.execute(
-            "CREATE OR REPLACE TABLE merged AS "
-            "SELECT "
-            + ", ".join(select_clause)
-            + " FROM all_pixels p "
-            "LEFT JOIN orig o ON p.pixel_id = o.pixel_id "
-            "LEFT JOIN corr c ON p.pixel_id = c.pixel_id "
-            "LEFT JOIN resamp r ON p.pixel_id = r.pixel_id"
-        )
+        with _progress("DuckDB: join + materialize"):
+            con.execute(
+                "CREATE OR REPLACE TABLE merged AS "
+                "SELECT "
+                + ", ".join(select_clause)
+                + " FROM all_pixels p "
+                "LEFT JOIN orig o ON p.pixel_id = o.pixel_id "
+                "LEFT JOIN corr c ON p.pixel_id = c.pixel_id "
+                "LEFT JOIN resamp r ON p.pixel_id = r.pixel_id"
+            )
 
         out_parquet.parent.mkdir(parents=True, exist_ok=True)
-        con.execute(
-            f"COPY merged TO '{_quote_path(str(out_parquet))}' (FORMAT PARQUET, CODEC ZSTD)"
-        )
+        with _progress("DuckDB: write parquet"):
+            con.execute(
+                f"""
+      COPY merged TO '{_quote_path(str(out_parquet))}'
+      (FORMAT PARQUET, CODEC ZSTD, ROW_GROUP_SIZE 5120000);
+    """
+            )
+            print(
+                f"[merge] ✅ Wrote parquet: {out_parquet} (exists={out_parquet.exists()})"
+            )
 
         if write_feather:
-            out_feather = out_parquet.with_suffix(".feather")
-            con.execute(
-                f"COPY merged TO '{_quote_path(str(out_feather))}' (FORMAT ARROW)"
-            )
+            out_feather = out_parquet.with_suffix(".feather").resolve()
+            with _progress("DuckDB: write feather"):
+                con.execute(
+                    f"COPY merged TO '{_quote_path(str(out_feather))}' (FORMAT ARROW)"
+                )
+                print(
+                    f"[merge] ✅ Wrote feather: {out_feather} (exists={out_feather.exists()})"
+                )
     finally:
         con.close()
+
+    if hasattr(os, "sync"):
+        try:
+            os.sync()
+        except OSError:
+            pass
 
     if emit_qa_panel:
         try:
             from cross_sensor_cal.qa_plots import render_flightline_panel
-
-            render_flightline_panel(flightline_dir, prefix)
-            print(f"🖼️  QA panel written → {prefix}_qa.png")
+            with _progress("QA: render panel"):
+                out_png = render_flightline_panel(flightline_dir, prefix)
+            out_png = Path(out_png).resolve()
+            print(
+                f"[merge] 🖼️  QA panel → {out_png} (exists={out_png.exists()})"
+            )
         except Exception as e:  # pragma: no cover - QA best effort
-            print(f"⚠️ QA panel after merge failed for {flightline_dir.name}: {e}")
+            print(f"[merge] ⚠️ QA panel failed: {e}")
+            traceback.print_exc()
 
+    print(
+        f"[merge] ✅ Done for {flightline_dir.name} at {datetime.now().isoformat(timespec='seconds')}"
+    )
     return out_parquet
 
 

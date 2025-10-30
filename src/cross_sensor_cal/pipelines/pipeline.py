@@ -411,15 +411,6 @@ from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
 from ..file_sort import generate_file_move_list
-
-
-
-def post_merge_for_flightline(flightline_dir: Path) -> Path:
-    out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
-    logger.info("✅ DuckDB master written → %s", out.name)
-    return out
-
-
 def _coerce_scalar(value: str):
     token = value.strip().strip('"').strip("'")
     if not token:
@@ -1450,6 +1441,8 @@ def stage_convolve_all_sensors(
 
     corrected_img = Path(paths["corrected_img"])
     corrected_hdr = Path(paths["corrected_hdr"])
+    default_work_dir = corrected_img.parent
+    flightline_dir = Path(paths.get("work_dir", default_work_dir)).resolve()
 
     if corrected_img_path is not None:
         corrected_img = Path(corrected_img_path)
@@ -1579,6 +1572,9 @@ def stage_convolve_all_sensors(
     )
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
+    merge_out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
+    logger.info(f"✅ DuckDB master → {merge_out}")
+
     logger.info(
         "📊 Sensor convolution summary for %s | created=%s, existing=%s, failed=%s",
         flight_stem,
@@ -1679,30 +1675,6 @@ def process_one_flightline(
         resample_method=resample_method,
         parallel_mode=parallel_mode,
     )
-
-    flightline_dir = Path(flight_paths["work_dir"])
-    try:
-        merged_path = post_merge_for_flightline(flightline_dir)
-    except Exception as exc:  # pragma: no cover - merge best effort
-        logger.warning(
-            "⚠️ DuckDB merge failed for %s: %s", flightline_dir, exc
-        )
-
-    from ..qa_plots import summarize_flightline_outputs
-
-    work_dir = Path(flight_paths["work_dir"])
-    qa_png = work_dir / f"{flight_stem}_qa.png"
-    try:
-        summarize_flightline_outputs(
-            base_folder=base_folder,
-            flight_stem=flight_stem,
-            out_png=qa_png,
-            shaded_regions=True,
-            overwrite=True,
-        )
-        logger.info("🖼️  Wrote QA panel for %s -> %s", flight_stem, qa_png.name)
-    except Exception as exc:  # pragma: no cover - QA best effort
-        logger.warning("⚠️  QA panel generation failed for %s: %s", flight_stem, exc)
 
     try:
         write_metrics(base_folder=base_folder, flight_stem=flight_stem)
