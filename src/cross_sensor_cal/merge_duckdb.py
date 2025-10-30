@@ -1,3 +1,23 @@
+"""
+cross_sensor_cal.merge_duckdb
+-----------------------------
+
+DuckDB-based merge stage that unifies all parquet tables for a NEON flightline.
+
+Each run creates one master parquet per flightline:
+    <scene_prefix>_merged_pixel_extraction.parquet
+
+The merged table contains:
+  • all pixel-level metadata (row, col, x, y, lat, lon, etc.)
+  • 426 original wavelengths (columns prefixed 'orig_wl')
+  • 426 corrected wavelengths (columns prefixed 'corr_wl')
+  • resampled wavelengths for each target sensor (columns prefixed 'resamp_wl')
+
+After writing the merged parquet, the stage automatically triggers the QA panel
+builder (see `qa_plots.render_flightline_panel`) to produce:
+    <scene_prefix>_qa.png
+"""
+
 from __future__ import annotations
 
 import os
@@ -259,6 +279,33 @@ def merge_flightline(
     write_feather: bool = False,
     emit_qa_panel: bool = True,
 ) -> Path:
+    """
+    Merge all pixel-level parquet tables for one flightline.
+
+    Parameters
+    ----------
+    flightline_dir : Path
+        Directory containing the flightline's parquet outputs.
+    out_name : str, optional
+        Custom name for the merged parquet. If None, defaults to:
+        <prefix>_merged_pixel_extraction.parquet
+    original_glob : str, optional
+        Glob used to locate original reflectance parquet tables.
+    corrected_glob : str, optional
+        Glob used to locate corrected reflectance parquet tables.
+    resampled_glob : str, optional
+        Glob used to locate resampled sensor parquet tables.
+    write_feather : bool, optional
+        If True, writes a Feather copy of the merged table alongside the parquet.
+    emit_qa_panel : bool, default True
+        If True, renders the standard QA panel (<prefix>_qa.png) after merging.
+
+    Returns
+    -------
+    Path
+        Path to the merged parquet file.
+    """
+
     flightline_dir = Path(flightline_dir)
     prefix = _derive_prefix(flightline_dir)
     if out_name is None:
