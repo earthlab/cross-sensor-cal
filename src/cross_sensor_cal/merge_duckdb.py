@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import os, sys, traceback, re, glob, shutil
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
@@ -62,6 +61,23 @@ try:
     from tqdm import tqdm
 except Exception:  # pragma: no cover - tqdm optional
     tqdm = None
+
+
+# Files we must exclude from any input scan to avoid schema collisions
+EXCLUDE_PATTERNS = {
+    "_merged_pixel_extraction.parquet",
+    "_qa_metrics.parquet",
+}
+
+
+def _exclude_parquets(paths):
+    keep = []
+    for p in paths:
+        name = p.name if hasattr(p, "name") else str(p)
+        if any(ex in name for ex in EXCLUDE_PATTERNS):
+            continue
+        keep.append(Path(p))
+    return keep
 
 
 @contextmanager
@@ -108,24 +124,6 @@ def _derive_prefix(flightline_dir: Path) -> str:
     if h5s:
         return h5s[0].stem
     return flightline_dir.name
-
-
-@dataclass(frozen=True)
-class MergeInputs:
-    flightline_dir: Path
-    original_glob: str = "**/*original*.parquet"
-    corrected_glob: str = "**/*corrected*.parquet"
-    resampled_glob: str = "**/*resampl*.parquet"
-
-    def discover(self) -> Dict[str, List[str]]:
-        def _glob(pattern: str) -> List[str]:
-            return [str(p) for p in self.flightline_dir.glob(pattern)]
-
-        return {
-            "orig": _glob(self.original_glob),
-            "corr": _glob(self.corrected_glob),
-            "resamp": _glob(self.resampled_glob),
-        }
 
 
 def _table_columns(con: duckdb.DuckDBPyConnection, table: str) -> List[str]:
@@ -180,34 +178,29 @@ def _quote_path(path: str) -> str:
 def _register_union(
     con: duckdb.DuckDBPyConnection,
     name: str,
-    paths: List[str],
+    paths: Iterable[Path],
     meta_candidates: Sequence[str],
 ) -> None:
     escaped_name = _quote_identifier(f"{name}_raw")
-    if not paths:
-        # Create an empty view with expected metadata so downstream SQL succeeds.
+    path_list = [Path(p) for p in paths]
+    if not path_list:
         select_cols = ["NULL::VARCHAR AS pixel_id"]
         for col in meta_candidates:
             if col == "pixel_id":
                 continue
             select_cols.append(f"NULL AS {_quote_identifier(col)}")
         con.execute(
-            f"CREATE OR REPLACE VIEW {_quote_identifier(name)} AS SELECT {', '.join(select_cols)} WHERE 0=1"
-        )
-        return
-
-    if len(paths) == 1:
-        sql = (
-            f"CREATE OR REPLACE VIEW {escaped_name} AS "
-            f"SELECT * FROM read_parquet('{_quote_path(paths[0])}')"
+            f"CREATE OR REPLACE VIEW {escaped_name} AS SELECT {', '.join(select_cols)} WHERE 1=0"
         )
     else:
-        path_list = ", ".join(f"'{_quote_path(p)}'" for p in paths)
-        sql = (
-            f"CREATE OR REPLACE VIEW {escaped_name} AS "
-            f"SELECT * FROM read_parquet([{path_list}])"
-        )
-    con.execute(sql)
+        selects: List[str] = []
+        for p in path_list:
+            selects.append(
+                "SELECT * FROM read_parquet('"
+                + _quote_path(p.as_posix())
+                + "', union_by_name=True)"
+            )
+        con.execute(f"CREATE OR REPLACE VIEW {escaped_name} AS " + " UNION ALL ".join(selects))
 
     raw_columns = _table_columns(con, f"{name}_raw")
     raw_column_set = set(raw_columns)
@@ -378,12 +371,56 @@ def merge_flightline(
     print(f"[merge] Start flightline={flightline_dir.name} prefix={prefix}")
     print(f"[merge] Output parquet → {out_parquet}")
 
-    inputs = MergeInputs(
-        flightline_dir,
-        original_glob,
-        corrected_glob,
-        resampled_glob,
-    ).discover()
+    def _discover_inputs() -> Dict[str, List[Path]]:
+        # When default globs are supplied, favour precise patterns with exclusions.
+        if (
+            original_glob == "**/*original*.parquet"
+            and corrected_glob == "**/*corrected*.parquet"
+            and resampled_glob == "**/*resampl*.parquet"
+        ):
+            inputs: Dict[str, List[Path]] = {"orig": [], "corr": [], "resamp": []}
+
+            # originals (long format from raw ENVI)
+            orig = sorted(flightline_dir.glob("*_envi.parquet"))
+            orig = [p for p in orig if "brdfandtopo_corrected" not in p.name]
+            inputs["orig"] = _exclude_parquets(orig)
+
+            # corrected (long format from corrected ENVI)
+            corr = sorted(
+                flightline_dir.glob("*_brdfandtopo_corrected_envi.parquet")
+            )
+            inputs["corr"] = _exclude_parquets(corr)
+
+            # resampled (sensor stacks)
+            resamp: List[Path] = []
+            for pat in [
+                "*_landsat_*_envi.parquet",
+                "*_micasense*_envi.parquet",
+            ]:
+                resamp.extend(sorted(flightline_dir.glob(pat)))
+            inputs["resamp"] = _exclude_parquets(resamp)
+            if not any(inputs.values()):
+                return {
+                    "orig": _exclude_parquets(
+                        sorted(flightline_dir.glob(original_glob))
+                    ),
+                    "corr": _exclude_parquets(
+                        sorted(flightline_dir.glob(corrected_glob))
+                    ),
+                    "resamp": _exclude_parquets(
+                        sorted(flightline_dir.glob(resampled_glob))
+                    ),
+                }
+            return inputs
+
+        # Fallback to user-supplied glob patterns
+        return {
+            "orig": _exclude_parquets(sorted(flightline_dir.glob(original_glob))),
+            "corr": _exclude_parquets(sorted(flightline_dir.glob(corrected_glob))),
+            "resamp": _exclude_parquets(sorted(flightline_dir.glob(resampled_glob))),
+        }
+
+    inputs = _discover_inputs()
 
     if not any(inputs.values()):
         raise FileNotFoundError(f"No parquet inputs found in {flightline_dir}")
@@ -510,10 +547,15 @@ def merge_flightline(
 
     if emit_qa_panel:
         try:
-            from cross_sensor_cal.qa_plots import render_flightline_panel
+            from cross_sensor_cal.qa_plots import make_flightline_panel
             with _progress("QA: render panel"):
-                out_png = render_flightline_panel(flightline_dir, prefix)
-            out_png_path = Path(out_png).resolve()
+                out_png_path = make_flightline_panel(
+                    flightline_dir, flightline_dir / f"{prefix}_qa.png"
+                )
+            if out_png_path is None:
+                raise FileNotFoundError(
+                    f"QA panel did not materialize: {flightline_dir / f'{prefix}_qa.png'}"
+                )
             print(
                 f"[merge] 🖼️  QA panel → {out_png_path} "
                 f"(exists={out_png_path.exists()})"

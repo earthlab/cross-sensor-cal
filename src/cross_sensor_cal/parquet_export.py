@@ -15,7 +15,85 @@ __all__ = [
     "parquet_exists_and_valid",
     "build_parquet_from_envi",
     "ensure_parquet_for_envi",
+    "pq_read_table",
+    "pq_write_table",
+    "repair_lonlat_in_place",
 ]
+
+
+def pq_read_table(path: Path):
+    import pyarrow.parquet as pq
+
+    return pq.read_table(path)
+
+
+def pq_write_table(obj, path: Path):
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if isinstance(obj, pa.Table):
+        table = obj
+    elif hasattr(obj, "to_pandas") and not isinstance(obj, pd.DataFrame):
+        table = obj
+    else:
+        if isinstance(obj, pd.DataFrame):
+            df = obj
+        else:
+            df = pd.DataFrame(obj)
+        table = pa.Table.from_pandas(df, preserve_index=False)
+    pq.write_table(table, path)
+    return path
+
+
+def _add_lonlat_columns(df, img_path: Path, *, transform=None, crs=None):
+    import numpy as np
+    import rasterio
+    from rasterio.transform import xy
+    import pyproj
+
+    img_path = Path(img_path)
+
+    if transform is None or crs is None:
+        with rasterio.open(img_path) as ds:
+            return _add_lonlat_columns(
+                df,
+                img_path,
+                transform=ds.transform,
+                crs=ds.crs,
+            )
+
+    if "x" in df.columns and "y" in df.columns:
+        cols = df["x"].to_numpy()
+        rows = df["y"].to_numpy()
+    elif {"col", "row"}.issubset(df.columns):
+        cols = df["col"].to_numpy()
+        rows = df["row"].to_numpy()
+    else:
+        raise RuntimeError(
+            "Missing pixel coordinates (x/y or row/col) for lon/lat export"
+        )
+
+    xs, ys = xy(transform, rows, cols, offset="center")
+    xs = np.asarray(xs)
+    ys = np.asarray(ys)
+
+    epsg = None
+    if crs is not None:
+        try:
+            epsg = crs.to_epsg()
+        except Exception:
+            epsg = None
+
+    if crs is not None and epsg and epsg != 4326:
+        to_wgs84 = pyproj.Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+        lons, lats = to_wgs84.transform(xs, ys)
+    else:
+        lons, lats = xs, ys
+
+    df["lon"] = lons
+    df["lat"] = lats
+    return df
 
 
 def parquet_exists_and_valid(parquet_path: Path) -> bool:
@@ -106,6 +184,7 @@ def build_parquet_from_envi(
         height = src.height
         width = src.width
         transform = src.transform
+        src_crs = src.crs
 
         crs_candidate: int | str | None = None
         if src.crs is not None:
@@ -209,6 +288,13 @@ def build_parquet_from_envi(
                         crs_epsg=crs_candidate,
                     )
 
+                    df_chunk = _add_lonlat_columns(
+                        df_chunk,
+                        envi_img,
+                        transform=transform,
+                        crs=src_crs,
+                    )
+
                     if "lon" not in df_chunk or "lat" not in df_chunk:
                         raise ValueError(f"Unable to compute lon/lat for {parquet_path}")
 
@@ -253,6 +339,31 @@ def build_parquet_from_envi(
             names=[field.name for field in schema],
         )
         pq.write_table(empty_table, parquet_path)
+
+
+def repair_lonlat_in_place(folder: Path):
+    from cross_sensor_cal.merge_duckdb import EXCLUDE_PATTERNS
+
+    folder = Path(folder)
+    for pq_path in sorted(folder.glob("*.parquet")):
+        name = pq_path.name
+        if any(ex in name for ex in EXCLUDE_PATTERNS):
+            continue
+        tbl = pq_read_table(pq_path)
+        if {"lat", "lon"}.issubset(tbl.column_names):
+            continue
+        base = (
+            name.replace(".parquet", "")
+            .replace("_envi", "")
+            .replace("_brdfandtopo_corrected", "")
+        )
+        candidates = list(folder.glob(f"{base}*_envi.img"))
+        if not candidates:
+            continue
+        img_path = candidates[0]
+        df = tbl.to_pandas()
+        df = _add_lonlat_columns(df, img_path)
+        pq_write_table(df, pq_path)
 
 
 def ensure_parquet_for_envi(envi_img: Path, logger) -> Path | None:
