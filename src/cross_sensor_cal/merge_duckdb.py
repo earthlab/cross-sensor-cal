@@ -1,21 +1,32 @@
-"""
-cross_sensor_cal.merge_duckdb
------------------------------
+"""cross_sensor_cal.merge_duckdb
+================================
 
-DuckDB-based merge stage that unifies all parquet tables for a NEON flightline.
+DuckDB-backed merge utilities for the cross-sensor-cal pipeline.
 
-Each run creates one master parquet per flightline:
-    <scene_prefix>_merged_pixel_extraction.parquet
+The public entry point :func:`merge_flightline` stitches every ENVI-derived
+Parquet table for a single flightline into one master artifact named
+``<scene_prefix>_merged_pixel_extraction.parquet``. The merged parquet includes
+pixel metadata, the full set of original/corrected wavelengths, and any
+resampled sensor bands.
 
-The merged table contains:
-  • all pixel-level metadata (row, col, x, y, lat, lon, etc.)
-  • 426 original wavelengths (columns prefixed 'orig_wl')
-  • 426 corrected wavelengths (columns prefixed 'corr_wl')
-  • resampled wavelengths for each target sensor (columns prefixed 'resamp_wl')
+Unless ``qa=False`` is passed, completing the merge automatically invokes
+``qa_plots.render_flightline_panel`` to emit ``<scene_prefix>_qa.png`` in the
+same directory. This mirrors the default behaviour of
+``python -m bin.merge_duckdb`` as documented in the CLI.
 
-After writing the merged parquet, the stage automatically triggers the QA panel
-builder (see `qa_plots.render_flightline_panel`) to produce:
-    <scene_prefix>_qa.png
+Typical usage::
+
+    from cross_sensor_cal import merge_duckdb
+
+    merge_duckdb.merge_flightline(
+        Path("/path/to/flightline"),
+        out_name="custom_master.parquet",  # optional override
+        qa=True,
+    )
+
+The module intentionally minimises assumptions about directory layout. The
+default glob patterns match the canonical pipeline exports but can be overridden
+to support custom workflows.
 """
 
 from __future__ import annotations

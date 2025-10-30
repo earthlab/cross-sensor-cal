@@ -1,62 +1,47 @@
-site_name: Cross Sensor Calibration
+site_name: cross-sensor-cal
 site_description: >-
   Documentation for the Cross-Sensor Calibration pipeline that processes NEON
   AOP hyperspectral flightlines into analysis-ready products.
 site_url: https://earthlab.github.io/cross-sensor-cal
-repo_name: earthlab/cross-sensor-cal
 repo_url: https://github.com/earthlab/cross-sensor-cal
 
 theme:
   name: material
   features:
     - navigation.instant
-    - navigation.sections
-    - navigation.top
-    - toc.integrate
+    - navigation.tracking
     - content.code.copy
+    - content.action.edit
+
+nav:
+  - Overview: index.md
+  - Pipeline:
+      - Stages: pipeline/stages.md
+      - Outputs: pipeline/outputs.md
+      - QA Panel: pipeline/qa_panel.md
+  - Usage:
+      - CLI & Examples: usage/cli.md
+  - API:
+      - merge_duckdb: api/merge_duckdb.md
+      - qa_plots: api/qa_plots.md
+  - Dev:
+      - Contributing: dev/contributing.md
+      - Doc Drift Report: dev/doc_drift_report.md
 
 plugins:
   - search
-  - mkdocstrings
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false
+            merge_init_into_class: true
+  - macros
 
 markdown_extensions:
   - admonition
+  - codehilite
   - footnotes
-  - tables
   - toc:
       permalink: true
-  - attr_list
-  - pymdownx.details
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
-
-nav:
-  - Home: index.md
-  - Getting Started:
-      - Overview: overview.md
-      - Quickstart: quickstart.md
-      - Environment Setup: env-setup.md
-      - CyVerse iRODS: cyverse-irods.md
-      - Configuration: configuration.md
-      - Naming Conventions: naming-conventions.md
-      - Schemas: schemas.md
-  - Pipeline:
-      - Pipeline Reference: pipeline.md
-      - Stage 03 · Pixel Extraction: stage-03-pixel-extraction.md
-      - Stage 04 · Spectral Library: stage-04-spectral-library.md
-      - Stage 05 · MESMA: stage-05-mesma.md
-  - Validation & Support:
-      - Validation: validation.md
-      - QA Panels: qa.md
-      - Benchmarks: benchmarks.md
-      - Troubleshooting: troubleshooting.md
-      - FAQ: faq.md
-  - Guides & References:
-      - Extending the Pipeline: extending.md
-      - Documentation Style Guide: documentation_style_guide.md
-      - Dev Notes: dev-notes.md
-      - Glossary: glossary.md
-      - References: references.md

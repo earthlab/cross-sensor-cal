@@ -1,0 +1,36 @@
+name: Build & Deploy Docs
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "docs/**"
+      - "src/**"
+      - "bin/**"
+      - "pyproject.toml"
+      - "mkdocs.yml"
+      - "tools/**"
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          python -m pip install -U pip
+          pip install mkdocs mkdocs-material mkdocstrings[python] mkdocs-macros-plugin linkchecker
+          pip install -e .
+      - run: python tools/site_prepare.py
+      - run: mkdocs build --strict
+      - name: Link check (best-effort)
+        continue-on-error: true
+        run: linkchecker site/index.html || true
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

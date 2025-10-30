@@ -1,17 +1,20 @@
-"""
-cross_sensor_cal.qa_plots
-------------------------
+"""cross_sensor_cal.qa_plots
+============================
 
-Generates quality assurance (QA) visualizations for each NEON flightline.
+Rendering utilities for cross-sensor-cal QA visualisations.
 
-Outputs:
-  • <prefix>_qa.png — composite panel showing thumbnails of the original,
-    corrected, and convolved ENVI cubes.
-  • <prefix>_qa.json — summary metrics (mean, std, flag counts, etc.).
+``render_flightline_panel`` is invoked automatically by the DuckDB merge stage
+and produces ``<scene_prefix>_qa.png`` immediately after the
+``<scene_prefix>_merged_pixel_extraction.parquet`` file is written. The image
+collects thumbnails for the original, corrected, and resampled ENVI cubes so
+operators can quickly verify spectral consistency. Companion metrics are
+persisted alongside the PNG when available.
 
-As of the October 2025 update, `render_flightline_panel()` is now called
-automatically at the end of the merge stage so that QA panels are produced
-even during full multi-flightline runs.
+The function is safe to call independently for ad-hoc debugging. Provide the
+flightline directory and it will discover the expected ENVI headers to extract
+RGB composites. Missing wavelength metadata falls back to sensor defaults, so
+doc troubleshooting steps refer to ensuring headers expose ``wavelength`` or
+``band names`` keys.
 """
 
 from __future__ import annotations
