@@ -1,2 +1,6 @@
 pytest>=7,<9
 duckdb>=1.0.0
+mkdocs
+mkdocs-material
+mkdocstrings[python]
+mkdocs-macros-plugin
