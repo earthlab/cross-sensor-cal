@@ -134,9 +134,9 @@ def test_master_parquet_naming(tmp_path):
     out = merge_flightline(
         fl,
         out_name=None,
-        original_glob="**/*.parquet",
-        corrected_glob="**/*.parquet",
-        resampled_glob="**/*.parquet",
+        original_glob="orig/*.parquet",
+        corrected_glob="corr/*.parquet",
+        resampled_glob="resamp/*.parquet",
         emit_qa_panel=False,
     )
     assert (
