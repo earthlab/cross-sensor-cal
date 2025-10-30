@@ -8,6 +8,6 @@
   ```
 - Preview docs locally:
   ```bash
-  pip install mkdocs mkdocs-material mkdocstrings[python]
+  pip install mkdocs mkdocs-material mkdocstrings[python] mkdocs-macros-plugin
   mkdocs serve
   ```
