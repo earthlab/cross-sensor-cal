@@ -352,8 +352,13 @@ def _export_parquet_stage(
     product_code: str,
     flight_stem: str,
     logger,
-) -> None:
-    """Stage: Parquet export for ENVI reflectance products."""
+) -> list[Path]:
+    """
+    Stage: Parquet export for ENVI reflectance products.
+
+    Returns the list of Parquet sidecars that exist (either newly written or
+    previously present and validated).
+    """
 
     from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
 
@@ -375,9 +380,11 @@ def _export_parquet_stage(
             "⚠️ Cannot locate work directory for Parquet export: %s",
             work_dir,
         )
-        return
+        return []
 
     logger.info("📦 Parquet export for %s ...", flight_stem)
+
+    parquet_outputs: list[Path] = []
 
     for img_path in sorted(work_dir.glob("*.img")):
         stem_lower = img_path.stem.lower()
@@ -385,7 +392,11 @@ def _export_parquet_stage(
             continue
 
         # ensure the raw ENVI (and any other reflectance cubes) receive Parquet outputs
-        ensure_parquet_for_envi(img_path, logger)
+        parquet_path = ensure_parquet_for_envi(img_path, logger)
+        if parquet_path is not None:
+            parquet_outputs.append(Path(parquet_path))
+
+    return parquet_outputs
 
 
 from cross_sensor_cal.brdf_topo import (
@@ -411,15 +422,6 @@ from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
 from ..polygon_extraction import control_function_for_extraction
 from ..file_sort import generate_file_move_list
-
-
-
-def post_merge_for_flightline(flightline_dir: Path) -> Path:
-    out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
-    logger.info("✅ DuckDB master written → %s", out.name)
-    return out
-
-
 def _coerce_scalar(value: str):
     token = value.strip().strip('"').strip("'")
     if not token:
@@ -1450,6 +1452,8 @@ def stage_convolve_all_sensors(
 
     corrected_img = Path(paths["corrected_img"])
     corrected_hdr = Path(paths["corrected_hdr"])
+    default_work_dir = corrected_img.parent
+    flightline_dir = Path(paths.get("work_dir", default_work_dir)).resolve()
 
     if corrected_img_path is not None:
         corrected_img = Path(corrected_img_path)
@@ -1571,13 +1575,22 @@ def stage_convolve_all_sensors(
             )
             failed.append(sensor_name)
 
-    _export_parquet_stage(
+    parquet_outputs = _export_parquet_stage(
         base_folder=base_folder,
         product_code=product_code,
         flight_stem=flight_stem,
         logger=logger,
     )
     logger.info("✅ Parquet stage complete for %s", flight_stem)
+
+    if parquet_outputs:
+        merge_out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
+        logger.info("✅ DuckDB master → %s", merge_out)
+    else:
+        logger.warning(
+            "⚠️ Skipping DuckDB merge for %s because no Parquet outputs were produced",
+            flight_stem,
+        )
 
     logger.info(
         "📊 Sensor convolution summary for %s | created=%s, existing=%s, failed=%s",
@@ -1679,30 +1692,6 @@ def process_one_flightline(
         resample_method=resample_method,
         parallel_mode=parallel_mode,
     )
-
-    flightline_dir = Path(flight_paths["work_dir"])
-    try:
-        merged_path = post_merge_for_flightline(flightline_dir)
-    except Exception as exc:  # pragma: no cover - merge best effort
-        logger.warning(
-            "⚠️ DuckDB merge failed for %s: %s", flightline_dir, exc
-        )
-
-    from ..qa_plots import summarize_flightline_outputs
-
-    work_dir = Path(flight_paths["work_dir"])
-    qa_png = work_dir / f"{flight_stem}_qa.png"
-    try:
-        summarize_flightline_outputs(
-            base_folder=base_folder,
-            flight_stem=flight_stem,
-            out_png=qa_png,
-            shaded_regions=True,
-            overwrite=True,
-        )
-        logger.info("🖼️  Wrote QA panel for %s -> %s", flight_stem, qa_png.name)
-    except Exception as exc:  # pragma: no cover - QA best effort
-        logger.warning("⚠️  QA panel generation failed for %s: %s", flight_stem, exc)
 
     try:
         write_metrics(base_folder=base_folder, flight_stem=flight_stem)

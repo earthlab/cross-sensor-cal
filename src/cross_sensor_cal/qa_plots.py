@@ -1119,26 +1119,12 @@ def summarize_flightline_outputs(
 
 def render_flightline_panel(flightline_dir: Path, prefix: str) -> Path:
     """
-    Build and save the standard QA panel for a flightline.
+    Build and save the standard QA panel (<prefix>_qa.png) in `flightline_dir`.
 
-    This function reuses the same code path as the in-pipeline QA step,
-    but can be called independently (e.g., after DuckDB merge) to ensure
-    that each flightline has a visual summary panel.
-
-    Parameters
-    ----------
-    flightline_dir : Path
-        Directory containing ENVI or parquet products for the flightline.
-    prefix : str
-        The canonical scene prefix (same as other output files).
-
-    Returns
-    -------
-    Path
-        Path to the written PNG file (<prefix>_qa.png).
+    Returns the PNG Path. Raises on failure (caller will log traceback).
     """
 
-    flightline_dir = Path(flightline_dir)
+    flightline_dir = Path(flightline_dir).resolve()
     out_png = flightline_dir / f"{prefix}_qa.png"
     summarize_flightline_outputs(
         base_folder=flightline_dir.parent,
@@ -1147,6 +1133,8 @@ def render_flightline_panel(flightline_dir: Path, prefix: str) -> Path:
         shaded_regions=True,
         overwrite=True,
     )
+    if not out_png.exists():
+        raise FileNotFoundError(f"QA panel did not materialize: {out_png}")
     return out_png
 
 
