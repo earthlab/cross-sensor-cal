@@ -352,8 +352,13 @@ def _export_parquet_stage(
     product_code: str,
     flight_stem: str,
     logger,
-) -> None:
-    """Stage: Parquet export for ENVI reflectance products."""
+) -> list[Path]:
+    """
+    Stage: Parquet export for ENVI reflectance products.
+
+    Returns the list of Parquet sidecars that exist (either newly written or
+    previously present and validated).
+    """
 
     from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
 
@@ -375,9 +380,11 @@ def _export_parquet_stage(
             "⚠️ Cannot locate work directory for Parquet export: %s",
             work_dir,
         )
-        return
+        return []
 
     logger.info("📦 Parquet export for %s ...", flight_stem)
+
+    parquet_outputs: list[Path] = []
 
     for img_path in sorted(work_dir.glob("*.img")):
         stem_lower = img_path.stem.lower()
@@ -385,7 +392,11 @@ def _export_parquet_stage(
             continue
 
         # ensure the raw ENVI (and any other reflectance cubes) receive Parquet outputs
-        ensure_parquet_for_envi(img_path, logger)
+        parquet_path = ensure_parquet_for_envi(img_path, logger)
+        if parquet_path is not None:
+            parquet_outputs.append(Path(parquet_path))
+
+    return parquet_outputs
 
 
 from cross_sensor_cal.brdf_topo import (
@@ -1564,7 +1575,7 @@ def stage_convolve_all_sensors(
             )
             failed.append(sensor_name)
 
-    _export_parquet_stage(
+    parquet_outputs = _export_parquet_stage(
         base_folder=base_folder,
         product_code=product_code,
         flight_stem=flight_stem,
@@ -1572,8 +1583,14 @@ def stage_convolve_all_sensors(
     )
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
-    merge_out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
-    logger.info(f"✅ DuckDB master → {merge_out}")
+    if parquet_outputs:
+        merge_out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
+        logger.info("✅ DuckDB master → %s", merge_out)
+    else:
+        logger.warning(
+            "⚠️ Skipping DuckDB merge for %s because no Parquet outputs were produced",
+            flight_stem,
+        )
 
     logger.info(
         "📊 Sensor convolution summary for %s | created=%s, existing=%s, failed=%s",
