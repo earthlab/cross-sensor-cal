@@ -1,0 +1,196 @@
+{
+  "missing_in_docs": {
+    "outputs": [],
+    "sensors": [
+      "micasense_to_match_oli_and_oli",
+      "micasense_to_match_oli_oli",
+      "micasense_to_match_tm_etm_plus"
+    ]
+  },
+  "stale_in_docs": {
+    "outputs": [
+      "_brdfandtopo_corrected_envi.parquet",
+      "_landsat_etm+_envi.img",
+      "_landsat_oli_envi.parquet",
+      "_landsat_tm_envi.hdr",
+      "_landsat_tm_envi.img",
+      "_micasense*_envi.img",
+      "_micasense_envi.hdr",
+      "_micasense_envi.img",
+      "_qa.json"
+    ],
+    "sensors": [
+      "MicaSense",
+      "MicaSense,",
+      "MicaSense,,",
+      "MicaSense,,,",
+      "MicaSense,,,,",
+      "MicaSense,,,,,",
+      "MicaSense,,,,,,",
+      "MicaSense,,,,,,,",
+      "Micasense,",
+      "Micasense,,",
+      "Micasense,,,",
+      "Micasense,,,,",
+      "Micasense,,,,,",
+      "Micasense,,,,,,",
+      "Micasense,,,,,,,",
+      "micasense']",
+      "micasense'],",
+      "micasense'],,",
+      "micasense'],,,",
+      "micasense'],,,,",
+      "micasense'],,,,,",
+      "micasense'],,,,,,",
+      "micasense*_envi.img,",
+      "micasense*_envi.img`",
+      "micasense*_envi.img`,",
+      "micasense_envi.hdr",
+      "micasense_envi.hdr,",
+      "micasense_envi.hdr,,",
+      "micasense_envi.hdr,,,",
+      "micasense_envi.hdr,,,,",
+      "micasense_envi.hdr,,,,,",
+      "micasense_envi.hdr,,,,,,",
+      "micasense_envi.img",
+      "micasense_envi.img,",
+      "micasense_envi.img,,",
+      "micasense_envi.img,,,",
+      "micasense_envi.img,,,,",
+      "micasense_envi.img,,,,,",
+      "micasense_envi.img,,,,,,",
+      "micasense_envi.img/.hdr/.parquet",
+      "micasense_envi.img/.hdr/.parquet,",
+      "micasense_envi.img/.hdr/.parquet,,",
+      "micasense_envi.img/.hdr/.parquet,,,",
+      "micasense_envi.img/.hdr/.parquet,,,,",
+      "micasense_envi.img/.hdr/.parquet,,,,,",
+      "micasense_envi.img/.hdr/.parquet,,,,,,",
+      "micasense_to_match_oli_and_oli,",
+      "micasense_to_match_oli_and_oli,,",
+      "micasense_to_match_oli_and_oli,,,",
+      "micasense_to_match_oli_and_oli,,,,",
+      "micasense_to_match_oli_and_oli,,,,,",
+      "micasense_to_match_oli_and_oli,,,,,,",
+      "micasense_to_match_oli_oli,",
+      "micasense_to_match_oli_oli,,",
+      "micasense_to_match_oli_oli,,,",
+      "micasense_to_match_oli_oli,,,,",
+      "micasense_to_match_oli_oli,,,,,",
+      "micasense_to_match_oli_oli,,,,,,",
+      "micasense_to_match_tm_etm+,,,,,,",
+      "micasense`)"
+    ]
+  },
+  "notes": [],
+  "naming_rule": "<prefix>_merged_pixel_extraction.parquet",
+  "stages_found": [
+    "[cscal-qa] \u2705 QA panels written to: {target.resolve()}",
+    "\u23ed\ufe0f Parquet already present for %s -> %s (skipping)",
+    "\u26a0\ufe0f  QA panel generation failed for %s: %s",
+    "\u26a0\ufe0f Cannot create Parquet work directory for %s: %s",
+    "\u26a0\ufe0f Cannot export Parquet for %s because .hdr is missing or empty",
+    "\u26a0\ufe0f Cannot export Parquet for %s because .img is missing or empty",
+    "\u26a0\ufe0f Cannot locate work directory for Parquet export: %s",
+    "\u26a0\ufe0f Failed Parquet export for %s: %s",
+    "\u26a0\ufe0f Merge failed for {future_map[future]}: {exc}",
+    "\u26a0\ufe0f QA panel after merge failed for {flightline_dir.name}: {e}",
+    "\u2705 BRDF+topo correction already complete for %s -> %s / %s (skipping)",
+    "\u2705 BRDF+topo correction already complete for %s, skipping",
+    "\u2705 BRDF+topo correction completed for %s -> %s / %s",
+    "\u2705 Download complete for %s \u2192 %s",
+    "\u2705 ENVI export already complete for %s -> %s / %s (skipping heavy export)",
+    "\u2705 ENVI export completed for %s -> %s / %s",
+    "\u2705 Parquet stage complete for %s",
+    "\u2705 Wrote Parquet for %s -> %s",
+    "\ud83c\udf10 Downloading %s (%s, %s) into %s ...",
+    "\ud83c\udf89 Finished pipeline for %s",
+    "\ud83c\udf89 Finished pipeline for %s (parallel worker join)",
+    "\ud83c\udfaf Convolving corrected reflectance for %s",
+    "\ud83d\udce6 ENVI export not found or invalid for %s, generating from %s",
+    "\ud83d\udce6 Parquet export for %s ...",
+    "\ud83d\udd0e ENVI export target for %s is %s / %s",
+    "\ud83d\uddbc\ufe0f  Overwriting QA panel -> %s",
+    "\ud83d\uddbc\ufe0f  QA panel written \u2192 {prefix}_qa.png",
+    "\ud83d\uddbc\ufe0f  Writing QA panel -> %s",
+    "\ud83d\uddbc\ufe0f  Wrote QA panel for %s -> %s"
+  ],
+  "entry_points": {
+    "cscal-download": "cross_sensor_cal.cli:download_main",
+    "cscal-pipeline": "cross_sensor_cal.cli.pipeline_cli:main",
+    "cscal-qa": "cross_sensor_cal.cli.qa_cli:main",
+    "cscal-recover-raw": "cross_sensor_cal.cli.recover_cli:main",
+    "cscal-qa-metrics": "cross_sensor_cal.qa_metrics:main",
+    "cscal-qa-dashboard": "cross_sensor_cal.qa_dashboard:main",
+    "csc-merge-duckdb": "cross_sensor_cal.merge_duckdb:main"
+  },
+  "cli_flags": {
+    "topo_and_brdf_correction.py": [
+      "--config_file"
+    ],
+    "neon_to_envi.py": [
+      "--brightness-offset"
+    ],
+    "qa_dashboard.py": [
+      "--base-folder",
+      "--out-parquet",
+      "--out-png"
+    ],
+    "merge_duckdb.py": [
+      "--corrected-glob",
+      "--data-root",
+      "--flightline-glob",
+      "--no-qa",
+      "--original-glob",
+      "--out-name",
+      "--resampled-glob",
+      "--write-feather"
+    ],
+    "qa_metrics.py": [
+      "--base-folder",
+      "--flight-stem"
+    ],
+    "standard_resample.py": [
+      "--hdr_path",
+      "--json_file",
+      "--output_path",
+      "--resampling_file_path",
+      "--sensor_type"
+    ],
+    "qa_cli.py": [
+      "--base-folder",
+      "--no-overwrite",
+      "--out-dir",
+      "--overwrite"
+    ],
+    "recover_cli.py": [
+      "--base-folder",
+      "--brightness-offset"
+    ],
+    "pipeline_cli.py": [
+      "--base-folder",
+      "--brightness-offset",
+      "--flight-lines",
+      "--max-workers",
+      "--product-code",
+      "--resample-method",
+      "--site-code",
+      "--year-month"
+    ],
+    "pipeline.py": [
+      "--brightness-offset",
+      "--no-sync",
+      "--polygon_layer_path",
+      "--reflectance-offset",
+      "--remote-prefix",
+      "--resample-method",
+      "--verbose"
+    ],
+    "download.py": [
+      "--flight",
+      "--output",
+      "--product",
+      "--year-month"
+    ]
+  }
+}
