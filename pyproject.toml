@@ -29,6 +29,7 @@ dependencies = [
     "geopandas",
     "spectral>=0.23",
     "ray[default]>=2.2",
+    "duckdb>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +50,7 @@ cscal-qa = "cross_sensor_cal.cli.qa_cli:main"
 cscal-recover-raw = "cross_sensor_cal.cli.recover_cli:main"
 cscal-qa-metrics = "cross_sensor_cal.qa_metrics:main"
 cscal-qa-dashboard = "cross_sensor_cal.qa_dashboard:main"
+csc-merge-duckdb = "cross_sensor_cal.merge_duckdb:main"
 
 [project.urls]
 Homepage = "https://github.com/earthlab/cross-sensor-cal"

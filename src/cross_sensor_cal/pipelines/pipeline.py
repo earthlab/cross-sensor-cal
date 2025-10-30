@@ -13,6 +13,7 @@ for NEON hyperspectral flight lines. The pipeline is now:
     3. BRDF + topographic correction
     4. Sensor convolution/resampling
     5. Parquet export for every ENVI reflectance product
+    6. DuckDB merge of original/corrected/resampled Parquet tables
 
 Key guarantees:
 - The stages ALWAYS run in the order above.
@@ -404,6 +405,7 @@ from ..file_types import (
 from ..envi_download import download_neon_file
 from ..neon_to_envi import neon_to_envi_no_hytools
 from ..progress_utils import TileProgressReporter
+from ..merge_duckdb import merge_flightline
 from ..utils.naming import get_flight_paths, get_flightline_products
 from ..standard_resample import translate_to_other_sensors
 from ..mask_raster import mask_raster_with_polygons
@@ -1610,6 +1612,7 @@ def process_one_flightline(
       3) apply BRDF + topographic correction
       4) convolve / resample to target sensors
       5) export Parquet sidecars for all reflectance ENVI outputs
+      6) merge Parquet sidecars into a DuckDB master table
 
     Each stage:
       - uses get_flightline_products() for canonical file naming
@@ -1670,6 +1673,15 @@ def process_one_flightline(
         resample_method=resample_method,
         parallel_mode=parallel_mode,
     )
+
+    flightline_dir = Path(flight_paths["work_dir"])
+    try:
+        merged_path = merge_flightline(flightline_dir)
+        logger.info("✅ DuckDB master written → %s", merged_path)
+    except Exception as exc:  # pragma: no cover - merge best effort
+        logger.warning(
+            "⚠️ DuckDB merge failed for %s: %s", flightline_dir, exc
+        )
 
     from ..qa_plots import summarize_flightline_outputs
 
