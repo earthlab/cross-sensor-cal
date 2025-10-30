@@ -14,10 +14,13 @@ from typing import Tuple, TYPE_CHECKING
 
 import numpy as np
 
+from cross_sensor_cal.paths import normalize_brdf_model_path, scene_prefix_from_dir
+
 __all__ = [
     "calc_cosine_i",
     "calc_volume_kernel",
     "calc_geom_kernel",
+    "load_brdf_model",
     "fit_and_save_brdf_model",
     "apply_topo_correct",
     "apply_brdf_correct",
@@ -29,6 +32,20 @@ if TYPE_CHECKING:  # pragma: no cover - only for type hints
 
 
 _BRDF_COEFF_CACHE: dict[Path, dict[str, np.ndarray | str]] = {}
+
+
+def load_brdf_model(flightline_dir: Path) -> dict:
+    """Load the BRDF model JSON for ``flightline_dir`` after normalizing its name."""
+
+    flightline_dir = Path(flightline_dir)
+    prefix = scene_prefix_from_dir(flightline_dir)
+    preferred = flightline_dir / f"{prefix}_brdf_model.json"
+    actual = normalize_brdf_model_path(flightline_dir) or preferred
+    if not actual.exists():
+        raise FileNotFoundError(
+            f"BRDF model not found for {prefix}: expected {preferred.name}"
+        )
+    return json.loads(actual.read_text(encoding="utf-8"))
 
 
 def _validate_angles(*arrays: np.ndarray) -> Tuple[np.ndarray, ...]:
@@ -288,12 +305,20 @@ def apply_brdf_correct(
     coeff_path_resolved: Path | None = None
     if coeff_path is not None:
         coeff_path_resolved = Path(coeff_path).resolve()
+        flightline_dir = coeff_path_resolved.parent
+        prefix = scene_prefix_from_dir(flightline_dir)
+        preferred = flightline_dir / f"{prefix}_brdf_model.json"
+        normalized_path = normalize_brdf_model_path(flightline_dir)
+        if normalized_path is not None:
+            coeff_path_resolved = normalized_path.resolve()
+        elif preferred.exists():
+            coeff_path_resolved = preferred.resolve()
+
         if coeff_path_resolved.exists():
             try:
                 coeffs_dict = _BRDF_COEFF_CACHE.get(coeff_path_resolved)
                 if coeffs_dict is None:
-                    with coeff_path_resolved.open("r", encoding="utf-8") as coeff_file:
-                        loaded = json.load(coeff_file)
+                    loaded = load_brdf_model(flightline_dir)
                     iso_arr = np.asarray(loaded.get("iso"), dtype=np.float32)
                     vol_arr = np.asarray(loaded.get("vol"), dtype=np.float32)
                     geo_arr = np.asarray(loaded.get("geo"), dtype=np.float32)
@@ -305,7 +330,7 @@ def apply_brdf_correct(
                         "geom_kernel": loaded.get("geom_kernel", "LiSparseReciprocal"),
                     }
                     _BRDF_COEFF_CACHE[coeff_path_resolved] = coeffs_dict
-            except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
+            except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError) as exc:
                 logging.warning(
                     "⚠️  Failed to load BRDF coefficients from %s (%s); falling back to cube/neutrals.",
                     coeff_path_resolved,
@@ -439,7 +464,10 @@ def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    coeff_path = out_dir / f"{cube.base_key}_brdf_model.json"
+    prefix = scene_prefix_from_dir(out_dir)
+    preferred = out_dir / f"{prefix}_brdf_model.json"
+    normalized = normalize_brdf_model_path(out_dir)
+    coeff_path = normalized if normalized is not None else preferred
     if coeff_path.exists():
         return coeff_path
 

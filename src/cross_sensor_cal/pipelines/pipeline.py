@@ -403,6 +403,7 @@ from cross_sensor_cal.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
+from cross_sensor_cal.paths import normalize_brdf_model_path
 from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.qa_metrics import write_metrics
 from cross_sensor_cal.utils import get_package_data_path
@@ -1655,6 +1656,11 @@ def process_one_flightline(
         brightness_offset=brightness_offset,
         parallel_mode=parallel_mode,
     )
+
+    flightline_dir = Path(flight_paths["work_dir"]).resolve()
+    normalized = normalize_brdf_model_path(flightline_dir)
+    if normalized:
+        logger.info("🔧 Normalized BRDF model name → %s", normalized.name)
 
     correction_json_path = stage_build_and_write_correction_json(
         base_folder=base_folder,
