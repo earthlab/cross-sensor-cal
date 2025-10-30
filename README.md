@@ -237,6 +237,7 @@ Each flightline directory will contain:
 | Parquet Tables | `*_envi.parquet`, `*_landsat_oli_envi.parquet` | Per-product reflectance tables |
 | **Merged Master** | `*_merged_pixel_extraction.parquet` | One row per pixel, all wavelengths and metadata combined |
 | **QA Panel (PNG)** | `*_qa.png` | Visual summary of all stages |
+| QA Metrics (JSON) | `*_qa.json` | Numeric QA measurements |
 
 Helper utilities such as `get_flight_paths(base_folder, flight_stem)` and
 `_scoped_log_prefix(prefix)` keep each worker isolated, ensure consistent
