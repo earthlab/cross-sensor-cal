@@ -258,7 +258,13 @@ def merge_flightline(
     con = duckdb.connect()
     try:
         con.execute(f"PRAGMA threads={os.cpu_count() or 4}")
-        con.execute("PRAGMA memory_limit='auto'")
+        try:
+            con.execute("PRAGMA memory_limit='auto'")
+        except duckdb.Error as exc:  # pragma: no cover - parser differences across DuckDB versions
+            # Older DuckDB releases require a numeric memory limit. Fall back to the
+            # default setting if "auto" is rejected rather than failing the merge.
+            if "memory limit" not in str(exc).lower():
+                raise
         con.execute(
             f"PRAGMA temp_directory='{_quote_path(str(tmp_dir.resolve()))}'"
         )
