@@ -22,6 +22,76 @@ from .pipelines.pipeline import _coerce_scalar, _parse_envi_header
 logger = logging.getLogger(__name__)
 
 
+def _band_axis_from_header(arr: np.ndarray, hdr: dict) -> int:
+    """Return axis index in ``arr`` that matches ENVI header ``'bands'``."""
+
+    nb = int(hdr.get("bands", 0) or 0)
+    if nb <= 0:
+        raise ValueError("Header has no valid 'bands' value.")
+
+    candidates = [i for i, dim in enumerate(arr.shape) if dim == nb]
+    if candidates:
+        return candidates[0]
+    if arr.ndim == 3:
+        return 2
+    return 0
+
+
+def _patch_mean_spectrum(
+    arr: np.ndarray,
+    hdr: dict,
+    patch: tuple[slice, slice] | None = None,
+) -> np.ndarray:
+    """
+    Compute mean spectrum over a spatial patch, averaging **only** spatial axes.
+
+    Works for arrays ordered ``(bands, rows, cols)`` or ``(rows, cols, bands)``.
+    """
+
+    if arr.ndim != 3:
+        raise ValueError(f"Expected 3D array, got shape {arr.shape}")
+
+    band_axis = _band_axis_from_header(arr, hdr)
+    spatial_axes = tuple(sorted({0, 1, 2} - {band_axis}))
+
+    selected = arr
+    if patch is not None:
+        sel = [slice(None)] * 3
+        spatial_list = list(spatial_axes)
+        sel[spatial_list[0]] = patch[0]
+        sel[spatial_list[1]] = patch[1]
+        selected = selected[tuple(sel)]
+
+    selected = np.asarray(selected, dtype=np.float32)
+    selected = np.where(
+        np.isfinite(selected) & (selected != 0),
+        selected,
+        np.nan,
+    )
+
+    spectrum = np.nanmean(selected, axis=spatial_axes)
+
+    if np.nanstd(spectrum) < 1e-4 and band_axis != 2:
+        alt_band_axis = 2
+        alt_spatial_axes = tuple(sorted({0, 1, 2} - {alt_band_axis}))
+        spectrum = np.nanmean(selected, axis=alt_spatial_axes)
+
+    return spectrum
+
+
+def _to_unitless_reflectance(spec: np.ndarray) -> np.ndarray:
+    """
+    Convert a 1D spectrum to unitless reflectance (0–1) if it appears scaled.
+    """
+
+    if spec.ndim != 1:
+        raise ValueError(f"Expected 1D spectrum, got shape {spec.shape}")
+    med = float(np.nanmedian(spec))
+    if np.isnan(med):
+        return spec
+    return spec / 10000.0 if med > 1.5 else spec
+
+
 _ENVI_DTYPE_MAP: dict[int, np.dtype] = {
     1: np.uint8,
     2: np.int16,
@@ -488,13 +558,26 @@ def summarize_flightline_outputs(
     ):
         raw_wavs_arr = _wavelength_array(raw_header)
         corr_wavs_arr = _wavelength_array(corrected_header)
-        bands = min(raw_mm.shape[0], corrected_mm.shape[0])
-        if raw_wavs_arr is not None:
-            bands = min(bands, raw_wavs_arr.shape[0])
-        if corr_wavs_arr is not None:
-            bands = min(bands, corr_wavs_arr.shape[0])
+        bands = 0
+        raw_band_axis: int | None = None
+        corr_band_axis: int | None = None
+        try:
+            raw_band_axis = _band_axis_from_header(raw_mm, raw_header)
+            corr_band_axis = _band_axis_from_header(corrected_mm, corrected_header)
+        except ValueError as exc:
+            _skip_spectra_panel(f"Skipping spectra panel: {exc}")
+            raw_band_axis = corr_band_axis = None
+        if raw_band_axis is not None and corr_band_axis is not None:
+            bands = min(
+                raw_mm.shape[raw_band_axis],
+                corrected_mm.shape[corr_band_axis],
+            )
+            if raw_wavs_arr is not None:
+                bands = min(bands, raw_wavs_arr.shape[0])
+            if corr_wavs_arr is not None:
+                bands = min(bands, corr_wavs_arr.shape[0])
 
-        if bands == 0:
+        if raw_band_axis is None or corr_band_axis is None or bands == 0:
             _skip_spectra_panel(
                 "Skipping spectra panel: no overlapping bands between raw and corrected cubes."
             )
@@ -502,12 +585,19 @@ def summarize_flightline_outputs(
             if nir_band is not None:
                 h, w = nir_band.shape
             else:
-                h, w = raw_mm.shape[1], raw_mm.shape[2]
+                spatial_axes_raw = tuple(sorted({0, 1, 2} - {raw_band_axis}))
+                h = raw_mm.shape[spatial_axes_raw[0]]
+                w = raw_mm.shape[spatial_axes_raw[1]]
 
             cy, cx = h // 2, w // 2
             half = 12
             min_valid_pixels = 200
-            mask_band_idx = int(min(max(0, bands - 1), nir_idx if nir_band is not None else 0))
+            mask_band_idx = int(
+                min(
+                    max(0, bands - 1),
+                    nir_idx if nir_band is not None else 0,
+                )
+            )
 
             def _bounds(center_y: int, center_x: int) -> tuple[int, int, int, int]:
                 y0_i = max(0, center_y - half)
@@ -517,13 +607,17 @@ def summarize_flightline_outputs(
                 return y0_i, y1_i, x0_i, x1_i
 
             def _valid_counts_for_patch(y0_i: int, y1_i: int, x0_i: int, x1_i: int) -> tuple[int, int]:
-                raw_band_idx = int(min(raw_mm.shape[0] - 1, mask_band_idx))
-                corr_band_idx = int(min(corrected_mm.shape[0] - 1, mask_band_idx))
-                raw_patch_band = np.asarray(
-                    raw_mm[raw_band_idx, y0_i:y1_i, x0_i:x1_i], dtype=np.float32
+                raw_band_idx = int(
+                    min(raw_mm.shape[raw_band_axis] - 1, mask_band_idx)
                 )
+                corr_band_idx = int(
+                    min(corrected_mm.shape[corr_band_axis] - 1, mask_band_idx)
+                )
+                raw_slice = np.take(raw_mm, raw_band_idx, axis=raw_band_axis)
+                corr_slice = np.take(corrected_mm, corr_band_idx, axis=corr_band_axis)
+                raw_patch_band = np.asarray(raw_slice[y0_i:y1_i, x0_i:x1_i], dtype=np.float32)
                 corr_patch_band = np.asarray(
-                    corrected_mm[corr_band_idx, y0_i:y1_i, x0_i:x1_i], dtype=np.float32
+                    corr_slice[y0_i:y1_i, x0_i:x1_i], dtype=np.float32
                 )
                 raw_mask = np.isfinite(raw_patch_band) & (raw_patch_band != 0)
                 corr_mask = np.isfinite(corr_patch_band) & (corr_patch_band != 0)
@@ -587,172 +681,194 @@ def summarize_flightline_outputs(
                 corr_valid_count,
             )
 
-            raw_means: list[float] = []
-            corr_means: list[float] = []
-            for idx in range(bands):
-                raw_patch = np.asarray(raw_mm[idx, y0:y1, x0:x1], dtype=np.float32)
-                corr_patch = np.asarray(
-                    corrected_mm[idx, y0:y1, x0:x1], dtype=np.float32
+            patch = (slice(y0, y1), slice(x0, x1))
+
+            try:
+                raw_spec = _patch_mean_spectrum(raw_mm, raw_header, patch=patch)
+                corr_spec = _patch_mean_spectrum(corrected_mm, corrected_header, patch=patch)
+
+                raw_spec = np.asarray(raw_spec[:bands], dtype=np.float32)
+                corr_spec = np.asarray(corr_spec[:bands], dtype=np.float32)
+
+                raw_s = _to_unitless_reflectance(raw_spec)
+                corr_s = _to_unitless_reflectance(corr_spec)
+
+                diff_arr = corr_s - raw_s
+                ratio_arr = np.divide(
+                    corr_s,
+                    np.maximum(raw_s, 1e-6),
+                    out=np.full_like(corr_s, np.nan),
+                    where=~np.isnan(raw_s) & ~np.isnan(corr_s),
                 )
 
-                raw_mask = np.isfinite(raw_patch) & (raw_patch != 0)
-                corr_mask = np.isfinite(corr_patch) & (corr_patch != 0)
-                raw_patch = np.where(raw_mask, raw_patch, np.nan)
-                corr_patch = np.where(corr_mask, corr_patch, np.nan)
+                raw_med = float(np.nanmedian(raw_s)) if raw_s.size else float("nan")
+                corr_med = float(np.nanmedian(corr_s)) if corr_s.size else float("nan")
+                ratio_med = float(np.nanmedian(ratio_arr)) if ratio_arr.size else float("nan")
+                corr_std = float(np.nanstd(corr_s)) if corr_s.size else float("nan")
 
-                raw_means.append(float(np.nanmean(raw_patch)))
-                corr_means.append(float(np.nanmean(corr_patch)))
-
-            raw_arr = np.asarray(raw_means, dtype=np.float32)
-            corr_arr = np.asarray(corr_means, dtype=np.float32)
-            raw_s = _unitless(raw_arr)
-            corr_s = _unitless(corr_arr)
-
-            diff_arr = corr_s - raw_s
-            ratio_arr = np.divide(
-                corr_s,
-                np.maximum(raw_s, 1e-6),
-                out=np.full_like(corr_s, np.nan),
-                where=~np.isnan(raw_s) & ~np.isnan(corr_s),
-            )
-
-            raw_med = float(np.nanmedian(raw_s)) if raw_s.size else float("nan")
-            corr_med = float(np.nanmedian(corr_s)) if corr_s.size else float("nan")
-            ratio_med = float(np.nanmedian(ratio_arr)) if ratio_arr.size else float("nan")
-
-            logger.info(
-                "Spectra medians (unitless): raw=%.3f corrected=%.3f ratio=%.3f",
-                raw_med,
-                corr_med,
-                ratio_med,
-            )
-
-            use_wavelengths = (
-                raw_wavs_arr is not None
-                and corr_wavs_arr is not None
-                and raw_wavs_arr.shape == corr_wavs_arr.shape
-                and raw_wavs_arr.shape[0] >= bands
-            )
-
-            if use_wavelengths:
-                x_vals = raw_wavs_arr[:bands]
-                ax_spectra.set_xlabel("Wavelength (nm)")
-            else:
-                x_vals = np.arange(bands)
-                ax_spectra.set_xlabel("Band index")
-
-            ax_spectra.set_title(
-                "Patch-mean spectrum before vs after BRDF+topo correction"
-            )
-            ax_spectra.set_ylabel("Reflectance (unitless, 0–1)")
-            line_raw, = ax_spectra.plot(
-                x_vals,
-                raw_s,
-                label="raw export (uncorrected)",
-            )
-            line_corr, = ax_spectra.plot(
-                x_vals,
-                corr_s,
-                label="corrected (BRDF+topo)",
-            )
-
-            if shaded_regions and use_wavelengths:
-                for start, end in ((400, 700), (700, 1300), (1300, 2500)):
-                    ax_spectra.axvspan(start, end, alpha=0.08, color="tab:blue", zorder=0)
-
-            ax_ratio = ax_spectra.twinx()
-            line_ratio, = ax_ratio.plot(
-                x_vals,
-                ratio_arr,
-                color="lightgray",
-                linewidth=1.2,
-                label="corrected/raw ratio",
-            )
-            ax_ratio.set_ylabel("Corrected/Raw ratio")
-            ax_ratio.set_ylim(0.5, 1.5)
-            ax_ratio.axhline(1.0, color="gray", linestyle=":", linewidth=0.8)
-            ax_ratio.spines["right"].set_color("gray")
-            ax_ratio.tick_params(axis="y", colors="dimgray")
-            ax_ratio.yaxis.label.set_color("dimgray")
-
-            ax_diff = ax_spectra.twinx()
-            ax_diff.spines["right"].set_position(("axes", 1.12))
-            ax_diff.spines["right"].set_visible(True)
-            ax_diff.patch.set_visible(False)
-            line_diff, = ax_diff.plot(
-                x_vals,
-                diff_arr,
-                color="tab:gray",
-                linestyle="--",
-                label="difference (corrected − raw)",
-            )
-            ax_diff.set_ylabel("Difference (unitless)")
-            ax_diff.tick_params(axis="y", colors="tab:gray")
-            ax_diff.yaxis.label.set_color("tab:gray")
-
-            handles = [line_raw, line_corr, line_diff, line_ratio]
-            ax_spectra.legend(handles, [h.get_label() for h in handles], loc="upper right")
-
-            note = (
-                "Correction reduces angular/illumination bias;\n"
-                "smoother, lower curve expected."
-            )
-            ax_spectra.text(0.02, 0.95, note, transform=ax_spectra.transAxes, fontsize=9, va="top")
-
-            if (
-                (np.isfinite(raw_med) and raw_med < 1e-6)
-                or (np.isfinite(corr_med) and corr_med < 1e-6)
-                or (
-                    np.isfinite(raw_med)
-                    and np.isfinite(corr_med)
-                    and raw_med < 0.005
-                    and corr_med < 0.005
+                logger.info(
+                    "Spectra medians (unitless): raw=%.3f corrected=%.3f (std corrected=%.4f)",
+                    raw_med,
+                    corr_med,
+                    corr_std,
                 )
-            ):
+                if np.isfinite(ratio_med):
+                    logger.info("Spectra corrected/raw median ratio: %.3f", ratio_med)
+
+                use_wavelengths = (
+                    raw_wavs_arr is not None
+                    and corr_wavs_arr is not None
+                    and raw_wavs_arr.shape == corr_wavs_arr.shape
+                    and raw_wavs_arr.shape[0] >= bands
+                )
+
+                if use_wavelengths:
+                    x_vals = raw_wavs_arr[:bands]
+                    ax_spectra.set_xlabel("Wavelength (nm)")
+                else:
+                    x_vals = np.arange(bands)
+                    ax_spectra.set_xlabel("Band index")
+
+                ax_spectra.set_title(
+                    "Patch-mean spectrum before vs after BRDF+topo correction"
+                )
+                ax_spectra.set_ylabel("Reflectance (unitless, 0–1)")
+                line_raw, = ax_spectra.plot(
+                    x_vals,
+                    raw_s,
+                    label="raw export (uncorrected)",
+                )
+                line_corr, = ax_spectra.plot(
+                    x_vals,
+                    corr_s,
+                    label="corrected (BRDF+topo)",
+                )
+
+                if shaded_regions and use_wavelengths:
+                    for start, end in ((400, 700), (700, 1300), (1300, 2500)):
+                        ax_spectra.axvspan(start, end, alpha=0.08, color="tab:blue", zorder=0)
+
+                ax_ratio = ax_spectra.twinx()
+                line_ratio, = ax_ratio.plot(
+                    x_vals,
+                    ratio_arr,
+                    color="lightgray",
+                    linewidth=1.2,
+                    label="corrected/raw ratio",
+                )
+                ax_ratio.set_ylabel("Corrected/Raw ratio")
+                ax_ratio.set_ylim(0.5, 1.5)
+                ax_ratio.axhline(1.0, color="gray", linestyle=":", linewidth=0.8)
+                ax_ratio.spines["right"].set_color("gray")
+                ax_ratio.tick_params(axis="y", colors="dimgray")
+                ax_ratio.yaxis.label.set_color("dimgray")
+
+                ax_diff = ax_spectra.twinx()
+                ax_diff.spines["right"].set_position(("axes", 1.12))
+                ax_diff.spines["right"].set_visible(True)
+                ax_diff.patch.set_visible(False)
+                line_diff, = ax_diff.plot(
+                    x_vals,
+                    diff_arr,
+                    color="tab:gray",
+                    linestyle="--",
+                    label="difference (corrected − raw)",
+                )
+                ax_diff.set_ylabel("Difference (unitless)")
+                ax_diff.tick_params(axis="y", colors="tab:gray")
+                ax_diff.yaxis.label.set_color("tab:gray")
+
+                handles = [line_raw, line_corr, line_diff, line_ratio]
+                ax_spectra.legend(
+                    handles, [h.get_label() for h in handles], loc="upper right"
+                )
+
+                note = (
+                    "Correction reduces angular/illumination bias;\n"
+                    "smoother, lower curve expected."
+                )
+                ax_spectra.text(
+                    0.02, 0.95, note, transform=ax_spectra.transAxes, fontsize=9, va="top"
+                )
+
+                if (
+                    (np.isfinite(raw_med) and raw_med < 1e-6)
+                    or (np.isfinite(corr_med) and corr_med < 1e-6)
+                    or (
+                        np.isfinite(raw_med)
+                        and np.isfinite(corr_med)
+                        and raw_med < 0.005
+                        and corr_med < 0.005
+                    )
+                ):
+                    ax_spectra.text(
+                        0.5,
+                        0.98,
+                        "WARNING: spectra nearly zero — check units / double-apply / offset",
+                        transform=ax_spectra.transAxes,
+                        ha="center",
+                        color="crimson",
+                        fontsize=9,
+                        bbox=dict(facecolor="white", alpha=0.7),
+                    )
+
+                if np.isfinite(corr_std) and corr_std < 1e-3:
+                    ax_spectra.text(
+                        0.5,
+                        0.92,
+                        "WARNING: corrected spectrum nearly flat — check axes/units/double-apply",
+                        transform=ax_spectra.transAxes,
+                        ha="center",
+                        fontsize=9,
+                        color="crimson",
+                        bbox=dict(facecolor="white", alpha=0.7, edgecolor="none"),
+                    )
+
+                if np.isfinite(ratio_med) and (ratio_med < 0.2 or ratio_med > 1.8):
+                    ax_spectra.text(
+                        0.5,
+                        0.84,
+                        f"Suspicious correction magnitude (median ratio={ratio_med:.2f})",
+                        transform=ax_spectra.transAxes,
+                        ha="center",
+                        color="crimson",
+                        fontsize=9,
+                        bbox=dict(facecolor="white", alpha=0.7),
+                    )
+
+                if insufficient_pixels:
+                    ax_spectra.text(
+                        0.5,
+                        0.1,
+                        "Insufficient valid pixels for representative patch.",
+                        transform=ax_spectra.transAxes,
+                        ha="center",
+                        color="darkorange",
+                        fontsize=9,
+                        bbox=dict(facecolor="white", alpha=0.7),
+                    )
+
+                mad = float(np.nanmean(np.abs(diff_arr)))
+                ax_spectra.text(
+                    0.01,
+                    0.02,
+                    f"Mean |Δ| = {mad:.3f}",
+                    transform=ax_spectra.transAxes,
+                    fontsize=9,
+                    va="bottom",
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                warnings.warn(f"Failed to render spectra panel: {exc}")
+                ax_spectra.axis("off")
+                ax_spectra.set_title("Patch spectra (failed)")
                 ax_spectra.text(
                     0.5,
-                    0.92,
-                    "WARNING: spectra nearly zero — check units / double-apply / offset",
-                    transform=ax_spectra.transAxes,
-                    ha="center",
-                    color="crimson",
-                    fontsize=9,
-                    bbox=dict(facecolor="white", alpha=0.7),
-                )
-
-            if np.isfinite(ratio_med) and (ratio_med < 0.2 or ratio_med > 1.8):
-                ax_spectra.text(
                     0.5,
-                    0.84,
-                    f"Suspicious correction magnitude (median ratio={ratio_med:.2f})",
-                    transform=ax_spectra.transAxes,
+                    "Rendering error — see logs",
                     ha="center",
-                    color="crimson",
-                    fontsize=9,
-                    bbox=dict(facecolor="white", alpha=0.7),
+                    va="center",
                 )
-
-            if insufficient_pixels:
-                ax_spectra.text(
-                    0.5,
-                    0.1,
-                    "Insufficient valid pixels for representative patch.",
-                    transform=ax_spectra.transAxes,
-                    ha="center",
-                    color="darkorange",
-                    fontsize=9,
-                    bbox=dict(facecolor="white", alpha=0.7),
-                )
-
-            mad = float(np.nanmean(np.abs(diff_arr)))
-            ax_spectra.text(
-                0.01,
-                0.02,
-                f"Mean |Δ| = {mad:.3f}",
-                transform=ax_spectra.transAxes,
-                fontsize=9,
-                va="bottom",
-            )
+            
     else:
         ax_spectra.axis("off")
         ax_spectra.set_title("Patch spectra (skipped: data unavailable)")
