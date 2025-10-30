@@ -1,4 +1,18 @@
-"""Generate quicklook QA plots for processed flightline outputs."""
+"""
+cross_sensor_cal.qa_plots
+------------------------
+
+Generates quality assurance (QA) visualizations for each NEON flightline.
+
+Outputs:
+  • <prefix>_qa.png — composite panel showing thumbnails of the original,
+    corrected, and convolved ENVI cubes.
+  • <prefix>_qa.json — summary metrics (mean, std, flag counts, etc.).
+
+As of the October 2025 update, `render_flightline_panel()` is now called
+automatically at the end of the merge stage so that QA panels are produced
+even during full multi-flightline runs.
+"""
 
 from __future__ import annotations
 
@@ -1102,8 +1116,23 @@ def summarize_flightline_outputs(
 
 def render_flightline_panel(flightline_dir: Path, prefix: str) -> Path:
     """
-    Stable wrapper so other stages (e.g., post-merge) can emit the same QA panel.
-    Uses the exact code path that logs 'Wrote QA panel for ...'.
+    Build and save the standard QA panel for a flightline.
+
+    This function reuses the same code path as the in-pipeline QA step,
+    but can be called independently (e.g., after DuckDB merge) to ensure
+    that each flightline has a visual summary panel.
+
+    Parameters
+    ----------
+    flightline_dir : Path
+        Directory containing ENVI or parquet products for the flightline.
+    prefix : str
+        The canonical scene prefix (same as other output files).
+
+    Returns
+    -------
+    Path
+        Path to the written PNG file (<prefix>_qa.png).
     """
 
     flightline_dir = Path(flightline_dir)

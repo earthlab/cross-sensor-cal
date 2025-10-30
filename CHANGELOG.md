@@ -1,3 +1,10 @@
+## [2025-10-30] Added Merge Stage + Restored QA Panel
+
+- Added new DuckDB-based merge step combining original, corrected, and resampled pixel tables.
+- Merged output uses naming convention: `<prefix>_merged_pixel_extraction.parquet`.
+- QA panel (`<prefix>_qa.png`) is now rendered automatically after each merge, even in parallel runs.
+- Documentation and examples updated accordingly.
+
 ## [2.2.0] – 2025-10-29
 ### Added
 - Automatic NEON HDF5 download (`stage_download_h5`) with live progress bar.

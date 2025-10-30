@@ -58,16 +58,19 @@ output_demo/
         <flight_stem>_brdfandtopo_corrected_envi.img/.hdr/.json/.parquet
         <flight_stem>_landsat_tm_envi.img/.hdr/.parquet
         ...
-        <flight_stem>_qa.png               # QA summary figure (see below)
+        <flight_stem>_merged_pixel_extraction.parquet
+                                        # Master pixel table (original + corrected + resampled)
+        <flight_stem>_qa.png             # QA summary figure (auto-generated after merge)
 ```
 
-After the pipeline finishes you can generate QA plots summarizing each flight line:
+QA panels are emitted automatically at the end of the merge stage. You can
+re-generate them on demand with:
 
 ```bash
 cscal-qa --base-folder output_demo
 ```
 
-That command creates `<flight_stem>_qa.png` inside each per-flightline folder.
+That command re-renders `<flight_stem>_qa.png` inside each per-flightline folder.
 
 ### Parallel execution from the CLI
 
@@ -181,8 +184,8 @@ Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line ident
 
 ## Pipeline overview
 
-Cross-Sensor Calibration processes every flight line through an idempotent
-five-stage flow. Each stage streams a tqdm-style progress bar, logs with a
+Cross-Sensor Calibration processes every flight line through a restart-safe
+seven-stage flow. Each stage streams a tqdm-style progress bar, logs with a
 scoped `[flight_stem]` prefix, and writes artifacts using canonical names from
 `get_flight_paths()`:
 
@@ -193,21 +196,47 @@ flowchart LR
     J[Build BRDF+topo JSON]
     C[Correct reflectance]
     R[Resample + Parquet]
-    D --> E --> J --> C --> R
+    M[Merge parquet tables]
+    Q[QA panel]
+    D --> E --> J --> C --> R --> M --> Q
 ```
 
-1. **Download** – `stage_download_h5()` ensures every NEON `.h5` exists before
-   heavy processing begins. Downloads show live byte counters and leave the
-   `.h5` beside the derived folder for easy cleanup.
-2. **ENVI export** – Converts the HDF5 cube into `<flight_stem>_envi.img/.hdr`
-   with chunk-level progress bars and restart-safe validation.
-3. **BRDF + topo JSON** – Computes correction parameters once and reuses valid
-   JSON on reruns.
-4. **BRDF + topo correction** – Applies the physical correction to produce the
-   canonical `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr`, updating the
-   progress bar for each processed chunk.
-5. **Sensor resampling + Parquet** – Convolves the corrected cube to per-sensor
-   ENVI pairs and emits Parquet summaries into the same per-flightline folder.
+1. **Download** NEON HDF5 reflectance files (`*_directional_reflectance.h5`)
+2. **Export** to ENVI format (`*_envi.img/.hdr`)
+3. **Topographic and BRDF Correction** → produces `*_brdfandtopo_corrected_envi.img/.hdr`
+4. **Cross-Sensor Convolution** to target sensors (Landsat TM, ETM+, OLI/OLI-2, MicaSense, etc.)
+5. **Parquet Export** for all ENVI products
+6. **Merge Stage (new)** → merges all pixel tables (original, corrected, resampled) into one master parquet per flightline:
+   `<prefix>_merged_pixel_extraction.parquet`
+   Each row = one pixel, all wavelengths and metadata combined.
+7. **QA Panel (restored)** → generates a per-flightline visual summary panel:
+   `<prefix>_qa.png`
+
+### Example Usage
+
+```bash
+python -m bin.merge_duckdb --data-root /path/to/output --flightline-glob "NEON_*"
+```
+
+This produces for each flightline:
+
+```
+NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_merged_pixel_extraction.parquet
+NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_qa.png
+```
+
+## Pipeline Outputs
+
+Each flightline directory will contain:
+
+| Output Type | Example Filename | Description |
+|--------------|------------------|--------------|
+| Original ENVI | `*_envi.img/.hdr` | Raw NEON export |
+| Corrected ENVI | `*_brdfandtopo_corrected_envi.img/.hdr` | BRDF + topography corrected |
+| Convolved Products | `*_landsat_tm_envi.img`, etc. | Sensor-matched cubes |
+| Parquet Tables | `*_envi.parquet`, `*_landsat_oli_envi.parquet` | Per-product reflectance tables |
+| **Merged Master** | `*_merged_pixel_extraction.parquet` | One row per pixel, all wavelengths and metadata combined |
+| **QA Panel (PNG)** | `*_qa.png` | Visual summary of all stages |
 
 Helper utilities such as `get_flight_paths(base_folder, flight_stem)` and
 `_scoped_log_prefix(prefix)` keep each worker isolated, ensure consistent
@@ -232,7 +261,7 @@ go_forth_and_multiply(
 )
 ```
 
-This executes the download → ENVI → BRDF+topo → resample pipeline for every
+This executes the download → ENVI → BRDF+topo → resample → merge → QA pipeline for every
 flight line, streaming progress bars along the way. After the last worker
 finishes, the pipeline logs `✅ All requested flightlines processed.`.
 
@@ -284,6 +313,8 @@ After a successful run you should see, for each flight line:
   - `<flight_stem>_brdfandtopo_corrected_envi.img/.hdr/.json/.parquet` (canonical
     corrected cube).
   - `<flight_stem>_<sensor>_envi.img/.hdr/.parquet` for each simulated sensor.
+  - `<flight_stem>_merged_pixel_extraction.parquet` (all pixels + wavelengths merged).
+  - `<flight_stem>_qa.png` (visual QA panel produced automatically).
   - Support files such as `NIWO_brdf_model.json` generated during correction.
 
 ## Quality Assurance (QA) panels
