@@ -33,3 +33,39 @@ Each panel validates a specific part of the workflow:
 
 Panels are written to `<flight_stem>_qa.png` inside each flight directory by default. Use
 `--out-dir` to aggregate them in a centralized folder for sharing or archival.
+
+## QA Dashboard
+
+You can summarize QA performance across multiple flightlines with a single command:
+
+```bash
+cscal-qa-dashboard --base-folder output_fresh
+```
+
+This command:
+
+- Aggregates all `*_qa_metrics.parquet` files,
+- Computes per-flightline statistics,
+- Writes a combined `qa_dashboard_summary.parquet`,
+- Generates an overview plot (`qa_dashboard_summary.png`).
+
+Each bar represents the fraction of flagged bands per flightline. Values above `0.25`
+(25%) are marked with ⚠️ and may require review.
+
+---
+
+### ✅ After running
+
+Expected artifacts in `output_fresh/`:
+
+- `qa_dashboard_summary.parquet`
+- `qa_dashboard_summary.png`
+
+and log output similar to:
+
+```
+📊 Aggregated 12 flightlines (2400 rows)
+✅ Computed summary for 12 flightlines
+💾 Wrote aggregated QA summary → qa_dashboard_summary.parquet
+🖼️ Saved dashboard → qa_dashboard_summary.png
+```

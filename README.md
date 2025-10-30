@@ -308,6 +308,19 @@ The `_brdfandtopo_corrected_envi` suffix remains the canonical "final"
 reflectance for analysis and downstream comparisons; all scientific semantics
 are unchanged from previous releases.
 
+### QA dashboard summaries
+
+To review QA performance across many flightlines at once, run:
+
+```bash
+cscal-qa-dashboard --base-folder output_fresh
+```
+
+This aggregates every `*_qa_metrics.parquet` file, computes per-flightline
+statistics, writes `qa_dashboard_summary.parquet`, and renders a companion plot
+(`qa_dashboard_summary.png`). Flag rates above 25% are marked with ⚠️ for quick
+triage.
+
 ### Pipeline stages
 
 Each stage uses `get_flight_paths()` to discover its inputs/outputs and performs
