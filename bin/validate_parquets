@@ -25,8 +25,12 @@ def main(p: str):
     root = Path(p)
     bad = []
     for q in root.glob("*.parquet"):
-        table = pq.read_table(q, columns=["lat", "lon"])
-        cols = table.schema.names
+        try:
+            schema = pq.read_schema(q)
+        except Exception as exc:  # pragma: no cover - defensive, should rarely happen
+            bad.append((q.name, f"unable to read schema: {exc}"))
+            continue
+        cols = list(schema.names)
         lat_idx = cols.index("lat") if "lat" in cols else -1
         lon_idx = cols.index("lon") if "lon" in cols else -1
         if lat_idx < 0 or lon_idx < 0:
