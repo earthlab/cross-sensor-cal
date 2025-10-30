@@ -10,10 +10,8 @@
       
       
       
-        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/dev/doc_drift_report/">
+        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/usage/parquet-preview/">
       
-      
-        <link rel="prev" href="../contributing/">
       
       
       
@@ -22,7 +20,7 @@
     
     
       
-        <title>Doc Drift Report - cross-sensor-cal</title>
+        <title>Previewing precursor and merged Parquets - cross-sensor-cal</title>
       
     
     
@@ -66,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#documentation-drift-report" class="md-skip">
+        <a href="#previewing-precursor-and-merged-parquets" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +100,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Doc Drift Report
+              Previewing precursor and merged Parquets
             
           </span>
         </div>
@@ -396,7 +394,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -514,20 +512,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
@@ -543,7 +539,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             Dev
@@ -557,7 +553,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../../dev/contributing/" class="md-nav__link">
         
   
   
@@ -577,32 +573,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Doc Drift Report
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../dev/doc_drift_report/" class="md-nav__link">
         
   
   
@@ -613,80 +587,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#naming-rule" class="md-nav__link">
-    <span class="md-ellipsis">
-      Naming rule
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#missing-items-in-docs" class="md-nav__link">
-    <span class="md-ellipsis">
-      Missing items in docs
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stale-items-in-docs" class="md-nav__link">
-    <span class="md-ellipsis">
-      Stale items in docs
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#entry-points-pyproject" class="md-nav__link">
-    <span class="md-ellipsis">
-      Entry points (pyproject)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cli-flags-discovered" class="md-nav__link">
-    <span class="md-ellipsis">
-      CLI flags discovered
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stage-markers-found-in-logs" class="md-nav__link">
-    <span class="md-ellipsis">
-      Stage markers found in logs
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -719,68 +619,6 @@
     
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#naming-rule" class="md-nav__link">
-    <span class="md-ellipsis">
-      Naming rule
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#missing-items-in-docs" class="md-nav__link">
-    <span class="md-ellipsis">
-      Missing items in docs
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stale-items-in-docs" class="md-nav__link">
-    <span class="md-ellipsis">
-      Stale items in docs
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#entry-points-pyproject" class="md-nav__link">
-    <span class="md-ellipsis">
-      Entry points (pyproject)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cli-flags-discovered" class="md-nav__link">
-    <span class="md-ellipsis">
-      CLI flags discovered
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stage-markers-found-in-logs" class="md-nav__link">
-    <span class="md-ellipsis">
-      Stage markers found in logs
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -795,7 +633,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/dev/doc_drift_report.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/usage/parquet-preview.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -803,135 +641,48 @@
   
 
 
-<h1 id="documentation-drift-report">Documentation Drift Report<a class="headerlink" href="#documentation-drift-report" title="Permanent link">&para;</a></h1>
-<h2 id="naming-rule">Naming rule<a class="headerlink" href="#naming-rule" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Merged parquet naming in code: <strong><prefix>_merged_pixel_extraction.parquet</strong></li>
-</ul>
-<h2 id="missing-items-in-docs">Missing items in docs<a class="headerlink" href="#missing-items-in-docs" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Outputs: _landsat_oli2_envi.img, _landsat_oli_envi.img, _micasense_to_match_oli_oli2_envi.img, _micasense_to_match_tm_etm+_envi.img</li>
-<li>Sensors: micasense_to_match_oli_and_oli, micasense_to_match_oli_oli, micasense_to_match_tm_etm+_envi, micasense_to_match_tm_etm_plus</li>
-</ul>
-<h2 id="stale-items-in-docs">Stale items in docs<a class="headerlink" href="#stale-items-in-docs" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Outputs: _brdfandtopo_corrected_envi.parquet, _landsat_oli_envi.parquet, _landsat_tm_envi.hdr, _micasense<em>_envi.img, _micasense</em>_envi.parquet, _micasense_envi.hdr, _qa.json</li>
-<li>Sensors: MicaSense, MicaSense,, MicaSense,,, MicaSense,,,, MicaSense,,,,, MicaSense,,,,,, MicaSense,,,,,,, MicaSense,,,,,,,, Micasense,, Micasense,,, Micasense,,,, Micasense,,,,, Micasense,,,,,, Micasense,,,,,,, Micasense,,,,,,,, micasense'], micasense'],, micasense'],,, micasense'],,,, micasense'],,,,, micasense'],,,,,, micasense'],,,,,,, micasense<em>_envi.img,, micasense</em>_envi.img<code>, micasense*_envi.img</code>,, micasense*_envi.parquet"))), micasense_envi.hdr, micasense_envi.hdr,, micasense_envi.hdr,,, micasense_envi.hdr,,,, micasense_envi.hdr,,,,, micasense_envi.hdr,,,,,, micasense_envi.hdr,,,,,,, micasense_envi.img, micasense_envi.img,, micasense_envi.img,,, micasense_envi.img,,,, micasense_envi.img,,,,, micasense_envi.img,,,,,, micasense_envi.img,,,,,,, micasense_envi.img/.hdr/.parquet, micasense_envi.img/.hdr/.parquet,, micasense_envi.img/.hdr/.parquet,,, micasense_envi.img/.hdr/.parquet,,,, micasense_envi.img/.hdr/.parquet,,,,, micasense_envi.img/.hdr/.parquet,,,,,, micasense_envi.img/.hdr/.parquet,,,,,,, micasense_to_match_oli_and_oli,, micasense_to_match_oli_and_oli,,, micasense_to_match_oli_and_oli,,,, micasense_to_match_oli_and_oli,,,,, micasense_to_match_oli_and_oli,,,,,, micasense_to_match_oli_and_oli,,,,,,, micasense_to_match_oli_oli,, micasense_to_match_oli_oli,,, micasense_to_match_oli_oli,,,, micasense_to_match_oli_oli,,,,, micasense_to_match_oli_oli,,,,,, micasense_to_match_oli_oli,,,,,,, micasense_to_match_tm_etm+,,,,,,, micasense`)</li>
-</ul>
-<h2 id="entry-points-pyproject">Entry points (pyproject)<a class="headerlink" href="#entry-points-pyproject" title="Permanent link">&para;</a></h2>
-<p>{
-  "cscal-download": "cross_sensor_cal.cli:download_main",
-  "cscal-pipeline": "cross_sensor_cal.cli.pipeline_cli:main",
-  "cscal-qa": "cross_sensor_cal.cli.qa_cli:main",
-  "cscal-recover-raw": "cross_sensor_cal.cli.recover_cli:main",
-  "cscal-qa-metrics": "cross_sensor_cal.qa_metrics:main",
-  "cscal-qa-dashboard": "cross_sensor_cal.qa_dashboard:main",
-  "csc-merge-duckdb": "cross_sensor_cal.merge_duckdb:main"
-}</p>
-<h2 id="cli-flags-discovered">CLI flags discovered<a class="headerlink" href="#cli-flags-discovered" title="Permanent link">&para;</a></h2>
-<p>{
-  "topo_and_brdf_correction.py": [
-    "--config_file"
-  ],
-  "neon_to_envi.py": [
-    "--brightness-offset"
-  ],
-  "qa_dashboard.py": [
-    "--base-folder",
-    "--out-parquet",
-    "--out-png"
-  ],
-  "merge_duckdb.py": [
-    "--corrected-glob",
-    "--data-root",
-    "--flightline-glob",
-    "--no-qa",
-    "--original-glob",
-    "--out-name",
-    "--resampled-glob",
-    "--write-feather"
-  ],
-  "qa_metrics.py": [
-    "--base-folder",
-    "--flight-stem"
-  ],
-  "standard_resample.py": [
-    "--hdr_path",
-    "--json_file",
-    "--output_path",
-    "--resampling_file_path",
-    "--sensor_type"
-  ],
-  "qa_cli.py": [
-    "--base-folder",
-    "--no-overwrite",
-    "--out-dir",
-    "--overwrite"
-  ],
-  "recover_cli.py": [
-    "--base-folder",
-    "--brightness-offset"
-  ],
-  "pipeline_cli.py": [
-    "--base-folder",
-    "--brightness-offset",
-    "--flight-lines",
-    "--max-workers",
-    "--product-code",
-    "--resample-method",
-    "--site-code",
-    "--year-month"
-  ],
-  "pipeline.py": [
-    "--brightness-offset",
-    "--no-sync",
-    "--polygon_layer_path",
-    "--reflectance-offset",
-    "--remote-prefix",
-    "--resample-method",
-    "--verbose"
-  ],
-  "download.py": [
-    "--flight",
-    "--output",
-    "--product",
-    "--year-month"
-  ]
-}</p>
-<h2 id="stage-markers-found-in-logs">Stage markers found in logs<a class="headerlink" href="#stage-markers-found-in-logs" title="Permanent link">&para;</a></h2>
-<ul>
-<li>[cscal-qa] ✅ QA panels written to: {target.resolve()}</li>
-<li>[merge] ⚠️ QA panel after merge failed for {prefix}: {e}</li>
-<li>[merge] 🖼️  QA panel → {out_png_path} </li>
-<li>⏭️ Parquet already present for %s -&gt; %s (skipping)</li>
-<li>⚠️ Cannot create Parquet work directory for %s: %s</li>
-<li>⚠️ Cannot export Parquet for %s because .hdr is missing or empty</li>
-<li>⚠️ Cannot export Parquet for %s because .img is missing or empty</li>
-<li>⚠️ Cannot locate work directory for Parquet export: %s</li>
-<li>⚠️ Failed Parquet export for %s: %s</li>
-<li>⚠️ Merge failed for {future_map[future]}: {exc}</li>
-<li>⚠️ Parquet validation reported an issue for %s: %s</li>
-<li>⚠️ Skipping DuckDB merge for %s because no Parquet outputs were produced</li>
-<li>✅ BRDF+topo correction already complete for %s -&gt; %s / %s (skipping)</li>
-<li>✅ BRDF+topo correction already complete for %s, skipping</li>
-<li>✅ BRDF+topo correction completed for %s -&gt; %s / %s</li>
-<li>✅ Download complete for %s → %s</li>
-<li>✅ ENVI export already complete for %s -&gt; %s / %s (skipping heavy export)</li>
-<li>✅ ENVI export completed for %s -&gt; %s / %s</li>
-<li>✅ Parquet stage complete for %s</li>
-<li>✅ Wrote Parquet for %s -&gt; %s</li>
-<li>🌐 Downloading %s (%s, %s) into %s ...</li>
-<li>🎉 Finished pipeline for %s</li>
-<li>🎉 Finished pipeline for %s (parallel worker join)</li>
-<li>🎯 Convolving corrected reflectance for %s</li>
-<li>📦 ENVI export not found or invalid for %s, generating from %s</li>
-<li>📦 Parquet export for %s ...</li>
-<li>🔎 ENVI export target for %s is %s / %s</li>
-<li>🖼️  Overwriting QA panel -&gt; %s</li>
-<li>🖼️  Writing QA panel -&gt; %s</li>
-<li>🖼️  Wrote QA panel for %s -&gt; %s</li>
-</ul>
-<p>TODO: Review sensor labels in docs for formatting issues.</p>
+<h1 id="previewing-precursor-and-merged-parquets">Previewing precursor and merged Parquets<a class="headerlink" href="#previewing-precursor-and-merged-parquets" title="Permanent link">&para;</a></h1>
+<p>Use DuckDB to peek at the merged pixel extraction table alongside its precursor Parquet files.
+Update <code>fl_dir</code> to the flightline of interest.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">duckdb</span><span class="o">,</span><span class="w"> </span><span class="nn">glob</span><span class="o">,</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="n">fl_dir</span> <span class="o">=</span> <span class="s2">&quot;/path/to/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span>
+
+<span class="n">merged</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="n">fl_dir</span><span class="p">,</span>
+    <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_merged_pixel_extraction.parquet&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">precursors</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fl_dir</span><span class="p">,</span> <span class="s2">&quot;*_envi.parquet&quot;</span><span class="p">)))</span> <span class="o">+</span> \
+             <span class="nb">sorted</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fl_dir</span><span class="p">,</span> <span class="s2">&quot;*_brdfandtopo_corrected_envi.parquet&quot;</span><span class="p">)))</span> <span class="o">+</span> \
+             <span class="nb">sorted</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fl_dir</span><span class="p">,</span> <span class="s2">&quot;*_landsat_*_envi.parquet&quot;</span><span class="p">)))</span> <span class="o">+</span> \
+             <span class="nb">sorted</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fl_dir</span><span class="p">,</span> <span class="s2">&quot;*_micasense*_envi.parquet&quot;</span><span class="p">)))</span>
+
+<span class="n">con</span> <span class="o">=</span> <span class="n">duckdb</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+<span class="c1"># merged head</span>
+<span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SELECT * FROM read_parquet(&#39;</span><span class="si">{</span><span class="n">merged</span><span class="si">}</span><span class="s2">&#39;) LIMIT 5&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">df</span><span class="p">()</span>
+
+<span class="c1"># peek one precursor from each stage/sensor</span>
+<span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">precursors</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;→&quot;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">p</span><span class="p">))</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SELECT * FROM read_parquet(&#39;</span><span class="si">{</span><span class="n">p</span><span class="si">}</span><span class="s2">&#39;) LIMIT 5&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">df</span><span class="p">()</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+
+<span class="c1"># quick schema check: verify spectral names and order</span>
+<span class="n">schema_check</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    WITH cols AS (</span>
+<span class="sd">      SELECT column_name</span>
+<span class="sd">      FROM parquet_schema($path)</span>
+<span class="sd">    )</span>
+<span class="sd">    SELECT *</span>
+<span class="sd">    FROM cols</span>
+<span class="sd">    WHERE column_name ~ &#39;.*_b[0-9]{3}_wl[0-9]{4}nm$&#39;</span>
+<span class="sd">    LIMIT 10</span>
+<span class="sd">    &quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="p">{</span><span class="s1">&#39;path&#39;</span><span class="p">:</span> <span class="n">precursors</span><span class="p">[</span><span class="mi">0</span><span class="p">]},</span>
+<span class="p">)</span><span class="o">.</span><span class="n">df</span><span class="p">()</span>
+<span class="n">schema_check</span>
+</code></pre></div>
 
 
 

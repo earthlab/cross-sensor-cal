@@ -19,6 +19,7 @@
       "_landsat_oli_envi.parquet",
       "_landsat_tm_envi.hdr",
       "_micasense*_envi.img",
+      "_micasense*_envi.parquet",
       "_micasense_envi.hdr",
       "_qa.json"
     ],
@@ -48,6 +49,7 @@
       "micasense*_envi.img,",
       "micasense*_envi.img`",
       "micasense*_envi.img`,",
+      "micasense*_envi.parquet\")))",
       "micasense_envi.hdr",
       "micasense_envi.hdr,",
       "micasense_envi.hdr,,",
@@ -98,6 +100,7 @@
     "\u26a0\ufe0f Cannot locate work directory for Parquet export: %s",
     "\u26a0\ufe0f Failed Parquet export for %s: %s",
     "\u26a0\ufe0f Merge failed for {future_map[future]}: {exc}",
+    "\u26a0\ufe0f Parquet validation reported an issue for %s: %s",
     "\u26a0\ufe0f Skipping DuckDB merge for %s because no Parquet outputs were produced",
     "\u2705 BRDF+topo correction already complete for %s -> %s / %s (skipping)",
     "\u2705 BRDF+topo correction already complete for %s, skipping",

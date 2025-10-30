@@ -132,4 +132,8 @@
          <loc>https://earthlab.github.io/cross-sensor-cal/usage/cli/</loc>
          <lastmod>2025-10-30</lastmod>
     </url>
+    <url>
+         <loc>https://earthlab.github.io/cross-sensor-cal/usage/parquet-preview/</loc>
+         <lastmod>2025-10-30</lastmod>
+    </url>
 </urlset>
