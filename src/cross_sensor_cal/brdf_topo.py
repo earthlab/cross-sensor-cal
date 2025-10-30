@@ -163,9 +163,11 @@ def apply_brdf_topo_core(
     out_hdr_path = Path(out_hdr_path)
     out_img_path.parent.mkdir(parents=True, exist_ok=True)
 
-    assert (
-        "brdfandtopo_corrected" not in raw_img_path.name.lower()
-    ), "Refusing to correct an already corrected cube."
+    raw_name_lower = raw_img_path.name.lower()
+    if "brdfandtopo_corrected_envi" in raw_name_lower:
+        raise RuntimeError(
+            f"Refusing to correct an already corrected cube: {raw_img_path.name}"
+        )
 
     source_h5 = Path(params.get("h5_path", "")) if isinstance(params, dict) else None
     if source_h5 is None or not source_h5.exists():
@@ -235,7 +237,10 @@ def apply_brdf_topo_core(
             corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
             if brightness_offset_np is not None:
                 if not brightness_offset_logged:
-                    logger.debug("Applying brightness_offset=%.3f once", brightness_offset)
+                    logger.debug(
+                        "Applying brightness_offset=%.3f once during correction",
+                        brightness_offset,
+                    )
                     brightness_offset_logged = True
                 corrected_chunk = corrected_chunk + brightness_offset_np
             writer.write_chunk(corrected_chunk, ys, xs)
