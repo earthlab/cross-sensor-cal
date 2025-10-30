@@ -414,6 +414,12 @@ from ..file_sort import generate_file_move_list
 
 
 
+def post_merge_for_flightline(flightline_dir: Path) -> Path:
+    out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
+    logger.info("✅ DuckDB master written → %s", out.name)
+    return out
+
+
 def _coerce_scalar(value: str):
     token = value.strip().strip('"').strip("'")
     if not token:
@@ -1676,8 +1682,7 @@ def process_one_flightline(
 
     flightline_dir = Path(flight_paths["work_dir"])
     try:
-        merged_path = merge_flightline(flightline_dir)
-        logger.info("✅ DuckDB master written → %s", merged_path)
+        merged_path = post_merge_for_flightline(flightline_dir)
     except Exception as exc:  # pragma: no cover - merge best effort
         logger.warning(
             "⚠️ DuckDB merge failed for %s: %s", flightline_dir, exc

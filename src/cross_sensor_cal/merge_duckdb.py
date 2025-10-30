@@ -27,6 +27,22 @@ META_CANDIDATES: Sequence[str] = (
 )
 
 
+def _derive_prefix(flightline_dir: Path) -> str:
+    """
+    Return the canonical scene/file prefix for this flightline (same as other artifacts).
+    Prefers any "*_envi.img" in the folder; strips the trailing "_envi" from the stem.
+    Falls back to the folder name.
+    """
+
+    flightline_dir = Path(flightline_dir)
+    prefix = flightline_dir.name
+    candidates = sorted(flightline_dir.glob("*_envi.img"))
+    if candidates:
+        stem = candidates[0].stem
+        prefix = stem[:-5] if stem.endswith("_envi") else stem
+    return prefix
+
+
 @dataclass(frozen=True)
 class MergeInputs:
     flightline_dir: Path
@@ -236,14 +252,17 @@ def _register_union(
 
 def merge_flightline(
     flightline_dir: Path,
-    *,
-    out_name: str = "flightline_master.parquet",
+    out_name: str | None = None,
     original_glob: str = "**/*original*.parquet",
     corrected_glob: str = "**/*corrected*.parquet",
     resampled_glob: str = "**/*resampl*.parquet",
     write_feather: bool = False,
+    emit_qa_panel: bool = True,
 ) -> Path:
     flightline_dir = Path(flightline_dir)
+    prefix = _derive_prefix(flightline_dir)
+    if out_name is None:
+        out_name = f"{prefix}_merged_pixel_extraction.parquet"
     out_parquet = flightline_dir / out_name
 
     inputs = MergeInputs(
@@ -346,6 +365,15 @@ def merge_flightline(
     finally:
         con.close()
 
+    if emit_qa_panel:
+        try:
+            from cross_sensor_cal.qa_plots import render_flightline_panel
+
+            render_flightline_panel(flightline_dir, prefix)
+            print(f"🖼️  QA panel written → {prefix}_qa.png")
+        except Exception as e:  # pragma: no cover - QA best effort
+            print(f"⚠️ QA panel after merge failed for {flightline_dir.name}: {e}")
+
     return out_parquet
 
 
@@ -388,11 +416,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--flightline-glob", type=str, default="NEON_*")
-    parser.add_argument("--out-name", type=str, default="flightline_master.parquet")
+    parser.add_argument(
+        "--out-name",
+        type=str,
+        default=None,
+        help="Override output parquet name (default: <prefix>_merged_pixel_extraction.parquet)",
+    )
     parser.add_argument("--original-glob", type=str, default="**/*original*.parquet")
     parser.add_argument("--corrected-glob", type=str, default="**/*corrected*.parquet")
     parser.add_argument("--resampled-glob", type=str, default="**/*resampl*.parquet")
     parser.add_argument("--write-feather", action="store_true")
+    parser.add_argument("--no-qa", action="store_true", help="Do not render QA panel after merge")
     args = parser.parse_args(argv)
 
     merge_all_flightlines(
@@ -403,6 +437,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         corrected_glob=args.corrected_glob,
         resampled_glob=args.resampled_glob,
         write_feather=args.write_feather,
+        emit_qa_panel=(not args.no_qa),
     )
     return 0
 

@@ -1095,8 +1095,27 @@ def summarize_flightline_outputs(
         else:
             logger.info("🖼️  Writing QA panel -> %s", out_png)
         fig.savefig(out_png, dpi=200, bbox_inches="tight")
+        logger.info("🖼️  Wrote QA panel for %s -> %s", flight_stem, out_png.name)
 
     return fig
+
+
+def render_flightline_panel(flightline_dir: Path, prefix: str) -> Path:
+    """
+    Stable wrapper so other stages (e.g., post-merge) can emit the same QA panel.
+    Uses the exact code path that logs 'Wrote QA panel for ...'.
+    """
+
+    flightline_dir = Path(flightline_dir)
+    out_png = flightline_dir / f"{prefix}_qa.png"
+    summarize_flightline_outputs(
+        base_folder=flightline_dir.parent,
+        flight_stem=prefix,
+        out_png=out_png,
+        shaded_regions=True,
+        overwrite=True,
+    )
+    return out_png
 
 
 def summarize_all_flightlines(
@@ -1137,5 +1156,9 @@ def summarize_all_flightlines(
             )
 
 
-__all__ = ["summarize_flightline_outputs", "summarize_all_flightlines"]
+__all__ = [
+    "summarize_flightline_outputs",
+    "summarize_all_flightlines",
+    "render_flightline_panel",
+]
 

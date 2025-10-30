@@ -12,11 +12,17 @@ def main() -> None:
     )
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--flightline-glob", type=str, default="NEON_*")
-    parser.add_argument("--out-name", type=str, default="flightline_master.parquet")
+    parser.add_argument(
+        "--out-name",
+        type=str,
+        default=None,
+        help="Override output parquet name (default: <prefix>_merged_pixel_extraction.parquet)",
+    )
     parser.add_argument("--original-glob", type=str, default="**/*original*.parquet")
     parser.add_argument("--corrected-glob", type=str, default="**/*corrected*.parquet")
     parser.add_argument("--resampled-glob", type=str, default="**/*resampl*.parquet")
     parser.add_argument("--write-feather", action="store_true")
+    parser.add_argument("--no-qa", action="store_true", help="Do not render QA panel after merge")
     args = parser.parse_args()
 
     merge_all_flightlines(
@@ -27,6 +33,7 @@ def main() -> None:
         corrected_glob=args.corrected_glob,
         resampled_glob=args.resampled_glob,
         write_feather=args.write_feather,
+        emit_qa_panel=(not args.no_qa),
     )
 
 

@@ -74,7 +74,7 @@ def test_duckdb_merge_smoke(tmp_path: Path) -> None:
     resamp_df = pd.DataFrame(resamp_rows)
     _write_parquet(resamp_df, flight_dir / "resamp" / "test_resampled_table.parquet")
 
-    output_path = merge_flightline(flight_dir)
+    output_path = merge_flightline(flight_dir, emit_qa_panel=False)
     merged = pd.read_parquet(output_path)
 
     assert merged["pixel_id"].is_unique
@@ -90,3 +90,21 @@ def test_duckdb_merge_smoke(tmp_path: Path) -> None:
     for meta in ("site", "domain", "flightline", "row", "col"):
         assert meta in merged.columns
         assert merged[meta].notna().all()
+
+
+def test_master_parquet_naming(tmp_path):
+    fl = tmp_path / "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"
+    fl.mkdir()
+    (fl / "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_envi.img").write_bytes(b"")
+    out = merge_flightline(
+        fl,
+        out_name=None,
+        original_glob="**/*.parquet",
+        corrected_glob="**/*.parquet",
+        resampled_glob="**/*.parquet",
+        emit_qa_panel=False,
+    )
+    assert (
+        out.name
+        == "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_merged_pixel_extraction.parquet"
+    )
