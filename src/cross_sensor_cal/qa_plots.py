@@ -37,50 +37,32 @@ from matplotlib.figure import Figure
 
 
 def _load_envi_header_dict(hdr_path: Path) -> dict:
-    """Parse an ENVI header into a lowercase-keyed dictionary."""
-
-    hdr_path = Path(hdr_path)
-    data: dict[str, object] = {}
-    with open(hdr_path, "r", encoding="utf-8", errors="ignore") as fh:
-        text = fh.read()
-
-    pattern = re.compile(r"^\s*([^=]+?)\s*=\s*(.+?)\s*$", re.MULTILINE)
-    for match in pattern.finditer(text):
-        key = match.group(1).strip().lower()
-        value = match.group(2).strip()
-
-        if value.startswith("{") and value.endswith("}"):
-            inner = value[1:-1]
-            tokens = [tok.strip() for tok in re.split(r",\s*", inner) if tok.strip()]
-            numeric_values: list[float] = []
-            numeric_ok = True
-            for token in tokens:
-                try:
-                    numeric_values.append(float(token))
-                except Exception:
-                    numeric_ok = False
-                    break
-            if numeric_ok:
-                data[key] = numeric_values
-            else:
-                data[key] = tokens
-            continue
-
-        if key == "bands":
+    d: dict[str, object] = {}
+    text = Path(hdr_path).read_text(encoding="utf-8", errors="ignore")
+    for m in re.finditer(r"^\s*([^=]+?)\s*=\s*(.+?)\s*$", text, re.M):
+        k = m.group(1).strip().lower()
+        v = m.group(2).strip()
+        if v.startswith("{") and v.endswith("}"):
+            inside = v[1:-1]
+            parts = [p.strip() for p in re.split(r",\s*", inside) if p.strip()]
             try:
-                data[key] = int(re.sub(r"[^\d]", "", value))
+                vals = [float(p) for p in parts]
+                d[k] = vals
             except Exception:
-                data[key] = value
-            continue
-
-        if (value.startswith('"') and value.endswith('"')) or (
-            value.startswith("'") and value.endswith("'")
-        ):
-            value = value[1:-1]
-
-        data[key] = value
-
-    return data
+                d[k] = parts
+        else:
+            if k == "bands":
+                try:
+                    d[k] = int(re.sub(r"[^\d]", "", v))
+                except Exception:
+                    d[k] = v
+            else:
+                if (v.startswith('"') and v.endswith('"')) or (
+                    v.startswith("'") and v.endswith("'")
+                ):
+                    v = v[1:-1]
+                d[k] = v
+    return d
 
 from .envi import (
     band_axis_from_header,
@@ -91,6 +73,29 @@ from .envi import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def _discover_products_in_dir(flightline_dir: Path, prefix: str) -> list[Path]:
+    """
+    Return a list of ENVI .img products for the QA panel, all inside
+    ``flightline_dir``.
+
+    The discovery is prefix-based and only returns files that exist.
+    """
+
+    flightline_dir = Path(flightline_dir)
+    candidates = [
+        flightline_dir / f"{prefix}_envi.img",
+        flightline_dir / f"{prefix}_brdfandtopo_corrected_envi.img",
+        flightline_dir / f"{prefix}_landsat_tm_envi.img",
+        flightline_dir / f"{prefix}_landsat_etm+_envi.img",
+        flightline_dir / f"{prefix}_landsat_oli_envi.img",
+        flightline_dir / f"{prefix}_landsat_oli2_envi.img",
+        flightline_dir / f"{prefix}_micasense_envi.img",
+        flightline_dir / f"{prefix}_micasense_to_match_tm_etm+_envi.img",
+        flightline_dir / f"{prefix}_micasense_to_match_oli_oli2_envi.img",
+    ]
+    return [p for p in candidates if p.exists()]
 
 
 def _to_py(obj):
@@ -112,40 +117,21 @@ def _to_py(obj):
 def _parse_wavelengths_or_bands(hdr_dict):
     wl = hdr_dict.get("wavelength") or hdr_dict.get("wavelengths")
     if wl is not None:
-        if isinstance(wl, str):
-            s = wl.strip().strip("{}")
-            parts = [p.strip() for p in s.replace("\n", " ").split(",") if p.strip()]
-            try:
-                vals = [float(p) for p in parts]
-            except Exception:
-                vals = None
-        else:
-            vals = [float(x) for x in wl]
+        vals = wl if isinstance(wl, list) else []
         if vals:
-            units = (
-                hdr_dict.get("wavelength units")
-                or hdr_dict.get("wavelength_units")
-                or ""
-            ).lower()
-            if "micro" in units or "µ" in units or "um" in units:
-                vals = [int(round(v * 1000)) for v in vals]
+            units = (hdr_dict.get("wavelength units") or hdr_dict.get("wavelength_units") or "").lower()
+            if any(u in units for u in ["micro", "µ", "um"]):
+                vals = [int(round(float(v) * 1000)) for v in vals]
             else:
-                vals = [int(round(v)) for v in vals]
+                vals = [int(round(float(v))) for v in vals]
             return "wavelength_nm", vals
-
     bn = hdr_dict.get("band names") or hdr_dict.get("band_names")
-    if bn is not None:
-        if isinstance(bn, str):
-            s = bn.strip().strip("{}")
-            names = [p.strip() for p in s.replace("\n", " ").split(",") if p.strip()]
-        else:
-            names = [str(x) for x in bn]
-        return "band_names", names
-
+    if bn:
+        names = bn if isinstance(bn, list) else []
+        return "band_names", [str(x) for x in names]
     n = hdr_dict.get("bands")
     if isinstance(n, int) and n > 0:
         return "band_names", [f"band_{i:02d}" for i in range(1, n + 1)]
-
     return "unknown", []
 
 
@@ -163,10 +149,10 @@ SENSOR_RGB_INDEX: dict[str, tuple[int, int, int]] = {
 RGB_WAVELENGTHS_NM = {"R": 660, "G": 560, "B": 480}
 
 
-def inferred_sensor_key_from_filename(name: str) -> str:
-    lower = name.lower()
+def _infer_sensor_key(name: str) -> str:
+    n = name.lower()
     for key in SENSOR_RGB_INDEX:
-        if key in lower:
+        if key in n:
             return key
     return "landsat_oli"
 
@@ -179,11 +165,9 @@ QA_THRESH = {
 }
 
 
-def _select_rgb_bands_from_hdr(hdr_path: Path, img_name: str) -> tuple[int, int, int]:
+def _select_rgb_bands(hdr_path: Path, img_name: str) -> tuple[int, int, int]:
     hdr_dict = _load_envi_header_dict(hdr_path)
     mode, vals = _parse_wavelengths_or_bands(hdr_dict)
-    sensor_key = inferred_sensor_key_from_filename(img_name)
-
     if mode == "wavelength_nm" and vals:
         arr = np.asarray(vals)
 
@@ -195,12 +179,11 @@ def _select_rgb_bands_from_hdr(hdr_path: Path, img_name: str) -> tuple[int, int,
             nearest(RGB_WAVELENGTHS_NM["G"]),
             nearest(RGB_WAVELENGTHS_NM["B"]),
         )
-
-    idx_1based = SENSOR_RGB_INDEX.get(sensor_key, (1, 2, 3))
-    n_bands = hdr_dict.get("bands")
-    if isinstance(n_bands, int) and n_bands > 0:
-        return tuple(max(0, min(n_bands, idx)) - 1 for idx in idx_1based)
-
+    key = _infer_sensor_key(img_name)
+    r1, g1, b1 = SENSOR_RGB_INDEX.get(key, (1, 2, 3))
+    n = hdr_dict.get("bands")
+    if isinstance(n, int) and n >= 3:
+        return (min(r1, n) - 1, min(g1, n) - 1, min(b1, n) - 1)
     return (0, 1, 2)
 
 
@@ -389,24 +372,12 @@ def _make_rgb_composite(mm: np.memmap, band_indices: Sequence[int]) -> np.ndarra
     return rgb
 
 
-def _sensor_label(img_path: Path, flight_stem: str) -> str:
+def _sensor_label(img_path: Path, prefix: str) -> str:
     name = img_path.stem
-    prefix = f"{flight_stem}_"
-    if name.startswith(prefix):
-        name = name[len(prefix) :]
+    prefix_token = f"{prefix}_"
+    if name.startswith(prefix_token):
+        name = name[len(prefix_token) :]
     return name
-
-
-def _gather_sensor_products(work_dir: Path, flight_stem: str) -> list[Path]:
-    all_imgs = sorted(work_dir.glob("*_envi.img"))
-    keep: list[Path] = []
-    raw_name = f"{flight_stem}_envi.img"
-    corrected_name = f"{flight_stem}_brdfandtopo_corrected_envi.img"
-    for img in all_imgs:
-        if img.name in {raw_name, corrected_name}:
-            continue
-        keep.append(img)
-    return keep
 
 
 def _downsample_rgb(rgb: np.ndarray, max_size: int = 200) -> np.ndarray:
@@ -430,22 +401,28 @@ def _collect_parquet_summaries(files: Iterable[Path]) -> list[str]:
     return summaries
 
 
-def summarize_flightline_outputs(
-    base_folder: Path,
-    flight_stem: str,
+def _build_and_save_panel(
+    flightline_dir: Path,
+    prefix: str,
     out_png: Path | None = None,
     *,
     shaded_regions: bool = True,
     overwrite: bool = True,
 ) -> Figure:
-    base_folder = Path(base_folder)
-    work_dir = base_folder / flight_stem
-    if not work_dir.is_dir():
-        raise FileNotFoundError(f"Flightline folder missing: {work_dir}")
+    flightline_dir = Path(flightline_dir)
+    flight_stem = prefix
+    if not flightline_dir.is_dir():
+        raise FileNotFoundError(f"Flightline folder missing: {flightline_dir}")
 
-    raw_img = work_dir / f"{flight_stem}_envi.img"
+    products = _discover_products_in_dir(flightline_dir, prefix)
+    if not products:
+        raise FileNotFoundError(
+            f"No ENVI products found for QA in {flightline_dir}"
+        )
+
+    raw_img = flightline_dir / f"{prefix}_envi.img"
     raw_hdr = raw_img.with_suffix(".hdr")
-    corrected_img = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
+    corrected_img = flightline_dir / f"{prefix}_brdfandtopo_corrected_envi.img"
     corrected_hdr = corrected_img.with_suffix(".hdr")
 
     metrics_by_stage: dict[str, dict] = {}
@@ -1012,7 +989,11 @@ def summarize_flightline_outputs(
         )
 
     # Panel D: Thumbnails of sensor products
-    sensor_imgs = _gather_sensor_products(work_dir, flight_stem)
+    sensor_imgs = [
+        p
+        for p in products
+        if p.name not in {raw_img.name, corrected_img.name}
+    ]
     if sensor_imgs:
         cols = min(3, max(1, int(math.ceil(math.sqrt(len(sensor_imgs))))))
         rows = int(math.ceil(len(sensor_imgs) / cols))
@@ -1021,58 +1002,22 @@ def summarize_flightline_outputs(
         for ax in thumb_axes:
             ax.axis("off")
         for img_path, ax in zip(sensor_imgs, thumb_axes):
-            sensor_label = _sensor_label(img_path, flight_stem)
+            sensor_label = _sensor_label(img_path, prefix)
             hdr_path = img_path.with_suffix(".hdr")
             if not hdr_path.exists():
-                ax.text(0.5, 0.5, "Missing HDR", ha="center", va="center")
-                ax.set_title(sensor_label, fontsize=9)
-                stage_key = f"resampled:{sensor_label}"
-                metrics_by_stage[stage_key] = {
-                    "available": False,
-                    "n_valid": 0,
-                    "pct_neg": float("nan"),
-                    "pct_gt1": float("nan"),
-                }
-                flags_by_stage[stage_key] = ["hdr_missing"]
-                _log_stage_metrics(
-                    stage_key, metrics_by_stage[stage_key], flags_by_stage[stage_key]
-                )
-                continue
-            r, g, b = (0, 1, 2)
-            try:
-                r, g, b = _select_rgb_bands_from_hdr(hdr_path, img_path.name)
-                header = _load_envi_header(hdr_path)
-                mm = memmap_bsq(img_path, header)
-                rgb = _make_rgb_composite(mm, (r, g, b))
-                rgb_small = _downsample_rgb(rgb)
-                ax.imshow(rgb_small)
-                ax.set_title(sensor_label, fontsize=9)
-                stage_key = f"resampled:{sensor_label}"
-                stage_metrics, stage_flags = _scene_metrics_from_cube(mm)
-                metrics_by_stage[stage_key] = stage_metrics
-                flags_by_stage[stage_key] = list(stage_flags)
-                _log_stage_metrics(stage_key, stage_metrics, stage_flags)
-            except Exception as exc:  # pragma: no cover - defensive
-                mode, _ = _parse_wavelengths_or_bands(
-                    _load_envi_header_dict(hdr_path)
-                )
-                warnings.warn(
-                    f"Thumbnail failed for {img_path.name}: {exc}. Parsed mode={mode}; "
-                    f"r,g,b={(r, g, b)}"
-                )
-                ax.text(0.5, 0.5, "Unavailable", ha="center", va="center")
-                ax.set_title(sensor_label, fontsize=9)
-                stage_key = f"resampled:{sensor_label}"
-                metrics_by_stage[stage_key] = {
-                    "available": False,
-                    "n_valid": 0,
-                    "pct_neg": float("nan"),
-                    "pct_gt1": float("nan"),
-                }
-                flags_by_stage[stage_key] = ["stage_unavailable"]
-                _log_stage_metrics(
-                    stage_key, metrics_by_stage[stage_key], flags_by_stage[stage_key]
-                )
+                raise FileNotFoundError(f"Missing ENVI header for {img_path.name}")
+            r, g, b = _select_rgb_bands(hdr_path, img_path.name)
+            header = _load_envi_header(hdr_path)
+            mm = memmap_bsq(img_path, header)
+            rgb = _make_rgb_composite(mm, (r, g, b))
+            rgb_small = _downsample_rgb(rgb)
+            ax.imshow(rgb_small)
+            ax.set_title(sensor_label, fontsize=9)
+            stage_key = f"resampled:{sensor_label}"
+            stage_metrics, stage_flags = _scene_metrics_from_cube(mm)
+            metrics_by_stage[stage_key] = stage_metrics
+            flags_by_stage[stage_key] = list(stage_flags)
+            _log_stage_metrics(stage_key, stage_metrics, stage_flags)
     else:
         thumb_spec = gs[1:, 1:].subgridspec(1, 1)
         ax_thumb = fig.add_subplot(thumb_spec[0])
@@ -1082,7 +1027,7 @@ def summarize_flightline_outputs(
     # Panel E: Parquet summary
     ax_parquet.set_title("Parquet outputs present")
     ax_parquet.axis("off")
-    parquet_files = list(work_dir.glob("*.parquet"))
+    parquet_files = list(flightline_dir.glob("*.parquet"))
     summaries = _collect_parquet_summaries(parquet_files)
     if summaries:
         text = "\n".join(summaries)
@@ -1117,6 +1062,39 @@ def summarize_flightline_outputs(
     return fig
 
 
+def summarize_flightline_outputs(
+    base_folder: Path,
+    flight_stem: str,
+    out_png: Path | None = None,
+    *,
+    shaded_regions: bool = True,
+    overwrite: bool = True,
+) -> Figure:
+    base_folder = Path(base_folder)
+    candidate = base_folder / flight_stem
+    if candidate.is_dir():
+        flightline_dir = candidate
+    elif base_folder.is_dir() and (
+        base_folder / f"{flight_stem}_envi.img"
+    ).exists():
+        flightline_dir = base_folder
+    elif base_folder.is_dir() and base_folder.name == flight_stem:
+        flightline_dir = base_folder
+    else:
+        raise FileNotFoundError(f"Flightline folder missing: {candidate}")
+
+    if out_png is None:
+        out_png = flightline_dir / f"{flight_stem}_qa.png"
+
+    return _build_and_save_panel(
+        flightline_dir,
+        flight_stem,
+        out_png=out_png,
+        shaded_regions=shaded_regions,
+        overwrite=overwrite,
+    )
+
+
 def render_flightline_panel(flightline_dir: Path, prefix: str) -> Path:
     """
     Build and save the standard QA panel (<prefix>_qa.png) in `flightline_dir`.
@@ -1124,11 +1102,11 @@ def render_flightline_panel(flightline_dir: Path, prefix: str) -> Path:
     Returns the PNG Path. Raises on failure (caller will log traceback).
     """
 
-    flightline_dir = Path(flightline_dir).resolve()
+    flightline_dir = Path(flightline_dir)
     out_png = flightline_dir / f"{prefix}_qa.png"
-    summarize_flightline_outputs(
-        base_folder=flightline_dir.parent,
-        flight_stem=prefix,
+    _build_and_save_panel(
+        flightline_dir,
+        prefix,
         out_png=out_png,
         shaded_regions=True,
         overwrite=True,

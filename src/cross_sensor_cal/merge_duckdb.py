@@ -31,17 +31,14 @@ to support custom workflows.
 
 from __future__ import annotations
 
-import os
-import sys
-import traceback
+import os, sys, traceback
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import duckdb
-
-from contextlib import contextmanager
 
 try:
     from tqdm import tqdm
@@ -357,22 +354,23 @@ def merge_flightline(
     if not any(inputs.values()):
         raise FileNotFoundError(f"No parquet inputs found in {flightline_dir}")
 
-    tmp_dir = flightline_dir / ".duckdb_tmp"
+    tmp_dir = (flightline_dir / ".duckdb_tmp").resolve()
     tmp_dir.mkdir(exist_ok=True)
 
     con = duckdb.connect()
     try:
-        con.execute(f"PRAGMA threads={os.cpu_count() or 4}")
+        con.execute("PRAGMA threads = " + str(os.cpu_count() or 4))
         try:
-            con.execute("PRAGMA memory_limit='auto'")
+            con.execute("PRAGMA memory_limit = 'auto'")
         except duckdb.Error as exc:  # pragma: no cover - parser differences across DuckDB versions
-            # Older DuckDB releases require a numeric memory limit. Fall back to the
-            # default setting if "auto" is rejected rather than failing the merge.
             if "memory limit" not in str(exc).lower():
                 raise
         con.execute(
-            f"PRAGMA temp_directory='{_quote_path(str(tmp_dir.resolve()))}'"
+            "PRAGMA temp_directory = '"
+            + _quote_path(str(tmp_dir))
+            + "'"
         )
+        con.execute("SET enable_progress_bar = true")
 
         with _progress("DuckDB: register + normalize"):
             _register_union(con, "orig", inputs["orig"], META_CANDIDATES)
@@ -437,16 +435,19 @@ def merge_flightline(
             )
 
         out_parquet.parent.mkdir(parents=True, exist_ok=True)
-        with _progress("DuckDB: write parquet"):
+        with _progress("DuckDB: write merged parquet"):
             con.execute(
                 f"""
       COPY merged TO '{_quote_path(str(out_parquet))}'
-      (FORMAT PARQUET, CODEC ZSTD, ROW_GROUP_SIZE 5120000);
+      (FORMAT PARQUET,
+       COMPRESSION ZSTD,
+       ROW_GROUP_SIZE 8388608,
+       PER_THREAD_OUTPUT true);
     """
             )
-            print(
-                f"[merge] ✅ Wrote parquet: {out_parquet} (exists={out_parquet.exists()})"
-            )
+        print(
+            f"[merge] ✅ Wrote parquet: {out_parquet} (exists={out_parquet.exists()})"
+        )
 
         if write_feather:
             out_feather = out_parquet.with_suffix(".feather").resolve()
@@ -471,12 +472,13 @@ def merge_flightline(
             from cross_sensor_cal.qa_plots import render_flightline_panel
             with _progress("QA: render panel"):
                 out_png = render_flightline_panel(flightline_dir, prefix)
-            out_png = Path(out_png).resolve()
+            out_png_path = Path(out_png).resolve()
             print(
-                f"[merge] 🖼️  QA panel → {out_png} (exists={out_png.exists()})"
+                f"[merge] 🖼️  QA panel → {out_png_path} "
+                f"(exists={out_png_path.exists()})"
             )
         except Exception as e:  # pragma: no cover - QA best effort
-            print(f"[merge] ⚠️ QA panel failed: {e}")
+            print(f"[merge] ⚠️ QA panel after merge failed for {prefix}: {e}")
             traceback.print_exc()
 
     print(
