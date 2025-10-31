@@ -53,14 +53,12 @@ def test_summarize_flightline_outputs_overwrites_png(tmp_path) -> None:
 
     out_png = work_dir / f"{flight_stem}_qa.png"
 
-    fig1 = summarize_flightline_outputs(base_folder, flight_stem, out_png=out_png)
-    plt.close(fig1)
+    summarize_flightline_outputs(base_folder, flight_stem, out_png=out_png)
     mtime_1 = out_png.stat().st_mtime_ns
 
     time.sleep(0.01)
 
-    fig2 = summarize_flightline_outputs(base_folder, flight_stem, out_png=out_png)
-    plt.close(fig2)
+    summarize_flightline_outputs(base_folder, flight_stem, out_png=out_png)
     mtime_2 = out_png.stat().st_mtime_ns
 
     assert mtime_2 > mtime_1

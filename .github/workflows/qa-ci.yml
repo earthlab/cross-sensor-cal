@@ -1,0 +1,80 @@
+name: qa-ci
+
+on:
+  push:
+    branches: ["main", "work", "qa/**"]
+  pull_request:
+    paths:
+      - "src/cross_sensor_cal/**"
+      - "tests/test_qa/**"
+      - "docs/**"
+      - ".github/workflows/qa-ci.yml"
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package with QA extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[tests,qa]
+
+      - name: Create QA fixture
+        run: |
+          python - <<'PY'
+          import numpy as np
+          from pathlib import Path
+
+          base = Path("qa_ci_fixture/flight_test")
+          base.mkdir(parents=True, exist_ok=True)
+
+          def write_envi(stem: Path, data: np.ndarray, wavelengths):
+              data = np.asarray(data, dtype=np.float32)
+              img = stem.with_suffix(".img")
+              hdr = stem.with_suffix(".hdr")
+              data.tofile(img)
+              hdr_lines = [
+                  "ENVI",
+                  f"samples = {data.shape[2]}",
+                  f"lines = {data.shape[1]}",
+                  f"bands = {data.shape[0]}",
+                  "data type = 4",
+                  "interleave = bsq",
+                  "byte order = 0",
+                  "wavelength = {" + ", ".join(str(w) for w in wavelengths) + "}",
+                  "",
+              ]
+              hdr.write_text("\n".join(hdr_lines), encoding="utf-8")
+
+          wavelengths = [450, 550, 650, 750, 850]
+          raw = np.full((5, 16, 16), 0.4, dtype=np.float32)
+          corrected = raw * 0.95
+          write_envi(base / "flight_test_envi", raw, wavelengths)
+          write_envi(
+              base / "flight_test_brdfandtopo_corrected_envi",
+              corrected,
+              wavelengths,
+          )
+          PY
+
+      - name: Run QA tests
+        run: pytest -q tests/test_qa
+
+      - name: Run quick QA CLI
+        run: cscal-qa --quick --base-folder qa_ci_fixture
+
+      - name: Upload QA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-panel
+          path: |
+            qa_ci_fixture/**/*.png
+            qa_ci_fixture/**/*.json

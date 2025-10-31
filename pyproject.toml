@@ -43,6 +43,10 @@ full = [
     "spectral>=0.23",
     "ray[default]>=2.2",
 ]
+qa = [
+    "ImageHash",
+    "Pillow",
+]
 docs = [
     "mkdocs",
     "mkdocs-material",

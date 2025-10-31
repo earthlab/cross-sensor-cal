@@ -60,7 +60,11 @@ Key behaviors:
 After editing Parquet tables or tweaking configuration, regenerate QA panels without rerunning heavy stages:
 
 ```bash
+# Quick (default) QA regeneration with JSON sidecars
 cscal-qa --base-folder output_demo --out-dir qa-panels
+
+# Full sampling pass if you need dense metrics
+cscal-qa --base-folder output_demo --full --n-sample 120000
 ```
 
 Point the dashboard at the same base folder to explore results interactively:
