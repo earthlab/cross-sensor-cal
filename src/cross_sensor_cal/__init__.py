@@ -3,9 +3,12 @@ from __future__ import annotations
 
 from importlib import import_module
 
+from .brightness import apply_brightness_correction
+
 __version__ = "2.2.0"
 
 __all__ = ["__version__"]
+__all__ += ["apply_brightness_correction"]
 
 
 def __getattr__(name: str):  # pragma: no cover - thin lazy import helper

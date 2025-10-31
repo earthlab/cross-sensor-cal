@@ -4,6 +4,10 @@ The `cscal-qa` command generates a summary PNG for each processed flight line. I
 combines visual checks and lightweight metadata to confirm that every stage of the
 pipeline completed successfully.
 
+When brightness correction is enabled, the accompanying QA JSON includes the
+per-band gain and offset emitted by `apply_brightness_correction()` so panel
+reviews can confirm illumination normalization values.
+
 QA figures are re-generated on every run so they always reflect the current pipeline
 settings. The spectral comparison panel converts reflectance to a unitless 0–1 scale and
 shades VIS/NIR/SWIR regions to make interpretation easier.
