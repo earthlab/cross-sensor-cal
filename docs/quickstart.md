@@ -28,6 +28,9 @@ source .venv/bin/activate          # On Windows use: .venv\Scripts\activate
 pip install -e .
 ```
 
+> Prefer installing the published release instead of editing the source tree? Run `pip install cross-sensor-cal` inside a fresh
+> virtual environment and skip the clone.
+
 ---
 
 ### 2. Prepare the Data Directory
