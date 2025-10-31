@@ -10,35 +10,38 @@ theme:
   features:
     - navigation.instant
     - navigation.tracking
-    - content.code.copy
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
     - content.action.edit
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+  icon:
+    repo: fontawesome/brands/github
 
 nav:
-  - Welcome:
-      - Home: index.md
-      - Project overview: overview.md
-      - Quickstart: quickstart.md
-      - Environment setup: env-setup.md
-      - FAQ: faq.md
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Environment: env.md
   - Pipeline:
       - Stages: pipeline/stages.md
       - Outputs: pipeline/outputs.md
       - QA panel: pipeline/qa_panel.md
   - Usage:
       - CLI & examples: usage/cli.md
-      - Parquet preview: usage/parquet-preview.md
-      - Troubleshooting: troubleshooting.md
+      - Parquet preview: usage/parquet_preview.md
   - Reference:
-      - Configuration: configuration.md
-      - Schemas: schemas.md
-      - Validation: validation.md
-      - Extending: extending.md
+      - Configuration: reference/configuration.md
+      - Schemas: reference/schemas.md
+      - Validation: reference/validation.md
+      - Extending: reference/extending.md
   - API:
-      - merge_duckdb: api/merge_duckdb.md
-      - qa_plots: api/qa_plots.md
-  - Dev:
-      - Contributing: dev/contributing.md
-      - Doc Drift Report: dev/doc_drift_report.md
+      - Python API: api/index.md
+  - Troubleshooting: troubleshooting.md
+  - Contributing: dev/contributing.md
+  - Doc Drift: dev/doc_drift.md
 
 plugins:
   - search
@@ -49,8 +52,12 @@ plugins:
             - src
           options:
             docstring_style: google
+            show_signature: true
             show_source: false
             merge_init_into_class: true
+  - glightbox
+  - minify:
+      minify_html: true
   - macros
 
 markdown_extensions:
@@ -59,3 +66,13 @@ markdown_extensions:
   - footnotes
   - toc:
       permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/earthlab/cross-sensor-cal

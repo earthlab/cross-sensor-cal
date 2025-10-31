@@ -1,3 +1,5 @@
+> Maintain this page after any behavior change. Surface a short "What changed?" callout on Home if user-facing.
+
 # Documentation Drift Report
 
 ## Naming rule

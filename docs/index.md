@@ -1,93 +1,80 @@
-# cross-sensor-cal
+<!-- HOME:START -->
+# Cross-Sensor Calibration
 
-Cross-Sensor Calibration turns raw [NEON AOP](https://www.neonscience.org/data-collection/airborne-remote-sensing) hyperspectral
-flight lines into analysis-ready reflectance, Parquet tables, and QA artifacts in a single restart-safe workflow. The pipeline
-covers download, ENVI export, BRDF + topographic correction, cross-sensor convolution, and reporting so teams can focus on
-analysis instead of data wrangling.
+Turn raw **NEON hyperspectral** flight lines into corrected ENVI cubes, sensor-matched products, tidy Parquet, and a QA panel—**in one restart-safe command**.
 
-!!! tip "Looking for the old quickstart?"
-    The expanded quickstart now lives at [Quickstart](quickstart.md) with both CLI and Python API walkthroughs.
+## Run your first tile (3 steps)
 
-## Get the package
+```bash
+# 1) Create an output base
+BASE=output_demo && mkdir -p "$BASE"
 
-=== "Install from PyPI"
+# 2) Process one flight line (replace IDs as needed)
+cscal-pipeline \
+  --base-folder "$BASE" \
+  --site-code NIWO \
+  --year-month 2023-08 \
+  --product-code DP1.30006.001 \
+  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
+  --max-workers 2
+
+# 3) Open the QA image
+open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png"
+```
+
+New here? See the [Quickstart](quickstart.md).
+
+Something broke? Jump to [Troubleshooting](troubleshooting.md).
+<!-- HOME:END -->
+
+---
+
+## Why teams use cross-sensor-cal
+
+- **Restart-safe orchestration** – rerun the same command after a crash; completed stages are skipped automatically.
+- **Consistent artifacts** – every tile produces ENVI cubes, tidy Parquet, and a QA panel named predictably.
+- **Python & CLI parity** – drive the pipeline from scripts or automate it in schedulers with the same arguments.
+
+## Install in minutes
+
+Choose a clean virtual environment (see the detailed [Environment](env.md) page for Conda tips and GDAL notes).
+
+=== "venv + PyPI"
     ```bash
-    python -m venv cscal-env
-    source cscal-env/bin/activate  # Windows: cscal-env\Scripts\activate
-    pip install --upgrade pip
+    python -m venv .venv && source .venv/bin/activate
+    pip install -U pip
     pip install cross-sensor-cal
     ```
 
-    This installs the CLI entry points (`cscal-download`, `cscal-pipeline`, `cscal-qa`, and friends) plus the Python API. The
-    wheels are published for Linux and macOS on Python 3.10–3.12; other platforms can build from source.
-
-=== "Install from source"
+=== "From source"
     ```bash
     git clone https://github.com/earthlab/cross-sensor-cal.git
     cd cross-sensor-cal
-    python -m venv .venv
-    source .venv/bin/activate
+    python -m venv .venv && source .venv/bin/activate
+    pip install -U pip
     pip install -e .[dev]
     ```
 
-    Source installs expose the latest development features and editable code. See [Environment Setup](env-setup.md) for Conda
-    instructions and notes about GDAL/PROJ, Ray shared memory, and documentation previews.
+## Understand the pipeline
 
-## Process your first flightline
+1. **Download NEON HDF5** tiles.
+2. **Export ENVI** cubes and apply **topographic + BRDF correction**.
+3. **Convolve** to other sensors, **flatten to Parquet**, and finish with a **QA panel**.
 
-1. Create a base folder where downloads and derived products will be written:
-   ```bash
-   BASE=output_demo
-   mkdir -p "$BASE"
-   ```
-2. Run the consolidated pipeline on one or more NEON flight lines. Replace placeholders with the site, month, product, and
-   flight IDs you need:
-   ```bash
-   cscal-pipeline \
-     --base-folder "$BASE" \
-     --site-code NIWO \
-     --year-month 2023-08 \
-     --product-code DP1.30006.001 \
-     --flight-lines \
-       NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance \
-       NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
-     --max-workers 2
-   ```
-3. Inspect results inside `$BASE/<flight_stem>/`—you should see ENVI exports, corrected cubes, sensor-specific resamples, Parquet
-   tables, and the QA panel (`<flight_stem>_qa.png`). Re-run the same command at any time; completed stages log `✅ ... (skipping)`
-   and are left untouched.
-4. Optional: generate fresh QA panels without rerunning the full pipeline.
-   ```bash
-   cscal-qa --base-folder "$BASE"
-   ```
+See the [Pipeline Stages](pipeline/stages.md) overview for purpose, inputs, outputs, and pitfalls at every step.
 
-Prefer a fully scripted flow? The [Quickstart](quickstart.md#4-python-api-equivalent) shows the matching Python API example using
-`go_forth_and_multiply()`.
+## Next steps
 
-## Troubleshooting & support
-
-- Start with the curated [Troubleshooting](troubleshooting.md) guide for Ray shared memory issues, filename validation errors,
-  ENVI mismatches, iRODS hiccups, and more.
-- Browse the [FAQ](faq.md) for configuration and workflow questions like resuming runs or adding new sensors.
-- Use `--verbose` on CLI commands or read the per-flightline logs inside each output directory to pinpoint stage failures.
-- When filing issues, include the console output (with the `[flight_stem]` prefixes) and your configuration overrides to speed up
-  triage.
-
-## Explore the documentation
-
-| Topic | Start here |
+| Goal | Start with |
 | --- | --- |
-| Step-by-step walkthrough | [Quickstart](quickstart.md) |
-| Environment and dependencies | [Environment Setup](env-setup.md) |
-| CLI usage and examples | [CLI & Examples](usage/cli.md) |
-| Pipeline architecture | [Pipeline Stages](pipeline/stages.md) |
-| Outputs and file formats | [Pipeline Outputs](pipeline/outputs.md) and [Schemas](schemas.md) |
-| Extending sensors & stages | [Extending the pipeline](extending.md) |
-| Validation and QA | [QA panel](pipeline/qa_panel.md), [Validation checks](validation.md) |
+| Rerun the full flow on multiple tiles | [CLI & examples](usage/cli.md) |
+| Inspect Parquet outputs in notebooks | [Parquet preview](usage/parquet_preview.md) |
+| Tune configuration for HPC or CI | [Reference → Configuration](reference/configuration.md) |
+| Validate artifacts and schemas | [Reference → Schemas](reference/schemas.md) & [Reference → Validation](reference/validation.md) |
+| Extend to a new sensor or reader | [Reference → Extending](reference/extending.md) |
+| Something looks off | [Troubleshooting](troubleshooting.md) |
 
 ## Release highlights
 
 - Per-flightline master table written as **`<prefix>_merged_pixel_extraction.parquet`**
 - QA panel **`<prefix>_qa.png`** is emitted **after the merge** during full runs
-
-root@d52d22c64421:/workspace/cross-sensor-cal#
