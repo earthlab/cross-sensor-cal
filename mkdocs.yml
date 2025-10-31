@@ -14,13 +14,25 @@ theme:
     - content.action.edit
 
 nav:
-  - Overview: index.md
+  - Welcome:
+      - Home: index.md
+      - Project overview: overview.md
+      - Quickstart: quickstart.md
+      - Environment setup: env-setup.md
+      - FAQ: faq.md
   - Pipeline:
       - Stages: pipeline/stages.md
       - Outputs: pipeline/outputs.md
-      - QA Panel: pipeline/qa_panel.md
+      - QA panel: pipeline/qa_panel.md
   - Usage:
-      - CLI & Examples: usage/cli.md
+      - CLI & examples: usage/cli.md
+      - Parquet preview: usage/parquet-preview.md
+      - Troubleshooting: troubleshooting.md
+  - Reference:
+      - Configuration: configuration.md
+      - Schemas: schemas.md
+      - Validation: validation.md
+      - Extending: extending.md
   - API:
       - merge_duckdb: api/merge_duckdb.md
       - qa_plots: api/qa_plots.md
