@@ -16,7 +16,7 @@
         <link rel="prev" href="../../pipeline/qa_panel/">
       
       
-        <link rel="next" href="../../api/merge_duckdb/">
+        <link rel="next" href="../parquet-preview/">
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
@@ -24,7 +24,7 @@
     
     
       
-        <title>CLI & Examples - cross-sensor-cal</title>
+        <title>CLI & examples - cross-sensor-cal</title>
       
     
     
@@ -104,7 +104,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              CLI & Examples
+              CLI & examples
             
           </span>
         </div>
@@ -223,18 +223,156 @@
   
   
   
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Welcome
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Welcome
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
     <li class="md-nav__item">
       <a href="../.." class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Overview
+    Home
     
   </span>
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Project overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../env-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Environment setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -335,7 +473,7 @@
   
   
   <span class="md-ellipsis">
-    QA Panel
+    QA panel
     
   </span>
   
@@ -414,7 +552,7 @@
   
   
   <span class="md-ellipsis">
-    CLI & Examples
+    CLI & examples
     
   </span>
   
@@ -427,7 +565,7 @@
   
   
   <span class="md-ellipsis">
-    CLI & Examples
+    CLI & examples
     
   </span>
   
@@ -450,6 +588,51 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#console-script-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Console script overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#downloading-data-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      Downloading data only
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-pipeline-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      Full pipeline run
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#qa-regeneration-and-dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      QA regeneration and dashboards
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recovering-raw-cubes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovering raw cubes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#merge-per-flightline-or-batch" class="md-nav__link">
     <span class="md-ellipsis">
       Merge (per flightline or batch)
@@ -462,6 +645,52 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../parquet-preview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Parquet preview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Troubleshooting
+    
+  </span>
+  
+
+      </a>
     </li>
   
 
@@ -497,7 +726,7 @@
   
   
   <span class="md-ellipsis">
-    API
+    Reference
     
   </span>
   
@@ -507,6 +736,143 @@
         
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../schemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Schemas
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Validation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../extending/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Extending
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    API
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             API
           </label>
@@ -580,10 +946,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
             
   
   
@@ -596,8 +962,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             Dev
           </label>
@@ -683,6 +1049,51 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#console-script-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Console script overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#downloading-data-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      Downloading data only
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-pipeline-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      Full pipeline run
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#qa-regeneration-and-dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      QA regeneration and dashboards
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recovering-raw-cubes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovering raw cubes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#merge-per-flightline-or-batch" class="md-nav__link">
     <span class="md-ellipsis">
       Merge (per flightline or batch)
@@ -716,6 +1127,104 @@
 
 
 <h1 id="cli-examples">CLI &amp; Examples<a class="headerlink" href="#cli-examples" title="Permanent link">&para;</a></h1>
+<p>Cross-Sensor Calibration installs several console scripts that cover download, the end-to-end pipeline, QA generation, and
+post-processing. Each command logs with a <code>[cscal-*]</code> prefix so you can correlate console output with artifacts written to disk.</p>
+<h2 id="console-script-overview">Console script overview<a class="headerlink" href="#console-script-overview" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Purpose</th>
+<th>Typical usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cscal-download</code></td>
+<td>Fetch NEON AOP HDF5 flight lines and ancillary files</td>
+<td>Prefetch data to a workstation before running the full pipeline</td>
+</tr>
+<tr>
+<td><code>cscal-pipeline</code></td>
+<td>Run download → ENVI export → correction → cross-sensor convolution → Parquet merge</td>
+<td>Primary entry point for production runs</td>
+</tr>
+<tr>
+<td><code>cscal-qa</code></td>
+<td>Rebuild QA panels for processed flight lines</td>
+<td>Spot-check results after editing outputs or merging tables</td>
+</tr>
+<tr>
+<td><code>cscal-qa-dashboard</code></td>
+<td>Launch an interactive dashboard to browse QA artifacts</td>
+<td>Review many flight lines quickly</td>
+</tr>
+<tr>
+<td><code>cscal-qa-metrics</code></td>
+<td>Summarize QA metrics across flight lines in CSV form</td>
+<td>Track trends or regressions over time</td>
+</tr>
+<tr>
+<td><code>cscal-recover-raw</code></td>
+<td>Restore original HDF5 cubes from staged products</td>
+<td>Recover deleted <code>.h5</code> files without redownloading</td>
+</tr>
+<tr>
+<td><code>python -m bin.merge_duckdb</code></td>
+<td>Merge per-stage Parquet tables and emit QA panel</td>
+<td>One-off merges, debugging, or custom folder layouts</td>
+</tr>
+</tbody>
+</table>
+<h2 id="downloading-data-only">Downloading data only<a class="headerlink" href="#downloading-data-only" title="Permanent link">&para;</a></h2>
+<p>Use <code>cscal-download</code> when you want to stage NEON HDF5 files ahead of time. The command is idempotent—reruns detect existing files
+and skip the transfer.</p>
+<div class="codehilite"><pre><span></span><code>cscal-download<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--base-folder<span class="w"> </span>data/NIWO_2023-08<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--flight-lines<span class="w"> </span>NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
+</code></pre></div>
+
+<p>Add <code>--max-workers</code> to parallelize downloads or <code>--no-ancillary</code> to skip optional ancillary products.</p>
+<h2 id="full-pipeline-run">Full pipeline run<a class="headerlink" href="#full-pipeline-run" title="Permanent link">&para;</a></h2>
+<p><code>cscal-pipeline</code> orchestrates every stage and writes outputs to a per-flightline directory. Use the same arguments as the download
+command plus any overrides you need (e.g., <code>--config</code> to point at a custom YAML file).</p>
+<div class="codehilite"><pre><span></span><code>cscal-pipeline<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--base-folder<span class="w"> </span>output_demo<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--flight-lines<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--verbose
+</code></pre></div>
+
+<p>Key behaviors:</p>
+<ul>
+<li><strong>Restart safe:</strong> existing stages log <code>✅ ... (skipping)</code> and are left untouched.</li>
+<li><strong>Structured outputs:</strong> artifacts live under <code>&lt;base&gt;/&lt;flight_stem&gt;/</code> with canonical names for ENVI, Parquet, JSON, and QA files.</li>
+<li><strong>Configuration aware:</strong> pass <code>--config path/to/settings.yaml</code> to customize sensor lists, resampling options, or QA thresholds.</li>
+</ul>
+<h2 id="qa-regeneration-and-dashboards">QA regeneration and dashboards<a class="headerlink" href="#qa-regeneration-and-dashboards" title="Permanent link">&para;</a></h2>
+<p>After editing Parquet tables or tweaking configuration, regenerate QA panels without rerunning heavy stages:</p>
+<div class="codehilite"><pre><span></span><code>cscal-qa<span class="w"> </span>--base-folder<span class="w"> </span>output_demo<span class="w"> </span>--out-dir<span class="w"> </span>qa-panels
+</code></pre></div>
+
+<p>Point the dashboard at the same base folder to explore results interactively:</p>
+<div class="codehilite"><pre><span></span><code>cscal-qa-dashboard<span class="w"> </span>--base-folder<span class="w"> </span>output_demo
+</code></pre></div>
+
+<p>Use <code>cscal-qa-metrics --base-folder output_demo --out metrics.csv</code> to summarize per-flightline metrics for monitoring.</p>
+<h2 id="recovering-raw-cubes">Recovering raw cubes<a class="headerlink" href="#recovering-raw-cubes" title="Permanent link">&para;</a></h2>
+<p>If the original <code>.h5</code> files were deleted but the ENVI exports remain, <code>cscal-recover-raw</code> rebuilds them from staged intermediates:</p>
+<div class="codehilite"><pre><span></span><code>cscal-recover-raw<span class="w"> </span>--flightline-dir<span class="w"> </span>output_demo/NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
+</code></pre></div>
+
+<p>The command validates that all required ENVI pieces exist before restoring the raw cube to <code>&lt;flight_stem&gt;.h5</code> at the base folder.</p>
 <h2 id="merge-per-flightline-or-batch">Merge (per flightline or batch)<a class="headerlink" href="#merge-per-flightline-or-batch" title="Permanent link">&para;</a></h2>
 <div class="codehilite"><pre><span></span><code><span class="c1"># Batch: all flightlines under a root</span>
 python<span class="w"> </span>-m<span class="w"> </span>bin.merge_duckdb<span class="w"> </span>--data-root<span class="w"> </span>/path/to/output<span class="w"> </span>--flightline-glob<span class="w"> </span><span class="s2">&quot;NEON_*&quot;</span>
