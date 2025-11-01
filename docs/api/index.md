@@ -8,6 +8,14 @@ from cross_sensor_cal import merge_duckdb
 merge_duckdb(["parquet/a.parquet","parquet/b.parquet"], "merged/all.parquet")
 ```
 
+## Brightness correction entry point
+
+### `apply_brightness_correction(cube, mask=None, method='percentile_match', ...)`
+Normalizes per-band brightness for hyperspectral cubes before BRDF/topo stages.
+The docstring walks through the affine model, parameter choices, and examples.
+Use it when you need to harmonise tiles prior to the full pipeline; the QA JSON
+will surface the per-band gain/offsets when this stage runs.
+
 ::: cross_sensor_cal
     options:
       members: true

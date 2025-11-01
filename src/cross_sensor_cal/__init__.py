@@ -8,6 +8,9 @@ __version__ = "2.2.0"
 __all__ = ["__version__"]
 
 
+from .brightness import apply_brightness_correction
+__all__ = sorted(set(__all__ + ["apply_brightness_correction"]))
+
 def __getattr__(name: str):  # pragma: no cover - thin lazy import helper
     if name == "pipeline":
         module = import_module("cross_sensor_cal.pipelines.pipeline")
