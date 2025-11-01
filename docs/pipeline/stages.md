@@ -31,7 +31,9 @@ cross-sensor-cal envi-export --in data/*.h5 --out envi/
 **Pitfalls** Disk usage; `_envi` suffix used downstream.
 
 ## 3) Topographic + BRDF correction
-**Purpose** Apply topo/BRDF; write sidecar JSON with parameters.  
+**Purpose** Apply topo/BRDF; write sidecar JSON with parameters.
+_Optional: run_ `apply_brightness_correction` _on cubes in Python before this stage
+to harmonise illumination; the QA JSON will expose the per-band gain/offsets._  
 **Inputs → Outputs** `*_envi.img/.hdr` → `*_brdfandtopo_corrected_envi.img/.hdr` + `*_brdfandtopo_corrected_envi.json`.  
 **Run it**
 ```bash
@@ -67,12 +69,12 @@ cross-sensor-cal merge-duckdb --in parquet/*.parquet --out merged/<prefix>_merge
 **Pitfalls** Ensure filenames follow [Outputs](outputs.md) conventions before merging.
 
 ## 7) QA panel
-**Purpose** Visual checks and metrics; saves `<prefix>_qa.png`.  
+**Purpose** Visual checks and metrics; saves `<prefix>_qa.png` and `<prefix>_qa.json`.
 **Run it**
 ```bash
-cross-sensor-cal qa-panel --merged merged/<prefix>_merged_pixel_extraction.parquet --out qa/
+cscal-qa --base-folder processed/flightlines --quick
 ```
-**Pitfalls** If ENVI reader missing, install QA helper in same env.
+**Pitfalls** Deterministic quick mode samples ~25k pixels; rerun with `--full` if you need denser stats.
 
 ## File-naming at a glance
 - Raw H5 → `..._directional_reflectance.h5`

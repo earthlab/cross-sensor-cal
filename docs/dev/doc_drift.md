@@ -19,7 +19,6 @@
   "cscal-pipeline": "cross_sensor_cal.cli.pipeline_cli:main",
   "cscal-qa": "cross_sensor_cal.cli.qa_cli:main",
   "cscal-recover-raw": "cross_sensor_cal.cli.recover_cli:main",
-  "cscal-qa-metrics": "cross_sensor_cal.qa_metrics:main",
   "cscal-qa-dashboard": "cross_sensor_cal.qa_dashboard:main",
   "csc-merge-duckdb": "cross_sensor_cal.merge_duckdb:main"
 }
@@ -74,9 +73,13 @@
   ],
   "qa_cli.py": [
     "--base-folder",
-    "--no-overwrite",
     "--out-dir",
-    "--overwrite"
+    "--quick",
+    "--full",
+    "--save-json",
+    "--no-save-json",
+    "--n-sample",
+    "--rgb-bands"
   ],
   "pipeline.py": [
     "--brightness-offset",

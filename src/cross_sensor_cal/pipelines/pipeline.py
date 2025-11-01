@@ -422,7 +422,7 @@ from cross_sensor_cal.brdf_topo import (
 )
 from cross_sensor_cal.paths import normalize_brdf_model_path
 from cross_sensor_cal.resample import resample_chunk_to_sensor
-from cross_sensor_cal.qa_metrics import write_metrics
+from cross_sensor_cal.qa_plots import render_flightline_panel
 from cross_sensor_cal.utils import get_package_data_path
 from cross_sensor_cal.utils_checks import is_valid_json
 
@@ -1717,9 +1717,9 @@ def process_one_flightline(
     )
 
     try:
-        write_metrics(base_folder=base_folder, flight_stem=flight_stem)
+        render_flightline_panel(Path(base_folder) / flight_stem, quick=True, save_json=True)
     except Exception as e:  # pragma: no cover - metrics best effort
-        logger.warning("⚠️  QA metrics computation failed for %s: %s", flight_stem, e)
+        logger.warning("⚠️  QA rendering failed for %s: %s", flight_stem, e)
 
 
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):

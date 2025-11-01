@@ -1,0 +1,81 @@
+name: QA quick check
+
+on:
+  push:
+    paths:
+      - 'src/cross_sensor_cal/**'
+      - 'tests/test_qa/**'
+      - '.github/workflows/qa-ci.yml'
+  pull_request:
+    paths:
+      - 'src/cross_sensor_cal/**'
+      - 'tests/test_qa/**'
+      - '.github/workflows/qa-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install QA dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[tests]
+          pip install pillow imagehash
+
+      - name: Run QA-focused tests
+        run: pytest tests/test_qa -q
+
+      - name: Generate QA panel fixture
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import numpy as np
+          from cross_sensor_cal.qa_plots import render_flightline_panel
+
+          def write_pair(base: Path, data: np.ndarray, wavelengths: list[float]) -> None:
+              data = np.asarray(data, dtype=np.float32)
+              img_path = base.with_suffix('.img')
+              hdr_path = base.with_suffix('.hdr')
+              data.tofile(img_path)
+              hdr_lines = [
+                  'ENVI',
+                  f'samples = {data.shape[2]}',
+                  f'lines = {data.shape[1]}',
+                  f'bands = {data.shape[0]}',
+                  'data type = 4',
+                  'interleave = bsq',
+                  'byte order = 0',
+                  'wavelength units = Nanometers',
+                  'fwhm = {' + ', '.join('10' for _ in wavelengths) + '}',
+                  'wavelength = {' + ', '.join(str(w) for w in wavelengths) + '}',
+              ]
+              hdr_path.write_text('\n'.join(hdr_lines), encoding='utf-8')
+
+          fixture = Path('qa_fixture/CI_QA_FLIGHT')
+          fixture.mkdir(parents=True, exist_ok=True)
+          wavelengths = [490.0, 560.0, 660.0, 820.0]
+          rng = np.random.default_rng(7)
+          raw = 0.18 + rng.random((4, 10, 8)).astype(np.float32) * 0.06
+          corrected = raw * 0.93 + 0.008
+          convolved = corrected * 0.91
+          write_pair(fixture / 'CI_QA_FLIGHT_envi', raw, wavelengths)
+          write_pair(fixture / 'CI_QA_FLIGHT_brdfandtopo_corrected_envi', corrected, wavelengths)
+          write_pair(fixture / 'CI_QA_FLIGHT_oli_convolved_envi', convolved, wavelengths)
+          render_flightline_panel(fixture, quick=True)
+          PY
+
+      - name: Upload QA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-panel
+          path: |
+            qa_fixture/CI_QA_FLIGHT/*_qa.png
+            qa_fixture/CI_QA_FLIGHT/*_qa.json
