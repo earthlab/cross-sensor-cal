@@ -55,10 +55,14 @@ plugins:
             show_signature: true
             show_source: false
             merge_init_into_class: true
-  - glightbox
-  - minify:
-      minify_html: true
   - macros
+
+extra_css:
+  - https://cdn.jsdelivr.net/npm/glightbox/dist/css/glightbox.min.css
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js
+  - js/glightbox-init.js
 
 markdown_extensions:
   - admonition
