@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/troubleshooting/">
+        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/env/">
       
       
-        <link rel="prev" href="../api/">
+        <link rel="prev" href="../quickstart/">
       
       
-        <link rel="next" href="../dev/contributing/">
+        <link rel="next" href="../pipeline/stages/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -24,7 +24,7 @@
     
     
       
-        <title>Troubleshooting - cross-sensor-cal</title>
+        <title>Environment - cross-sensor-cal</title>
       
     
     
@@ -70,7 +70,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#troubleshooting-by-symptom" class="md-skip">
+        <a href="#environment" class="md-skip">
           Skip to content
         </a>
       
@@ -104,7 +104,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Troubleshooting
+              Environment
             
           </span>
         </div>
@@ -227,9 +227,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../env/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -326,11 +328,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../troubleshooting/" class="md-tabs__link">
         
   
   
@@ -476,10 +476,32 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../env/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Environment
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -490,6 +512,44 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#setup-venv" class="md-nav__link">
+    <span class="md-ellipsis">
+      Setup (venv)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setup-conda" class="md-nav__link">
+    <span class="md-ellipsis">
+      Setup (conda)
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -928,19 +988,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
         
   
   
@@ -951,7 +1002,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1016,7 +1066,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/troubleshooting.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/env.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1024,59 +1074,40 @@
   
 
 
-<blockquote>
-<p>DO NOT EDIT OUTSIDE MARKERS</p>
-</blockquote>
-<!-- FILLME:START -->
-<h1 id="troubleshooting-by-symptom">Troubleshooting (by symptom)<a class="headerlink" href="#troubleshooting-by-symptom" title="Permanent link">&para;</a></h1>
+<h1 id="environment">Environment<a class="headerlink" href="#environment" title="Permanent link">&para;</a></h1>
 <table>
 <thead>
 <tr>
-<th>Symptom</th>
-<th>Likely cause</th>
-<th>Fix</th>
+<th>Component</th>
+<th>Known-good</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>No correction JSON written</td>
-<td>Stage 3 didn’t run or wrong paths</td>
-<td>Re-run Stage 3; verify <code>..._brdfandtopo_corrected_envi.json</code> exists</td>
+<td>Python</td>
+<td>3.10–3.12</td>
 </tr>
 <tr>
-<td>Convolution error: wavelengths</td>
-<td>Missing/garbled HDR wavelength block</td>
-<td>Regenerate ENVI or fix header; re-run Stage 4</td>
+<td>OS</td>
+<td>macOS 13+, Ubuntu 22.04+</td>
 </tr>
 <tr>
-<td>QA fails: ENVI reader missing</td>
-<td>Helper not installed in env</td>
-<td>Install QA helper; run Stage 7 again</td>
-</tr>
-<tr>
-<td>OOM / slow export</td>
-<td>Too many workers or large chunks</td>
-<td>Reduce <code>--max-workers</code>; use <code>--chunksize</code></td>
-</tr>
-<tr>
-<td>QA issues: “Wavelengths not strictly increasing”</td>
-<td>ENVI header wavelengths out of order or missing</td>
-<td>Re-export header from HyTools/ENVI; ensure <code>wavelength</code> block is numeric and ordered</td>
-</tr>
-<tr>
-<td>QA issues: “X% negative pixels”</td>
-<td>Mask gaps or incorrect brightness/BRDF parameters</td>
-<td>Inspect mask rasters, rerun <code>cscal-qa --full</code>, adjust brightness/BRDF inputs</td>
-</tr>
-<tr>
-<td>High RMSE/SAM in QA JSON</td>
-<td>Convolved cube misaligned with corrected cube</td>
-<td>Confirm resample/convolution sensors, regenerate *_convolved_envi products</td>
+<td>Core libs</td>
+<td>numpy, rasterio, gdal, ray, xarray, pandas</td>
 </tr>
 </tbody>
 </table>
-<p>See also: <a href="../pipeline/stages/">Stages</a> • <a href="../pipeline/outputs/">Outputs</a></p>
-<!-- FILLME:END -->
+<h2 id="setup-venv">Setup (venv)<a class="headerlink" href="#setup-venv" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
+pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>pip
+pip<span class="w"> </span>install<span class="w"> </span>cross-sensor-cal
+</code></pre></div>
+<h2 id="setup-conda">Setup (conda)<a class="headerlink" href="#setup-conda" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>cscal<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.11<span class="w"> </span>-y
+conda<span class="w"> </span>activate<span class="w"> </span>cscal
+pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>pip
+pip<span class="w"> </span>install<span class="w"> </span>cross-sensor-cal
+</code></pre></div>
 
 
 

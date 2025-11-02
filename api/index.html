@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/troubleshooting/">
+        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/api/">
       
       
-        <link rel="prev" href="../api/">
+        <link rel="prev" href="../reference/extending/">
       
       
-        <link rel="next" href="../dev/contributing/">
+        <link rel="next" href="../troubleshooting/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -24,7 +24,7 @@
     
     
       
-        <title>Troubleshooting - cross-sensor-cal</title>
+        <title>Python API - cross-sensor-cal</title>
       
     
     
@@ -70,7 +70,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#troubleshooting-by-symptom" class="md-skip">
+        <a href="#python-api" class="md-skip">
           Skip to content
         </a>
       
@@ -104,7 +104,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Troubleshooting
+              Python API
             
           </span>
         </div>
@@ -306,11 +306,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../api/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
           
   
   
@@ -326,11 +328,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../troubleshooting/" class="md-tabs__link">
         
   
   
@@ -855,26 +855,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
             
   
   
@@ -887,7 +892,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             API
@@ -898,10 +903,32 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../api/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Python API
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -912,6 +939,155 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick example
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#brightness-correction-entry-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      Brightness correction entry point
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Brightness correction entry point">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#apply_brightness_correctioncube-masknone-methodpercentile_match" class="md-nav__link">
+    <span class="md-ellipsis">
+      apply_brightness_correction(cube, mask=None, method='percentile_match', ...)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal" class="md-nav__link">
+    <span class="md-ellipsis">
+      cross_sensor_cal
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal.__all__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __all__
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal.__version__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __version__
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal.__getattr__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __getattr__
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal.apply_brightness_correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      apply_brightness_correction
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="apply_brightness_correction">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.apply_brightness_correction--mathematical-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      Mathematical form
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.apply_brightness_correction--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.apply_brightness_correction--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.apply_brightness_correction--examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.apply_brightness_correction--notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -928,19 +1104,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
         
   
   
@@ -951,7 +1118,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1016,7 +1182,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/troubleshooting.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/api/index.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1024,59 +1190,174 @@
   
 
 
+<h1 id="python-api">Python API<a class="headerlink" href="#python-api" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p>DO NOT EDIT OUTSIDE MARKERS</p>
+<p>Use these functions when you need fine-grained control beyond the CLI.</p>
 </blockquote>
-<!-- FILLME:START -->
-<h1 id="troubleshooting-by-symptom">Troubleshooting (by symptom)<a class="headerlink" href="#troubleshooting-by-symptom" title="Permanent link">&para;</a></h1>
-<table>
-<thead>
-<tr>
-<th>Symptom</th>
-<th>Likely cause</th>
-<th>Fix</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>No correction JSON written</td>
-<td>Stage 3 didn’t run or wrong paths</td>
-<td>Re-run Stage 3; verify <code>..._brdfandtopo_corrected_envi.json</code> exists</td>
-</tr>
-<tr>
-<td>Convolution error: wavelengths</td>
-<td>Missing/garbled HDR wavelength block</td>
-<td>Regenerate ENVI or fix header; re-run Stage 4</td>
-</tr>
-<tr>
-<td>QA fails: ENVI reader missing</td>
-<td>Helper not installed in env</td>
-<td>Install QA helper; run Stage 7 again</td>
-</tr>
-<tr>
-<td>OOM / slow export</td>
-<td>Too many workers or large chunks</td>
-<td>Reduce <code>--max-workers</code>; use <code>--chunksize</code></td>
-</tr>
-<tr>
-<td>QA issues: “Wavelengths not strictly increasing”</td>
-<td>ENVI header wavelengths out of order or missing</td>
-<td>Re-export header from HyTools/ENVI; ensure <code>wavelength</code> block is numeric and ordered</td>
-</tr>
-<tr>
-<td>QA issues: “X% negative pixels”</td>
-<td>Mask gaps or incorrect brightness/BRDF parameters</td>
-<td>Inspect mask rasters, rerun <code>cscal-qa --full</code>, adjust brightness/BRDF inputs</td>
-</tr>
-<tr>
-<td>High RMSE/SAM in QA JSON</td>
-<td>Convolved cube misaligned with corrected cube</td>
-<td>Confirm resample/convolution sensors, regenerate *_convolved_envi products</td>
-</tr>
-</tbody>
-</table>
-<p>See also: <a href="../pipeline/stages/">Stages</a> • <a href="../pipeline/outputs/">Outputs</a></p>
-<!-- FILLME:END -->
+<h2 id="quick-example">Quick example<a class="headerlink" href="#quick-example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal</span><span class="w"> </span><span class="kn">import</span> <span class="n">merge_duckdb</span>
+<span class="n">merge_duckdb</span><span class="p">([</span><span class="s2">&quot;parquet/a.parquet&quot;</span><span class="p">,</span><span class="s2">&quot;parquet/b.parquet&quot;</span><span class="p">],</span> <span class="s2">&quot;merged/all.parquet&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="brightness-correction-entry-point">Brightness correction entry point<a class="headerlink" href="#brightness-correction-entry-point" title="Permanent link">&para;</a></h2>
+<h3 id="apply_brightness_correctioncube-masknone-methodpercentile_match"><code>apply_brightness_correction(cube, mask=None, method='percentile_match', ...)</code><a class="headerlink" href="#apply_brightness_correctioncube-masknone-methodpercentile_match" title="Permanent link">&para;</a></h3>
+<p>Normalizes per-band brightness for hyperspectral cubes before BRDF/topo stages.
+The docstring walks through the affine model, parameter choices, and examples.
+Use it when you need to harmonise tiles prior to the full pipeline; the QA JSON
+will surface the per-band gain/offsets when this stage runs.</p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="cross_sensor_cal"></a>
+    <div class="doc doc-contents first">
+
+        <p>Cross-Sensor Calibration public package surface.</p>
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="cross_sensor_cal.__all__" class="doc doc-heading">
+            <code class=" language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">__all__</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;apply_brightness_correction&#39;</span><span class="p">]))</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#cross_sensor_cal.__all__" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="cross_sensor_cal.__version__" class="doc doc-heading">
+            <code class=" language-python"><span class="n">__version__</span> <span class="o">=</span> <span class="s1">&#39;2.2.0&#39;</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#cross_sensor_cal.__version__" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="cross_sensor_cal.__getattr__" class="doc doc-heading">
+            <code class=" language-python"><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">)</span></code>
+
+<a href="#cross_sensor_cal.__getattr__" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="cross_sensor_cal.apply_brightness_correction" class="doc doc-heading">
+            <code class=" language-python"><span class="n">apply_brightness_correction</span><span class="p">(</span><span class="n">cube</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;percentile_match&#39;</span><span class="p">,</span> <span class="n">reference_cube</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reference_stats</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">p_lo</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">p_hi</span><span class="o">=</span><span class="mf">95.0</span><span class="p">,</span> <span class="n">clip_min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">clip_max</span><span class="o">=</span><span class="mf">1.2</span><span class="p">,</span> <span class="n">huber_delta</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span></code>
+
+<a href="#cross_sensor_cal.apply_brightness_correction" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply a per-band brightness correction to hyperspectral/multispectral data.</p>
+<p>This normalizes scene brightness under varying illumination (sun angle, terrain shadow)
+or sensor gain drift. Typically used after ENVI export and before BRDF correction.</p>
+<h4 id="cross_sensor_cal.apply_brightness_correction--mathematical-form">Mathematical form<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--mathematical-form" title="Permanent link">&para;</a></h4>
+<p>For band b:
+    y_corr[b] = gain[b] * y_raw[b] + offset[b]
+where gain/offset come from robust percentile matching or regression vs a reference.</p>
+<h4 id="cross_sensor_cal.apply_brightness_correction--parameters">Parameters<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--parameters" title="Permanent link">&para;</a></h4>
+<p>cube : np.ndarray
+    Array shaped (B, Y, X) or (Y, X, B).
+mask : np.ndarray, optional
+    Boolean mask: True = valid pixel used for stats.
+method : {'percentile_match', 'linear_regression', 'unit_gain_offset_only'}, default='percentile_match'
+    Strategy for estimating per-band gain/offset.
+reference_cube : np.ndarray, optional
+    Reference to match brightness against (required for 'linear_regression').
+reference_stats : tuple[np.ndarray, np.ndarray], optional
+    (p_lo, p_hi) per band for reference distribution (each shape (B,)).
+p_lo, p_hi : float
+    Robust percentile bounds, default (5, 95).
+clip_min, clip_max : float
+    Optional post-correction clipping, default (0.0, 1.2).
+huber_delta : float
+    Huber delta for robust regression.</p>
+<h4 id="cross_sensor_cal.apply_brightness_correction--returns">Returns<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--returns" title="Permanent link">&para;</a></h4>
+<p>np.ndarray
+    Corrected cube with same shape as input.
+dict
+    Metadata with per-band gain/offset and diagnostics.</p>
+<h4 id="cross_sensor_cal.apply_brightness_correction--examples">Examples<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--examples" title="Permanent link">&para;</a></h4>
+<blockquote>
+<blockquote>
+<blockquote>
+<p>corr, meta = apply_brightness_correction(cube, mask=mask)
+corr2, meta = apply_brightness_correction(cube, reference_cube=panel, method='linear_regression')</p>
+</blockquote>
+</blockquote>
+</blockquote>
+<h4 id="cross_sensor_cal.apply_brightness_correction--notes">Notes<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--notes" title="Permanent link">&para;</a></h4>
+<ul>
+<li>NaNs preserved. Bandwise affine transform.</li>
+<li>See also: topo+BRDF correction stage and QA JSON (gain/offset are included there when run).</li>
+</ul>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 

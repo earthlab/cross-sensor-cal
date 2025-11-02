@@ -14,13 +14,10 @@
       "_landsat_tm_envi.hdr",
       "_landsat_tm_envi.img",
       "_micasense*_envi.img",
-      "_micasense*_envi.parquet",
       "_micasense_envi.hdr",
-      "_micasense_envi.img",
-      "_qa.json"
+      "_micasense_envi.img"
     ],
     "sensors": [
-      "MicaSense",
       "MicaSense,",
       "MicaSense,,",
       "MicaSense,,,",
@@ -28,6 +25,7 @@
       "MicaSense,,,,,",
       "MicaSense,,,,,,",
       "MicaSense,,,,,,,",
+      "MicaSense]",
       "Micasense,",
       "Micasense,,",
       "Micasense,,,",
@@ -43,9 +41,7 @@
       "micasense'],,,,,",
       "micasense'],,,,,,",
       "micasense*_envi.img,",
-      "micasense*_envi.img`",
       "micasense*_envi.img`,",
-      "micasense*_envi.parquet\")))",
       "micasense_envi.hdr",
       "micasense_envi.hdr,",
       "micasense_envi.hdr,,",
@@ -86,7 +82,6 @@
   "notes": [],
   "naming_rule": "<prefix>_merged_pixel_extraction.parquet",
   "stages_found": [
-    "[cscal-qa] \u2705 QA panels written to: {target.resolve()}",
     "[merge] \u26a0\ufe0f QA panel after merge failed for {prefix}: {e}",
     "[merge] \ud83d\uddbc\ufe0f  QA panel \u2192 {out_png_path} ",
     "\u23ed\ufe0f Parquet already present for %s -> %s (skipping)",
@@ -112,17 +107,13 @@
     "\ud83c\udfaf Convolving corrected reflectance for %s",
     "\ud83d\udce6 ENVI export not found or invalid for %s, generating from %s",
     "\ud83d\udce6 Parquet export for %s ...",
-    "\ud83d\udd0e ENVI export target for %s is %s / %s",
-    "\ud83d\uddbc\ufe0f  Overwriting QA panel -> %s",
-    "\ud83d\uddbc\ufe0f  Writing QA panel -> %s",
-    "\ud83d\uddbc\ufe0f  Wrote QA panel for %s -> %s"
+    "\ud83d\udd0e ENVI export target for %s is %s / %s"
   ],
   "entry_points": {
     "cscal-download": "cross_sensor_cal.cli:download_main",
     "cscal-pipeline": "cross_sensor_cal.cli.pipeline_cli:main",
     "cscal-qa": "cross_sensor_cal.cli.qa_cli:main",
     "cscal-recover-raw": "cross_sensor_cal.cli.recover_cli:main",
-    "cscal-qa-metrics": "cross_sensor_cal.qa_metrics:main",
     "cscal-qa-dashboard": "cross_sensor_cal.qa_dashboard:main",
     "csc-merge-duckdb": "cross_sensor_cal.merge_duckdb:main"
   },
@@ -148,10 +139,6 @@
       "--resampled-glob",
       "--write-feather"
     ],
-    "qa_metrics.py": [
-      "--base-folder",
-      "--flight-stem"
-    ],
     "standard_resample.py": [
       "--hdr_path",
       "--json_file",
@@ -161,9 +148,12 @@
     ],
     "qa_cli.py": [
       "--base-folder",
-      "--no-overwrite",
+      "--full",
+      "--n-sample",
       "--out-dir",
-      "--overwrite"
+      "--quick",
+      "--rgb-bands",
+      "--save-json"
     ],
     "recover_cli.py": [
       "--base-folder",

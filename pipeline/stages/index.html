@@ -13,14 +13,14 @@
         <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/pipeline/stages/">
       
       
-        <link rel="prev" href="../../faq/">
+        <link rel="prev" href="../../env/">
       
       
         <link rel="next" href="../outputs/">
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
     
     
       
@@ -48,6 +48,8 @@
     
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/glightbox/dist/css/glightbox.min.css">
     
     <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
@@ -80,9 +82,7 @@
     
       
 
-  
-
-<header class="md-header md-header--shadow" data-md-component="header">
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="cross-sensor-cal" class="md-header__button md-logo" aria-label="cross-sensor-cal" data-md-component="logo">
       
@@ -141,6 +141,8 @@
         </button>
       </nav>
       
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
     </form>
     <div class="md-search__output">
       <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
@@ -161,7 +163,7 @@
         <a href="https://github.com/earthlab/cross-sensor-cal" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
   </div>
   <div class="md-source__repository">
     GitHub
@@ -178,6 +180,211 @@
       
         
           
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quickstart
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../env/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Environment
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Pipeline
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../usage/cli/" class="md-tabs__link">
+          
+  
+  
+  Usage
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/configuration/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/" class="md-tabs__link">
+          
+  
+  
+  API
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../dev/contributing/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../dev/doc_drift/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Doc Drift
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
         
       
       <main class="md-main" data-md-component="main">
@@ -191,8 +398,12 @@
                     
 
 
+  
 
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="cross-sensor-cal" class="md-nav__button md-logo" aria-label="cross-sensor-cal" data-md-component="logo">
       
@@ -207,7 +418,7 @@
       <a href="https://github.com/earthlab/cross-sensor-cal" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
   </div>
   <div class="md-source__repository">
     GitHub
@@ -219,44 +430,6 @@
     
       
       
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
-        
-          
-          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    Welcome
-    
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_1">
-            <span class="md-nav__icon md-icon"></span>
-            Welcome
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
   
   
   
@@ -276,33 +449,9 @@
     </li>
   
 
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../overview/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Project overview
     
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
+      
+      
   
   
   
@@ -322,21 +471,20 @@
     </li>
   
 
-              
-            
-              
-                
+    
+      
+      
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../env-setup/" class="md-nav__link">
+      <a href="../../env/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Environment setup
+    Environment
     
   </span>
   
@@ -345,37 +493,6 @@
     </li>
   
 
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../faq/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    FAQ
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
     
       
       
@@ -389,15 +506,23 @@
     
     
     
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
             
   
   
@@ -410,8 +535,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_2">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             Pipeline
           </label>
@@ -433,6 +558,19 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Stages
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -444,6 +582,97 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-download-neon-hdf5" class="md-nav__link">
+    <span class="md-ellipsis">
+      1) Download NEON HDF5
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-export-to-envi" class="md-nav__link">
+    <span class="md-ellipsis">
+      2) Export to ENVI
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-topographic-brdf-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      3) Topographic + BRDF correction
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-cross-sensor-convolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      4) Cross-sensor convolution
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-parquet-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      5) Parquet export
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-duckdb-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      6) DuckDB merge
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-qa-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      7) QA panel
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-naming-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      File-naming at a glance
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -513,15 +742,20 @@
     
     
     
+      
+      
+        
+      
+    
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
             
   
   
@@ -534,8 +768,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             Usage
           </label>
@@ -571,35 +805,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/parquet-preview/" class="md-nav__link">
+      <a href="../../usage/parquet_preview/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     Parquet preview
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../troubleshooting/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Troubleshooting
     
   </span>
   
@@ -627,15 +838,20 @@
     
     
     
+      
+      
+        
+      
+    
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
             
   
   
@@ -648,8 +864,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             Reference
           </label>
@@ -662,7 +878,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../configuration/" class="md-nav__link">
+      <a href="../../reference/configuration/" class="md-nav__link">
         
   
   
@@ -685,7 +901,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../schemas/" class="md-nav__link">
+      <a href="../../reference/schemas/" class="md-nav__link">
         
   
   
@@ -708,7 +924,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../validation/" class="md-nav__link">
+      <a href="../../reference/validation/" class="md-nav__link">
         
   
   
@@ -731,7 +947,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/" class="md-nav__link">
+      <a href="../../reference/extending/" class="md-nav__link">
         
   
   
@@ -764,15 +980,20 @@
     
     
     
+      
+      
+        
+      
+    
     
     <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -785,8 +1006,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             API
           </label>
@@ -799,35 +1020,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/merge_duckdb/" class="md-nav__link">
+      <a href="../../api/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    merge_duckdb
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../api/qa_plots/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    qa_plots
+    Python API
     
   </span>
   
@@ -851,40 +1049,24 @@
   
   
   
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
-        
-          
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
-            
   
   
   <span class="md-ellipsis">
-    Dev
+    Troubleshooting
     
   </span>
   
 
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            Dev
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
+      </a>
+    </li>
+  
+
+    
+      
+      
   
   
   
@@ -904,34 +1086,25 @@
     </li>
   
 
-              
-            
-              
-                
+    
+      
+      
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../dev/doc_drift_report/" class="md-nav__link">
+      <a href="../../dev/doc_drift/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Doc Drift Report
+    Doc Drift
     
   </span>
   
 
       </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
     </li>
   
 
@@ -942,24 +1115,6 @@
                 </div>
               </div>
             
-            
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
-                <div class="md-sidebar__scrollwrap">
-                  <div class="md-sidebar__inner">
-                    
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-</nav>
-                  </div>
-                </div>
-              </div>
             
           
           
@@ -979,15 +1134,76 @@
 
 
 <h1 id="pipeline-stages">Pipeline Stages<a class="headerlink" href="#pipeline-stages" title="Permanent link">&para;</a></h1>
-<ol>
-<li><strong>Download</strong> <code>*_directional_reflectance.h5</code></li>
-<li><strong>Export to ENVI</strong> → <code>*_envi.img/.hdr</code></li>
-<li><strong>Topographic + BRDF correction</strong> → <code>*_brdfandtopo_corrected_envi.img/.hdr</code> (+ JSON)</li>
-<li><strong>Cross-sensor convolution</strong> (TM, ETM+, OLI/OLI-2, MicaSense variants)</li>
-<li><strong>Parquet export</strong> for all ENVI products</li>
-<li><strong>DuckDB Merge (new)</strong> → <strong><code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code></strong></li>
-<li><strong>QA Panel (restored)</strong> → <strong><code>&lt;prefix&gt;_qa.png</code></strong> (triggered post-merge)</li>
-</ol>
+<blockquote>
+<p>TL;DR: This pipeline takes NEON hyperspectral HDF5, produces corrected ENVI cubes, optionally convolves them to other sensors, then exports tidy Parquet for analysis—plus a visual QA panel.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code>flowchart TD
+  A[H5 download\n*_directional_reflectance.h5] --&gt; B[ENVI export\n*_envi.img/.hdr]
+  B --&gt; C[Topo + BRDF correction\n*_brdfandtopo_corrected_envi.* + JSON]
+  C --&gt; D[Cross-sensor convolution\nTM/ETM+/OLI/OLI-2/MicaSense]
+  D --&gt; E[Parquet export\nall ENVI products]
+  E --&gt; F[DuckDB merge\n&lt;prefix&gt;_merged_pixel_extraction.parquet]
+  F --&gt; G[QA panel\n&lt;prefix&gt;_qa.png]
+</code></pre></div>
+<h2 id="1-download-neon-hdf5">1) Download NEON HDF5<a class="headerlink" href="#1-download-neon-hdf5" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Pull <code>*_directional_reflectance.h5</code> tiles.<br />
+<strong>Inputs → Outputs</strong> H5 → same (no transform).<br />
+<strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>download<span class="w"> </span>--site<span class="w"> </span>NIWO<span class="w"> </span>--year<span class="w"> </span><span class="m">2023</span><span class="w"> </span>--tiles<span class="w"> </span>L019-1<span class="w"> </span>L020-1
+</code></pre></div>
+<strong>Pitfalls</strong> Existing files are skipped (expected).</p>
+<h2 id="2-export-to-envi">2) Export to ENVI<a class="headerlink" href="#2-export-to-envi" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Convert H5 → ENVI <code>.img/.hdr</code>.<br />
+<strong>Inputs → Outputs</strong> H5 → <code>*_directional_reflectance_envi.img/.hdr</code>.<br />
+<strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>envi-export<span class="w"> </span>--in<span class="w"> </span>data/*.h5<span class="w"> </span>--out<span class="w"> </span>envi/
+</code></pre></div>
+<strong>Pitfalls</strong> Disk usage; <code>_envi</code> suffix used downstream.</p>
+<h2 id="3-topographic-brdf-correction">3) Topographic + BRDF correction<a class="headerlink" href="#3-topographic-brdf-correction" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Apply topo/BRDF; write sidecar JSON with parameters.
+<em>Optional: run</em> <code>apply_brightness_correction</code> <em>on cubes in Python before this stage
+to harmonise illumination; the QA JSON will expose the per-band gain/offsets.</em><br />
+<strong>Inputs → Outputs</strong> <code>*_envi.img/.hdr</code> → <code>*_brdfandtopo_corrected_envi.img/.hdr</code> + <code>*_brdfandtopo_corrected_envi.json</code>.<br />
+<strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>correct<span class="w"> </span>--in<span class="w"> </span>envi/*_envi.img<span class="w"> </span>--dtm<span class="w"> </span>dtm/NIWO.tif<span class="w"> </span>--out<span class="w"> </span>corrected/
+</code></pre></div>
+<strong>Pitfalls</strong> If JSON is missing, correction didn’t run; fix paths and rerun.</p>
+<h2 id="4-cross-sensor-convolution">4) Cross-sensor convolution<a class="headerlink" href="#4-cross-sensor-convolution" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Resample to target sensor bandpasses.<br />
+<strong>Inputs → Outputs</strong> corrected ENVI → <code>*_..._envi_&lt;sensor&gt;.img/.hdr</code>.<br />
+<strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>convolve<span class="w"> </span>--in<span class="w"> </span>corrected/*_brdfandtopo_corrected_envi.img<span class="w"> </span>--sensor<span class="w"> </span>OLI<span class="w"> </span>--out<span class="w"> </span>convolved/
+</code></pre></div>
+<strong>Pitfalls</strong> HDR must contain a valid wavelength block.</p>
+<h2 id="5-parquet-export">5) Parquet export<a class="headerlink" href="#5-parquet-export" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Flatten ENVI to tidy Parquet.<br />
+<strong>Inputs → Outputs</strong> ENVI products → <code>*.parquet</code>.<br />
+<strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>export-parquet<span class="w"> </span>--in<span class="w"> </span>corrected/*.img<span class="w"> </span>convolved/*.img<span class="w"> </span>--out<span class="w"> </span>parquet/
+</code></pre></div>
+<strong>Pitfalls</strong> Use <code>--chunksize</code> to keep memory low.</p>
+<h2 id="6-duckdb-merge">6) DuckDB merge<a class="headerlink" href="#6-duckdb-merge" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Merge parquet tables into one analysis-ready file.<br />
+<strong>Inputs → Outputs</strong> <code>parquet/*.parquet</code> → <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code>.<br />
+<strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>merge-duckdb<span class="w"> </span>--in<span class="w"> </span>parquet/*.parquet<span class="w"> </span>--out<span class="w"> </span>merged/&lt;prefix&gt;_merged_pixel_extraction.parquet
+</code></pre></div>
+<strong>Pitfalls</strong> Ensure filenames follow <a href="../outputs/">Outputs</a> conventions before merging.</p>
+<h2 id="7-qa-panel">7) QA panel<a class="headerlink" href="#7-qa-panel" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Visual checks and metrics; saves <code>&lt;prefix&gt;_qa.png</code> and <code>&lt;prefix&gt;_qa.json</code>.
+<strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>cscal-qa<span class="w"> </span>--base-folder<span class="w"> </span>processed/flightlines<span class="w"> </span>--quick
+</code></pre></div>
+<strong>Pitfalls</strong> Deterministic quick mode samples ~25k pixels; rerun with <code>--full</code> if you need denser stats.</p>
+<h2 id="file-naming-at-a-glance">File-naming at a glance<a class="headerlink" href="#file-naming-at-a-glance" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Raw H5 → <code>..._directional_reflectance.h5</code></li>
+<li>ENVI export → <code>..._directional_reflectance_envi.img/.hdr</code></li>
+<li>Corrected → <code>..._brdfandtopo_corrected_envi.img/.hdr</code> + JSON</li>
+<li>Convolved → <code>..._brdfandtopo_corrected_envi_&lt;sensor&gt;.img/.hdr</code></li>
+<li>Merged parquet → <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code></li>
+<li>QA → <code>&lt;prefix&gt;_qa.png</code></li>
+</ul>
 
 
 
@@ -1005,6 +1221,8 @@
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
         
@@ -1024,6 +1242,22 @@
   
 </div>
       
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/earthlab/cross-sensor-cal" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
     </div>
   </div>
 </footer>
@@ -1036,10 +1270,14 @@
     
     
       
-      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.tracking", "content.code.copy", "content.action.edit"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
+      
+        <script src="../../js/glightbox-init.js"></script>
       
     
   </body>
