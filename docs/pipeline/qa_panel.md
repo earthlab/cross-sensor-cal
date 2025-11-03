@@ -1,16 +1,31 @@
 # QA panel
 
-The QA panel now couples a metrics JSON file with the annotated PNG so that
+The QA panel couples a metrics JSON file with an annotated PNG so that
 engineering and science teams can track both spectral statistics and the visual
-context for every flightline. In addition to the PNG, the pipeline writes a
-three-page PDF report (`<prefix>_qa.pdf`) that includes:
+context for every flightline. See [How to Interpret the Panel](#how-to-interpret-the-panel)
+and the [validation reference](../reference/validation.md) for deeper guidance
+on each metric.
 
-- **Page 1:** ENVI product overview (one row of RGB quicklooks for each ENVI
-  cube discovered).
-- **Page 2:** Topographic and BRDF diagnostics (histogram/Δ plots plus geometry
-  summaries).
-- **Page 3:** Remaining QA diagnostics (convolution scatter, header/mask
-  summaries, and issues list).
+## Multi-page QA report
+
+In addition to the single PNG QA panel (`<prefix>_qa.png`), the pipeline now
+writes a multi-page PDF report (`<prefix>_qa.pdf`) with three pages:
+
+1. **Page 1 – ENVI overview**  
+   One row with one panel per ENVI product. This is a quick visual check that
+   all ENVI files exist and render correctly.
+
+2. **Page 2 – Topographic & BRDF diagnostics**  
+   - Row 1: pre vs post histograms and Δ median vs wavelength for the combined
+     topographic + BRDF correction stage.  
+   - Row 2: summaries of topographic (slope/aspect) and BRDF geometry
+     (solar/sensor angles) derived from the correction JSON.
+
+3. **Page 3 – Remaining QA diagnostics**  
+   - Convolution scatter plots (expected vs computed bands).  
+   - Header and wavelength integrity summary.  
+   - Mask coverage & negatives summary.  
+   - Issues/warnings, including brightness coefficients that were applied.
 
 ---
 
@@ -32,6 +47,27 @@ It provides both a visual and quantitative summary of how well each product beha
 | **Convolution Accuracy (per target sensor)** | RMSE and Spectral Angle Mapper (SAM) between expected vs computed bands | Confirms spectral resampling is physically consistent. High RMSE or large SAM (>0.05 radians) indicates wavelength misalignment or incorrect response functions. |
 | **Mask Coverage** | % of valid pixels used for metrics | Low valid coverage (<60%) signals missing masks or unfiltered NaNs. |
 | **Histogram Shape Consistency** | Visual histogram overlay of pre/post corrections | Skewed or bimodal shapes suggest scene heterogeneity or masking issues. |
+
+---
+
+### Brightness coefficients
+
+When NEON data are convolved to Landsat bands, we optionally apply small
+per-band brightness adjustments so that Landsat-like products match a
+MicaSense reference.
+
+- Coefficients are stored in `landsat_to_micasense.json` (units: percent).
+- The adjustment is multiplicative:
+
+  `L_adj = L_raw * (1 + coeff / 100)`, where negative coefficients darken
+  Landsat bands slightly.
+
+- Applied coefficients are recorded in the QA JSON under
+  `brightness_coefficients.landsat_to_micasense` and displayed on Page 3 of
+  the QA PDF.
+
+This makes it easy to verify when a brightness adjustment was applied and to
+audit the exact per-band values.
 
 ---
 

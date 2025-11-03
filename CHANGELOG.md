@@ -1,3 +1,20 @@
+## [2.3.0] – 2025-11-03
+### Added
+- Config-driven brightness coefficients for Landsat→MicaSense (`landsat_to_micasense.json`) and helper loader.
+- Automatic per-band brightness adjustment applied to Landsat-convolved products, recorded in QA JSON and brightness tables.
+- Multi-page QA report (`*_qa.pdf`) with:
+  - Page 1: ENVI product overview (one row, one panel per ENVI file).
+  - Page 2: topographic and BRDF diagnostics (two rows).
+  - Page 3: remaining QA diagnostics (convolution accuracy, header/mask summaries, issues, brightness coefficients).
+- Expanded QA JSON metrics, including header integrity, mask coverage, Δ reflectance, convolution error, and brightness coefficients.
+
+### Changed
+- ENVI export and pipeline logs now use affirmative, progress-oriented wording (e.g., “creating new ENVI export” instead of “not found or invalid”).
+- CI simplified to four main checks on PRs: `CI / lite`, `CI / unit`, `Docs Drift Check / audit`, and `QA quick check / qa`.
+
+### Fixed
+- Duplicate QA/pytest workflows removed; QA quick check now runs once per PR (and optionally once per push to `main`).
+
 ## [2025-10-30] Added Merge Stage + Restored QA Panel
 
 - Added new DuckDB-based merge step combining original, corrected, and resampled pixel tables.
