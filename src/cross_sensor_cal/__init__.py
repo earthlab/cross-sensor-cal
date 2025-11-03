@@ -20,8 +20,8 @@ __all__ = sorted(
         + [
             "apply_brightness_correction",
             load_brightness_coefficients.__name__,
-            "make_sensor_vs_neon_panels",
-            "make_micasense_vs_landsat_panels",
+            make_sensor_vs_neon_panels.__name__,
+            make_micasense_vs_landsat_panels.__name__,
         ]
     )
 )
