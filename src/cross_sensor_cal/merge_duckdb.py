@@ -187,25 +187,33 @@ def _register_union(
     meta_candidates: Sequence[str],
 ) -> None:
     escaped_name = _quote_identifier(f"{name}_raw")
-    path_list = [Path(p) for p in paths]
+    path_list = sorted(Path(p) for p in paths)
+
     if not path_list:
-        select_cols = ["NULL::VARCHAR AS pixel_id"]
-        for col in meta_candidates:
-            if col == "pixel_id":
-                continue
-            select_cols.append(f"NULL AS {_quote_identifier(col)}")
         con.execute(
-            f"CREATE OR REPLACE VIEW {escaped_name} AS SELECT {', '.join(select_cols)} WHERE 1=0"
+            f"CREATE OR REPLACE VIEW {escaped_name} AS SELECT * FROM (SELECT 1) WHERE 1=0"
+        )
+    elif len(path_list) == 1:
+        p = path_list[0]
+        con.execute(
+            "CREATE OR REPLACE VIEW "
+            + escaped_name
+            + " AS SELECT * FROM read_parquet('"
+            + _quote_path(p.as_posix())
+            + "', union_by_name = TRUE)"
         )
     else:
-        selects: List[str] = []
-        for p in path_list:
-            selects.append(
-                "SELECT * FROM read_parquet('"
-                + _quote_path(p.as_posix())
-                + "', union_by_name=True)"
-            )
-        con.execute(f"CREATE OR REPLACE VIEW {escaped_name} AS " + " UNION ALL ".join(selects))
+        files_array = ", ".join(
+            "'" + _quote_path(p.as_posix()) + "'" for p in path_list
+        )
+        sql = (
+            "CREATE OR REPLACE VIEW "
+            + escaped_name
+            + " AS SELECT * FROM read_parquet(["
+            + files_array
+            + "], union_by_name = TRUE)"
+        )
+        con.execute(sql)
 
     raw_columns = _table_columns(con, f"{name}_raw")
     raw_column_set = set(raw_columns)
