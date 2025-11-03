@@ -73,6 +73,7 @@ from cross_sensor_cal.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
+from cross_sensor_cal.brightness_config import load_brightness_coefficients
 from cross_sensor_cal.paths import normalize_brdf_model_path
 from cross_sensor_cal.qa_plots import render_flightline_panel
 from cross_sensor_cal.resample import resample_chunk_to_sensor
@@ -570,6 +571,43 @@ def _build_resample_header_text(header: dict) -> str:
     return "\n".join(lines)
 
 
+def _sensor_requires_landsat_adjustment(sensor_name: str | None) -> bool:
+    if not sensor_name:
+        return False
+    lowered = sensor_name.lower()
+    return "landsat" in lowered
+
+
+def _apply_landsat_brightness_adjustment(
+    cube: np.ndarray,
+    system_pair: str = "landsat_to_micasense",
+) -> dict[int, float]:
+    """Adjust Landsat-convolved cube brightness relative to MicaSense."""
+
+    coeffs_pct = load_brightness_coefficients(system_pair)
+    if cube.ndim != 3:
+        raise ValueError("Expected 3D cube for brightness adjustment")
+
+    band_axis = int(np.argmin(cube.shape))
+    if cube.shape[band_axis] > 16:
+        band_axis = 0
+
+    if band_axis != 0:
+        cube = np.moveaxis(cube, band_axis, 0)
+
+    bands = cube.shape[0]
+    applied: dict[int, float] = {}
+
+    for band_idx, coeff_pct in coeffs_pct.items():
+        zero_based = band_idx - 1
+        if 0 <= zero_based < bands:
+            frac = coeff_pct / 100.0
+            cube[zero_based] = cube[zero_based] * (1.0 + frac)
+            applied[band_idx] = coeff_pct
+
+    return applied
+
+
 def convolve_resample_product(
     corrected_hdr_path: Path,
     sensor_srf: dict[str, np.ndarray],
@@ -580,7 +618,9 @@ def convolve_resample_product(
     *,
     interactive_mode: bool = True,
     log_every: int = 25,
-) -> None:
+    sensor_name: str | None = None,
+    brightness_system_pair: str | None = None,
+) -> dict[str, dict[int, float]]:
     src_header = _parse_envi_header(corrected_hdr_path)
     try:
         samples = int(src_header["samples"])  # type: ignore[index]
@@ -627,6 +667,8 @@ def convolve_resample_product(
     out_img_path = out_stem_resampled.with_suffix(".img")
     out_img_path.parent.mkdir(parents=True, exist_ok=True)
     mm_out = np.memmap(out_img_path, dtype="float32", mode="w+", shape=(out_bands, lines, samples))
+
+    brightness_map: dict[str, dict[int, float]] = {}
 
     nodata_value = src_header.get("data ignore value")
     nodata_float: float | None
@@ -686,6 +728,12 @@ def convolve_resample_product(
     finally:
         reporter.close()
 
+    if _sensor_requires_landsat_adjustment(sensor_name):
+        system_pair = brightness_system_pair or "landsat_to_micasense"
+        applied_coeffs = _apply_landsat_brightness_adjustment(mm_out, system_pair=system_pair)
+        if applied_coeffs:
+            brightness_map[system_pair] = applied_coeffs
+
     mm_out.flush()
     del mm_out
     del mm
@@ -706,11 +754,20 @@ def convolve_resample_product(
         ),
     }
 
+    if brightness_map:
+        serialized = {
+            system_pair: {str(b): float(v) for b, v in coeffs.items()}
+            for system_pair, coeffs in brightness_map.items()
+        }
+        out_header["brightness_coefficients"] = json.dumps(serialized, sort_keys=True)
+
     out_header = {k: v for k, v in out_header.items() if v is not None}
 
     hdr_text = _build_resample_header_text(out_header)
     out_hdr_path = out_stem_resampled.with_suffix(".hdr")
     out_hdr_path.write_text(hdr_text, encoding="utf-8")
+
+    return brightness_map
 
 
 def _normalize_product_code(value: str | None) -> str:
@@ -1014,16 +1071,17 @@ def write_resampled_product(
     corrected_hdr_path: Path,
     interactive_mode: bool = True,
     log_every: int = 25,
-) -> None:
+) -> dict[str, dict[int, float]]:
     out_path = Path(out_path)
     out_stem = out_path.with_suffix("")
-    convolve_resample_product(
+    return convolve_resample_product(
         corrected_hdr_path=corrected_hdr_path,
         sensor_srf=arr,
         out_stem_resampled=out_stem,
         progress_label=f"🧪 {sensor_name} tiles",
         interactive_mode=interactive_mode,
         log_every=log_every,
+        sensor_name=sensor_name,
     )
 
 
@@ -1036,7 +1094,8 @@ def write_resampled_envi_cube(
     progress_label: str | None = None,
     interactive_mode: bool = True,
     log_every: int = 25,
-) -> None:
+    sensor_name: str | None = None,
+) -> dict[str, dict[int, float]]:
     """Persist a resampled sensor bandstack to ENVI ``.img``/``.hdr`` files."""
 
     out_img_path = Path(img_path)
@@ -1045,13 +1104,14 @@ def write_resampled_envi_cube(
     out_hdr_path.parent.mkdir(parents=True, exist_ok=True)
 
     out_stem = out_img_path.with_suffix("")
-    convolve_resample_product(
+    metadata = convolve_resample_product(
         corrected_hdr_path=corrected_hdr_path,
         sensor_srf=bandstack_array,
         out_stem_resampled=out_stem,
         progress_label=progress_label,
         interactive_mode=interactive_mode,
         log_every=log_every,
+        sensor_name=sensor_name,
     )
 
     expected_img = out_stem.with_suffix(".img")
@@ -1074,6 +1134,8 @@ def write_resampled_envi_cube(
         except Exception:
             logger.exception("Failed to rename resampled header to %s", out_hdr_path)
             raise
+
+    return metadata
 
 
 def stage_download_h5(
@@ -1544,6 +1606,7 @@ def stage_convolve_all_sensors(
                 corrected_hdr_path=corrected_hdr,
                 progress_label=f"🧪 {sensor_name} tiles",
                 interactive_mode=not parallel_mode,
+                sensor_name=resolved_name,
             )
 
             if not is_valid_envi_pair(out_img, out_hdr):

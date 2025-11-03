@@ -3,12 +3,22 @@ from __future__ import annotations
 
 from importlib import import_module
 
+from .brightness_config import load_brightness_coefficients
+
 __version__ = "2.2.0"
 
 __all__ = ["__version__"]
 
 
-__all__ = sorted(set(__all__ + ["apply_brightness_correction"]))
+__all__ = sorted(
+    set(
+        __all__
+        + [
+            "apply_brightness_correction",
+            load_brightness_coefficients.__name__,
+        ]
+    )
+)
 
 def __getattr__(name: str):  # pragma: no cover - thin lazy import helper
     if name == "apply_brightness_correction":
