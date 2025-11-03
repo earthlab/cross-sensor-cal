@@ -69,6 +69,31 @@ from contextlib import contextmanager
 
 import numpy as np
 
+from cross_sensor_cal.brdf_topo import (
+    apply_brdf_topo_core,
+    build_correction_parameters_dict,
+)
+from cross_sensor_cal.paths import normalize_brdf_model_path
+from cross_sensor_cal.qa_plots import render_flightline_panel
+from cross_sensor_cal.resample import resample_chunk_to_sensor
+from cross_sensor_cal.utils import get_package_data_path
+from cross_sensor_cal.utils_checks import is_valid_json
+
+from ..envi_download import download_neon_file
+from ..file_sort import generate_file_move_list
+from ..mask_raster import mask_raster_with_polygons
+from ..merge_duckdb import merge_flightline
+from ..neon_to_envi import neon_to_envi_no_hytools
+from ..polygon_extraction import control_function_for_extraction
+from ..progress_utils import TileProgressReporter
+from ..standard_resample import translate_to_other_sensors
+from ..utils.naming import get_flight_paths, get_flightline_products
+from ..file_types import (
+    NEONReflectanceBRDFCorrectedENVIFile,
+    NEONReflectanceENVIFile,
+    NEONReflectanceResampledENVIFile,
+)
+
 # ---------------------------------------------------------------------
 # Logging setup (safe even if module imported multiple times)
 # ---------------------------------------------------------------------
@@ -416,30 +441,6 @@ def _export_parquet_stage(
     return parquet_outputs
 
 
-from cross_sensor_cal.brdf_topo import (
-    apply_brdf_topo_core,
-    build_correction_parameters_dict,
-)
-from cross_sensor_cal.paths import normalize_brdf_model_path
-from cross_sensor_cal.resample import resample_chunk_to_sensor
-from cross_sensor_cal.qa_plots import render_flightline_panel
-from cross_sensor_cal.utils import get_package_data_path
-from cross_sensor_cal.utils_checks import is_valid_json
-
-from ..file_types import (
-    NEONReflectanceBRDFCorrectedENVIFile,
-    NEONReflectanceENVIFile,
-    NEONReflectanceResampledENVIFile,
-)
-from ..envi_download import download_neon_file
-from ..neon_to_envi import neon_to_envi_no_hytools
-from ..progress_utils import TileProgressReporter
-from ..merge_duckdb import merge_flightline
-from ..utils.naming import get_flight_paths, get_flightline_products
-from ..standard_resample import translate_to_other_sensors
-from ..mask_raster import mask_raster_with_polygons
-from ..polygon_extraction import control_function_for_extraction
-from ..file_sort import generate_file_move_list
 def _coerce_scalar(value: str):
     token = value.strip().strip('"').strip("'")
     if not token:

@@ -1,14 +1,14 @@
 import math
 import re
-from pathlib import Path
 from collections import defaultdict
-from typing import List, Optional, Set
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import List, Optional, Set
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
-import numpy as np
 
 from cross_sensor_cal.exports.schema_utils import (
     SENSOR_WAVELENGTHS_NM,
@@ -19,6 +19,13 @@ from cross_sensor_cal.exports.schema_utils import (
 )
 
 from ._optional import require_geopandas, require_rasterio
+from .file_types import (
+    DataFile,
+    NEONReflectanceBRDFCorrectedENVIFile,
+    NEONReflectanceENVIFile,
+    NEONReflectanceResampledENVIFile,
+    SpectralDataParquetFile,
+)
 
 
 def _require_pyarrow():
@@ -40,10 +47,6 @@ def _require_pyarrow_parquet():
 
     pa = _require_pyarrow()
     return pa.parquet
-
-from .file_types import DataFile, NEONReflectanceENVIFile, NEONReflectanceBRDFCorrectedENVIFile, \
-    NEONReflectanceResampledENVIFile, SpectralDataParquetFile
-
 
 _BAND_RE = re.compile(r"^(ENVI|Masked|Original)_band_(\d+)$")
 
@@ -200,9 +203,11 @@ def validate_bands_in_dir(
     print("\n===== BAND LAYOUT VALIDATION =====")
     print(f"Directory: {directory}")
     print(f"Files: {len(result)}")
-    print(f"Open errors: {(result['ok_open'] == False).sum()}")
-    print(f"Band-count mismatches: {(result['bands_ok'] == False).sum()} (expected {expected_bands})")
-    print(f"Finite check failures: {(result['finite_ok'] == False).sum()}")
+    print(f"Open errors: {(~result['ok_open']).sum()}")
+    print(
+        f"Band-count mismatches: {(~result['bands_ok']).sum()} (expected {expected_bands})"
+    )
+    print(f"Finite check failures: {(~result['finite_ok']).sum()}")
     print(
         "Files with all-zero bands (any): "
         f"{(result['all_zero_bands'].apply(lambda x: len(x) > 0)).sum()}"

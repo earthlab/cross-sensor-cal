@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from cross_sensor_cal.file_sort import categorize_file
 from cross_sensor_cal.file_types import (
     NEONReflectanceAncillaryENVIFile,

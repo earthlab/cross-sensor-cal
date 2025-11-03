@@ -1,10 +1,9 @@
+import importlib
+import importlib.metadata as md
+
 from tests.conftest import require_mode
 
 pytestmark = require_mode("full")
-
-
-import importlib
-import importlib.metadata as md
 
 def test_hytools_present_and_pinned():
     # Import must succeed via module name "hytools"
