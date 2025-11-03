@@ -416,11 +416,15 @@ class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
 # Keep this alias so both spellings resolve to the same class.
 NEONReflectanceENVHDRFile = NEONReflectanceENVIHDRFile
 
-# If you maintain an __all__, expose both:
+# If you maintain an __all__, expose both spellings of the class
 try:
-    __all__.append("NEONReflectanceENVHDRFile")
-except Exception:
-    pass
+    __all__
+except NameError:  # pragma: no cover - module may not define __all__
+    __all__ = []
+
+for name in ("NEONReflectanceENVIHDRFile", "NEONReflectanceENVHDRFile"):
+    if name not in __all__:
+        __all__.append(name)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

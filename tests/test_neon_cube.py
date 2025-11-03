@@ -1,10 +1,11 @@
-import numpy as np
-import pytest
 from pathlib import Path
 
-h5py = pytest.importorskip("h5py")
+import numpy as np
+import pytest
 
 from cross_sensor_cal.neon_cube import NeonCube
+
+h5py = pytest.importorskip("h5py")
 
 
 def _create_fake_neon_file(path: Path) -> None:
