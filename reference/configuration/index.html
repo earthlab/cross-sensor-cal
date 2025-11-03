@@ -841,6 +841,30 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#brightness-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Brightness configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Brightness configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-to-change-coefficients" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to change coefficients
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#run-it" class="md-nav__link">
     <span class="md-ellipsis">
       Run it
@@ -1120,6 +1144,44 @@
 </ul>
 <h2 id="outputs">Outputs<a class="headerlink" href="#outputs" title="Permanent link">&para;</a></h2>
 <p>A normalized configuration object passed into each stage; affects artifact naming in <a href="../../pipeline/outputs/">Outputs</a>.</p>
+<h2 id="brightness-configuration">Brightness configuration<a class="headerlink" href="#brightness-configuration" title="Permanent link">&para;</a></h2>
+<p>Brightness adjustments between sensor systems (e.g., Landsat→MicaSense) are
+defined via small JSON files shipped with the package:</p>
+<ul>
+<li>Location: <code>cross_sensor_cal/data/brightness/*.json</code></li>
+<li>Loader: <code>cross_sensor_cal.load_brightness_coefficients(system_pair)</code></li>
+</ul>
+<p>Example (<code>landsat_to_micasense.json</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;system_pair&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;landsat_to_micasense&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;unit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;percent&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;bands&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;1&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-7.40</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;2&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-2.75</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;3&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-6.94</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;4&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-10.12</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;5&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-6.65</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;6&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-2.74</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;7&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-1.11</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>These coefficients are applied to Landsat convolution products as:
+<code>L_adj = L_raw * (1 + coeff / 100)</code>
+and are surfaced in:</p>
+<ul>
+<li>The brightness summary table (per-band values).</li>
+<li>The QA JSON (<code>brightness_coefficients</code>).</li>
+<li>The multi-page QA PDF (Page 3).</li>
+</ul>
+<h3 id="how-to-change-coefficients">How to change coefficients<a class="headerlink" href="#how-to-change-coefficients" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Create a new JSON file under <code>cross_sensor_cal/data/brightness/</code>.</li>
+<li>Set <code>"system_pair"</code> and a <code>"bands"</code> mapping of 1-based band indices to
+   percent adjustments.</li>
+<li>Call <code>load_brightness_coefficients("&lt;your_system_pair&gt;")</code> from your
+   pipeline extension or configuration.</li>
+</ol>
 <h2 id="run-it">Run it<a class="headerlink" href="#run-it" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>cscal-pipeline<span class="w"> </span>--base-folder<span class="w"> </span>out<span class="w"> </span>--config<span class="w"> </span>configs/niwo_gpu.yaml<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>

@@ -1133,8 +1133,9 @@ cscal-pipeline<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--flight-lines<span class="w"> </span>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span>
 
-<span class="c1"># 3) Open the QA image</span>
+<span class="c1"># 3) Open the QA image (and PDF report)</span>
 open<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png&quot;</span>
+open<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.pdf&quot;</span>
 </code></pre></div>
 <p>New here? See the <a href="quickstart/">Quickstart</a>.</p>
 <p>Something broke? Jump to <a href="troubleshooting/">Troubleshooting</a>.</p>
@@ -1144,7 +1145,8 @@ open<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE
 <h2 id="why-teams-use-cross-sensor-cal">Why teams use cross-sensor-cal<a class="headerlink" href="#why-teams-use-cross-sensor-cal" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Restart-safe orchestration</strong> – rerun the same command after a crash; completed stages are skipped automatically.</li>
-<li><strong>Consistent artifacts</strong> – every tile produces ENVI cubes, tidy Parquet, and a QA panel named predictably.</li>
+<li><strong>Consistent artifacts</strong> – every tile produces ENVI cubes, tidy Parquet, and QA outputs named predictably.</li>
+<li><strong>Built-in QA and calibration</strong> – each run emits a single-page <a href="pipeline/qa_panel/">QA panel</a>, a multi-page QA PDF, and a JSON metrics file. Brightness adjustments between Landsat and MicaSense are applied from a versioned JSON and recorded across every QA artifact for full traceability.</li>
 <li><strong>Python &amp; CLI parity</strong> – drive the pipeline from scripts or automate it in schedulers with the same arguments.</li>
 </ul>
 <h2 id="install-in-minutes">Install in minutes<a class="headerlink" href="#install-in-minutes" title="Permanent link">&para;</a></h2>
@@ -1171,7 +1173,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <ol>
 <li><strong>Download NEON HDF5</strong> tiles.</li>
 <li><strong>Export ENVI</strong> cubes and apply <strong>topographic + BRDF correction</strong>.</li>
-<li><strong>Convolve</strong> to other sensors, <strong>flatten to Parquet</strong>, and finish with a <strong>QA panel</strong>.</li>
+<li><strong>Convolve</strong> to other sensors, <strong>flatten to Parquet</strong>, and finish with QA outputs (PNG, PDF, JSON).</li>
 </ol>
 <p>See the <a href="pipeline/stages/">Pipeline Stages</a> overview for purpose, inputs, outputs, and pitfalls at every step.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
@@ -1211,11 +1213,12 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 </table>
 <hr />
 <h2 id="quality-assurance-overview">Quality Assurance Overview<a class="headerlink" href="#quality-assurance-overview" title="Permanent link">&para;</a></h2>
-<p>All processed tiles automatically undergo a <strong>QA panel</strong> and <strong>JSON validation</strong> stage.</p>
+<p>All processed tiles automatically produce a <strong>QA panel</strong>, a <strong>multi-page QA PDF</strong>, and <strong>JSON metrics</strong>.</p>
 <p>✅ <strong>Good:</strong> reflectance within [0, 1.2], low ΔReflectance, high mask coverage.<br />
 ⚠️ <strong>Needs Review:</strong> 1–2 metrics outside thresholds.<br />
 ❌ <strong>Fail:</strong> large brightness shifts, missing wavelengths, or high spectral error.</p>
-<p><a href="pipeline/qa_panel/">Read full QA interpretation →</a></p>
+<p>Each QA artifact lists any Landsat→MicaSense brightness coefficients that were applied so you can audit sensor harmonization settings quickly.</p>
+<p><a href="pipeline/qa_panel/">Read full QA interpretation →</a> and the <a href="reference/validation/">JSON metrics reference</a>.</p>
 <h2 id="release-highlights">Release highlights<a class="headerlink" href="#release-highlights" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Per-flightline master table written as <strong><code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code></strong></li>

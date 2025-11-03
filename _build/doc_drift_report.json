@@ -19,6 +19,7 @@
     ],
     "sensors": [
       "MicaSense",
+      "MicaSense)",
       "MicaSense).",
       "MicaSense,",
       "MicaSense,,",
@@ -35,6 +36,7 @@
       "Micasense,,,,,",
       "Micasense,,,,,,",
       "Micasense,,,,,,,",
+      "micasense\",",
       "micasense']",
       "micasense'],",
       "micasense'],,",
@@ -45,6 +47,7 @@
       "micasense*_envi.img,",
       "micasense*_envi.img`,",
       "micasense.json`",
+      "micasense.json`):",
       "micasense_envi.hdr",
       "micasense_envi.hdr,",
       "micasense_envi.hdr,,",
@@ -79,6 +82,7 @@
       "micasense_to_match_oli_oli,,,,,",
       "micasense_to_match_oli_oli,,,,,,",
       "micasense_to_match_tm_etm+,,,,,,",
+      "micasense`",
       "micasense`)"
     ]
   },

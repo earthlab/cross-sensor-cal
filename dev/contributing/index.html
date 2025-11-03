@@ -1011,6 +1011,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#continuous-integration-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Continuous integration checks
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1084,6 +1093,17 @@ mkdocs<span class="w"> </span>serve
 <li>[ ] Link Stages ↔ Schemas ↔ Outputs ↔ Troubleshooting</li>
 <li>[ ] <code>mkdocs build</code> passes locally</li>
 </ul>
+<h2 id="continuous-integration-checks">Continuous integration checks<a class="headerlink" href="#continuous-integration-checks" title="Permanent link">&para;</a></h2>
+<p>Pull requests to <code>main</code> run four main checks:</p>
+<ol>
+<li><strong>CI / lite</strong> – fast linting and smoke tests.</li>
+<li><strong>CI / unit</strong> – full Python test suite.</li>
+<li><strong>Docs Drift Check / audit</strong> – verifies docs and code stay in sync.</li>
+<li><strong>QA quick check / qa</strong> – runs a minimal QA pipeline on a small fixture and uploads the PNG/JSON/PDF artifacts.</li>
+</ol>
+<p>This layout keeps feedback fast while ensuring the QA pipeline and docs stay
+healthy. The QA quick check now runs once per PR (and optionally on pushes to
+<code>main</code>) instead of duplicating work on every branch push.</p>
 
 
 

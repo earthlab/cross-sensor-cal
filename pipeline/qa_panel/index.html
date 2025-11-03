@@ -604,6 +604,19 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    QA panel
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -615,6 +628,34 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#multi-page-qa-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-page QA report
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1030,18 +1071,37 @@
 
 
 <h1 id="qa-panel">QA panel<a class="headerlink" href="#qa-panel" title="Permanent link">&para;</a></h1>
-<p>The QA panel now couples a metrics JSON file with the annotated PNG so that
+<p>The QA panel couples a metrics JSON file with an annotated PNG so that
 engineering and science teams can track both spectral statistics and the visual
-context for every flightline. In addition to the PNG, the pipeline writes a
-three-page PDF report (<code>&lt;prefix&gt;_qa.pdf</code>) that includes:</p>
-<ul>
-<li><strong>Page 1:</strong> ENVI product overview (one row of RGB quicklooks for each ENVI
-  cube discovered).</li>
-<li><strong>Page 2:</strong> Topographic and BRDF diagnostics (histogram/Δ plots plus geometry
-  summaries).</li>
-<li><strong>Page 3:</strong> Remaining QA diagnostics (convolution scatter, header/mask
-  summaries, and issues list).</li>
-</ul>
+context for every flightline. See <a href="#how-to-interpret-the-panel">How to Interpret the Panel</a>
+and the <a href="../../reference/validation/">validation reference</a> for deeper guidance
+on each metric.</p>
+<h2 id="multi-page-qa-report">Multi-page QA report<a class="headerlink" href="#multi-page-qa-report" title="Permanent link">&para;</a></h2>
+<p>In addition to the single PNG QA panel (<code>&lt;prefix&gt;_qa.png</code>), the pipeline now
+writes a multi-page PDF report (<code>&lt;prefix&gt;_qa.pdf</code>) with three pages:</p>
+<ol>
+<li>
+<p><strong>Page 1 – ENVI overview</strong><br />
+   One row with one panel per ENVI product. This is a quick visual check that
+   all ENVI files exist and render correctly.</p>
+</li>
+<li>
+<p><strong>Page 2 – Topographic &amp; BRDF diagnostics</strong>  </p>
+</li>
+<li>Row 1: pre vs post histograms and Δ median vs wavelength for the combined
+     topographic + BRDF correction stage.  </li>
+<li>
+<p>Row 2: summaries of topographic (slope/aspect) and BRDF geometry
+     (solar/sensor angles) derived from the correction JSON.</p>
+</li>
+<li>
+<p><strong>Page 3 – Remaining QA diagnostics</strong>  </p>
+</li>
+<li>Convolution scatter plots (expected vs computed bands).  </li>
+<li>Header and wavelength integrity summary.  </li>
+<li>Mask coverage &amp; negatives summary.  </li>
+<li>Issues/warnings, including brightness coefficients that were applied.</li>
+</ol>
 <hr />
 <h1 id="qa-panel-and-validation-tests">QA Panel and Validation Tests<a class="headerlink" href="#qa-panel-and-validation-tests" title="Permanent link">&para;</a></h1>
 <p>The QA panel is the final diagnostic step of the <strong>Cross-Sensor Calibration pipeline</strong>.<br />
@@ -1094,6 +1154,24 @@ It provides both a visual and quantitative summary of how well each product beha
 </tr>
 </tbody>
 </table>
+<hr />
+<h3 id="brightness-coefficients">Brightness coefficients<a class="headerlink" href="#brightness-coefficients" title="Permanent link">&para;</a></h3>
+<p>When NEON data are convolved to Landsat bands, we optionally apply small
+per-band brightness adjustments so that Landsat-like products match a
+MicaSense reference.</p>
+<ul>
+<li>Coefficients are stored in <code>landsat_to_micasense.json</code> (units: percent).</li>
+<li>The adjustment is multiplicative:</li>
+</ul>
+<p><code>L_adj = L_raw * (1 + coeff / 100)</code>, where negative coefficients darken
+  Landsat bands slightly.</p>
+<ul>
+<li>Applied coefficients are recorded in the QA JSON under
+  <code>brightness_coefficients.landsat_to_micasense</code> and displayed on Page 3 of
+  the QA PDF.</li>
+</ul>
+<p>This makes it easy to verify when a brightness adjustment was applied and to
+audit the exact per-band values.</p>
 <hr />
 <h2 id="why-these-tests-are-appropriate">Why These Tests Are Appropriate<a class="headerlink" href="#why-these-tests-are-appropriate" title="Permanent link">&para;</a></h2>
 <p>These diagnostics are <strong>physically interpretable</strong> and <strong>sensor-agnostic</strong>:</p>

@@ -762,6 +762,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#qa" class="md-nav__link">
+    <span class="md-ellipsis">
+      QA
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1110,7 +1119,7 @@
 <h2 id="full-pipeline-one-tile">Full pipeline (one tile)<a class="headerlink" href="#full-pipeline-one-tile" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Run every stage end-to-end for a single flight line.</p>
 <p><strong>Inputs</strong> Base folder, NEON site/month/product, flight line IDs.</p>
-<p><strong>Outputs</strong> Per-flight directory with ENVI exports, corrected/convolved cubes, Parquet tables, merged parquet, QA panel.</p>
+<p><strong>Outputs</strong> Per-flight directory with ENVI exports, corrected/convolved cubes, Parquet tables, merged parquet, QA panel PNG, QA PDF, and QA JSON.</p>
 <p><strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cscal-pipeline<span class="w"> </span>--base-folder<span class="w"> </span>out<span class="w"> </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
@@ -1118,6 +1127,12 @@
 <span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span>
 </code></pre></div>
 <strong>Pitfalls</strong> High worker counts can exhaust <code>/dev/shm</code>; rerun with the same arguments to resume safely.</p>
+<p>The CLI logs are designed to be affirmative. Messages like:</p>
+<blockquote>
+<p>📦 No existing ENVI export detected — creating a new one from source data ...</p>
+</blockquote>
+<p>are normal and indicate that the tool is creating outputs for the first time.
+Only <code>WARNING</code> or <code>ERROR</code> messages require attention.</p>
 <h2 id="convolve-only">Convolve only<a class="headerlink" href="#convolve-only" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Resample corrected ENVI cubes to a target sensor.</p>
 <p><strong>Inputs</strong> Corrected ENVI <code>.img</code> files, target sensor code, output folder.</p>
@@ -1137,7 +1152,7 @@
 <h2 id="merge-qa">Merge + QA<a class="headerlink" href="#merge-qa" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Consolidate product Parquet tables and rebuild QA panels.</p>
 <p><strong>Inputs</strong> Set of Parquet files, target merged filename, optional QA output directory.</p>
-<p><strong>Outputs</strong> <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code> and <code>&lt;prefix&gt;_qa.png</code>.</p>
+<p><strong>Outputs</strong> <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code>, <code>&lt;prefix&gt;_qa.png</code>, <code>&lt;prefix&gt;_qa.pdf</code>, and <code>&lt;prefix&gt;_qa.json</code>.</p>
 <p><strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>merge-duckdb<span class="w"> </span>--in<span class="w"> </span>parquet/*.parquet<span class="w"> </span>--out<span class="w"> </span>merged/demo_merged_pixel_extraction.parquet
 cross-sensor-cal<span class="w"> </span>qa-panel<span class="w"> </span>--merged<span class="w"> </span>merged/demo_merged_pixel_extraction.parquet<span class="w"> </span>--out<span class="w"> </span>qa/
@@ -1155,6 +1170,13 @@ cross-sensor-cal<span class="w"> </span>qa-panel<span class="w"> </span>--merged
     <span class="n">max_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
+<h2 id="qa">QA<a class="headerlink" href="#qa" title="Permanent link">&para;</a></h2>
+<p>The pipeline saves:</p>
+<ul>
+<li><code>&lt;prefix&gt;_qa.png</code> – a compact single-page QA panel.</li>
+<li><code>&lt;prefix&gt;_qa.pdf</code> – a multi-page QA report (ENVI overview, topo/BRDF diagnostics, and additional QA metrics).</li>
+<li><code>&lt;prefix&gt;_qa.json</code> – machine-readable QA metrics, including header, mask, convolution error, and brightness coefficients when applied.</li>
+</ul>
 
 
 
