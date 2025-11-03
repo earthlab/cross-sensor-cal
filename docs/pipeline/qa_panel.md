@@ -6,6 +6,14 @@ context for every flightline. See [How to Interpret the Panel](#how-to-interpret
 and the [validation reference](../reference/validation.md) for deeper guidance
 on each metric.
 
+Additional QA products created from the merged Parquet:
+
+- `<prefix>_merged__BY_SENSOR_vs_NEON_directional_BRDFTopo.png`  
+  Sensor-by-sensor scatter panels versus NEON directional BRDFTopo.
+
+- `<prefix>_merged__MS_vs_Landsat_FIXED.png`  
+  MicaSense-matched (X) versus Landsat (Y) scatter panels by band.
+
 ## Multi-page QA report
 
 In addition to the single PNG QA panel (`<prefix>_qa.png`), the pipeline now

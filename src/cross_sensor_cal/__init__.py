@@ -4,6 +4,10 @@ from __future__ import annotations
 from importlib import import_module
 
 from .brightness_config import load_brightness_coefficients
+from .sensor_panel_plots import (
+    make_micasense_vs_landsat_panels,
+    make_sensor_vs_neon_panels,
+)
 
 __version__ = "2.2.0"
 
@@ -16,6 +20,8 @@ __all__ = sorted(
         + [
             "apply_brightness_correction",
             load_brightness_coefficients.__name__,
+            "make_sensor_vs_neon_panels",
+            "make_micasense_vs_landsat_panels",
         ]
     )
 )
