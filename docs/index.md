@@ -74,6 +74,18 @@ See the [Pipeline Stages](pipeline/stages.md) overview for purpose, inputs, outp
 | Extend to a new sensor or reader | [Reference → Extending](reference/extending.md) |
 | Something looks off | [Troubleshooting](troubleshooting.md) |
 
+---
+
+## Quality Assurance Overview
+
+All processed tiles automatically undergo a **QA panel** and **JSON validation** stage.
+
+✅ **Good:** reflectance within [0, 1.2], low ΔReflectance, high mask coverage.  
+⚠️ **Needs Review:** 1–2 metrics outside thresholds.  
+❌ **Fail:** large brightness shifts, missing wavelengths, or high spectral error.
+
+[Read full QA interpretation →](pipeline/qa_panel.md)
+
 ## Release highlights
 
 - Per-flightline master table written as **`<prefix>_merged_pixel_extraction.parquet`**
