@@ -18,6 +18,7 @@
       "_micasense_envi.img"
     ],
     "sensors": [
+      "MicaSense",
       "MicaSense).",
       "MicaSense,",
       "MicaSense,,",
@@ -43,6 +44,7 @@
       "micasense'],,,,,,",
       "micasense*_envi.img,",
       "micasense*_envi.img`,",
+      "micasense.json`",
       "micasense_envi.hdr",
       "micasense_envi.hdr,",
       "micasense_envi.hdr,,",

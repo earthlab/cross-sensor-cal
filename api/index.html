@@ -1024,6 +1024,48 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal.load_brightness_coefficients" class="md-nav__link">
+    <span class="md-ellipsis">
+      load_brightness_coefficients
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="load_brightness_coefficients">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.load_brightness_coefficients--parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.load_brightness_coefficients--returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Returns
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross_sensor_cal.load_brightness_coefficients--notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1177,7 +1219,7 @@ will surface the per-band gain/offsets when this stage runs.</p>
 
 
 <h2 id="cross_sensor_cal.__all__" class="doc doc-heading">
-            <code class=" language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">__all__</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;apply_brightness_correction&#39;</span><span class="p">]))</span></code>
+            <code class=" language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">__all__</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;apply_brightness_correction&#39;</span><span class="p">,</span> <span class="n">load_brightness_coefficients</span><span class="o">.</span><span class="vm">__name__</span><span class="p">]))</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
@@ -1225,6 +1267,34 @@ will surface the per-band gain/offsets when this stage runs.</p>
 
 
     <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="cross_sensor_cal.load_brightness_coefficients" class="doc doc-heading">
+            <code class=" language-python"><span class="n">load_brightness_coefficients</span><span class="p">(</span><span class="n">system_pair</span><span class="o">=</span><span class="s1">&#39;landsat_to_micasense&#39;</span><span class="p">)</span></code>
+
+<a href="#cross_sensor_cal.load_brightness_coefficients" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load brightness coefficients for a given system pair.</p>
+<h4 id="cross_sensor_cal.load_brightness_coefficients--parameters">Parameters<a class="headerlink" href="#cross_sensor_cal.load_brightness_coefficients--parameters" title="Permanent link">&para;</a></h4>
+<p>system_pair : str
+    Key identifying the pair of systems, e.g. "landsat_to_micasense".</p>
+<h4 id="cross_sensor_cal.load_brightness_coefficients--returns">Returns<a class="headerlink" href="#cross_sensor_cal.load_brightness_coefficients--returns" title="Permanent link">&para;</a></h4>
+<p>dict[int, float]
+    Mapping from 1-based band index to brightness coefficient (percent).</p>
+<h4 id="cross_sensor_cal.load_brightness_coefficients--notes">Notes<a class="headerlink" href="#cross_sensor_cal.load_brightness_coefficients--notes" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Values are stored in percent (e.g., -7.3959 means "reduce by 7.3959%").</li>
+</ul>
 
 
     </div>

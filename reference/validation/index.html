@@ -887,6 +887,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#landsatmicasense-brightness-adjustment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Landsat↔MicaSense brightness adjustment
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#purpose" class="md-nav__link">
     <span class="md-ellipsis">
       Purpose
@@ -1150,6 +1159,17 @@ absolute reflectance fidelity within ±2 %.</p>
 <p>Computes RMSE and SAM between expected and computed spectral bands; high errors indicate sensor response mismatch.</p>
 <h3 id="brightness-gainoffset-check">Brightness Gain/Offset Check<a class="headerlink" href="#brightness-gainoffset-check" title="Permanent link">&para;</a></h3>
 <p>Evaluates brightness normalization stability; flags gain &lt; 0.85 or &gt; 1.15.</p>
+<h3 id="landsatmicasense-brightness-adjustment">Landsat↔MicaSense brightness adjustment<a class="headerlink" href="#landsatmicasense-brightness-adjustment" title="Permanent link">&para;</a></h3>
+<p>When the pipeline convolves corrected NEON cubes to Landsat bands, it now applies a
+small per-band brightness adjustment so the results align with a MicaSense reference.</p>
+<ul>
+<li>Coefficients live in <code>data/brightness/landsat_to_micasense.json</code> and are shipped with the
+  package.</li>
+<li>The applied values are written into QA JSON files under <code>brightness_coefficients</code> and are
+  also rendered on Page 3 of the QA PDF alongside other issues.</li>
+<li>The Landsat ENVI headers record the same coefficients so downstream tools can reproduce
+  the exact multiplicative adjustment (<code>L_adj = L_raw * (1 + coeff / 100)</code>).</li>
+</ul>
 <p><a href="../../pipeline/qa_panel/">See detailed interpretation →</a></p>
 <blockquote>
 <p><strong>When do I need this?</strong> When a stage fails or a QA smell appears; validate inputs/outputs against known-good schema.</p>
