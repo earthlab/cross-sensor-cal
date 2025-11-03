@@ -56,12 +56,14 @@ def neon_to_envi_no_hytools(
         "Uncorrected NEON reflectance (float32 BSQ) exported via NeonCube"
     )
 
-    refl_file = NEONReflectanceFile.from_filename(h5_path)
-    if not refl_file.tile:
+    try:
+        refl_file = NEONReflectanceFile.from_filename(h5_path)
+    except ValueError as exc:
         raise RuntimeError(
-            "Unable to determine NEON tile identifier from HDF5 filename; "
-            "expected standard NEON naming convention."
-        )
+            "Unable to parse NEON reflectance filename. Expected one of the standard "
+            "NEON patterns (tile+directional, legacy date+time, coordinate-based, "
+            "or bidirectional reflectance)."
+        ) from exc
 
     envi_file = NEONReflectanceENVIFile.from_components(
         domain=refl_file.domain,
