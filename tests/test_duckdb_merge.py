@@ -140,3 +140,69 @@ def test_master_parquet_naming(tmp_path):
         out.name
         == "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_merged_pixel_extraction.parquet"
     )
+
+
+def _seed_minimal_tables(flight_dir: Path) -> None:
+    prefix = flight_dir.name
+    orig_df = pd.DataFrame(
+        {
+            "pixel_id": ["p0"],
+            "wavelength_nm": [500.0],
+            "reflectance": [0.1],
+        }
+    )
+    _write_parquet(orig_df, flight_dir / f"{prefix}_envi.parquet")
+
+    corr_df = pd.DataFrame(
+        {
+            "pixel_id": ["p0"],
+            "corr_wl0500": [0.2],
+        }
+    )
+    _write_parquet(
+        corr_df,
+        flight_dir / f"{prefix}_brdfandtopo_corrected_envi.parquet",
+    )
+
+    resamp_df = pd.DataFrame(
+        {
+            "pixel_id": ["p0"],
+            "resamp_wl0500": [0.3],
+        }
+    )
+    _write_parquet(
+        resamp_df,
+        flight_dir / f"{prefix}_resampled_Landsat_8_OLI_envi.parquet",
+    )
+
+
+def test_merge_skips_invalid_inputs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    flight_dir = tmp_path / "NEON_TEST_FLIGHT_INVALID"
+    flight_dir.mkdir()
+    (flight_dir / "NEON_TEST_FLIGHT_INVALID_envi.img").write_bytes(b"")
+
+    _seed_minimal_tables(flight_dir)
+
+    bad = flight_dir / f"{flight_dir.name}_extra_envi.parquet"
+    bad.write_text("not a parquet file", encoding="utf-8")
+
+    out = merge_flightline(flight_dir, emit_qa_panel=False)
+
+    captured = capsys.readouterr()
+    assert f"Skipping invalid parquet {bad.name}" in captured.out
+    assert out.exists()
+
+
+def test_merge_errors_when_category_empty_after_skip(tmp_path: Path) -> None:
+    flight_dir = tmp_path / "NEON_TEST_FLIGHT_ALL_INVALID"
+    flight_dir.mkdir()
+    (flight_dir / "NEON_TEST_FLIGHT_ALL_INVALID_envi.img").write_bytes(b"")
+
+    broken = flight_dir / f"{flight_dir.name}_brdfandtopo_corrected_envi.parquet"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    broken.write_text("still not parquet", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        merge_flightline(flight_dir, emit_qa_panel=False)
+
+    assert "Remove or recreate the invalid files" in str(excinfo.value)

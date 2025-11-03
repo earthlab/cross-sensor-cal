@@ -41,6 +41,7 @@ logger.setLevel(logging.INFO)
 _DEFAULT_RGB_TARGETS = (660.0, 560.0, 490.0)
 _EXPECTED_HEADER_KEYS = ["wavelength", "fwhm", "band names"]
 _NEGATIVE_WARN_THRESHOLD = 1.0
+_OVERBRIGHT_WARN_THRESHOLD = 1.0
 _DELTA_WARN_THRESHOLD = 0.05
 
 
@@ -262,7 +263,17 @@ def _convolution_reports(
     reports: list[ConvolutionReport] = []
     scatter_data: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     brightness_map: dict[str, dict[int, float]] = {}
-    for img_path in sorted(base_dir.glob(f"{prefix}_*_convolved_envi.img")):
+    patterns = [
+        f"{prefix}_*_convolved_envi.img",
+        f"{prefix}_resampled_*_envi.img",
+        f"{prefix}_resampled_*_envi_masked.img",
+    ]
+    candidates: set[Path] = set()
+    for pattern in patterns:
+        for match in base_dir.rglob(pattern):
+            candidates.add(match)
+
+    for img_path in sorted(candidates):
         sensor = img_path.stem.replace(f"{prefix}_", "").replace("_convolved_envi", "")
         hdr = hdr_to_dict(img_path.with_suffix(".hdr"))
         cube = read_envi_cube(img_path, hdr)
@@ -479,11 +490,13 @@ def _render_page3_remaining(
     ax_mask = axes[1, 0]
     mask = metrics.mask
     negatives_pct = metrics.negatives_pct
+    overbright_pct = metrics.overbright_pct
     lines = [
         f"Total pixels: {mask.n_total}",
         f"Valid pixels: {mask.n_valid}",
         f"Valid %: {mask.valid_pct:.2f}%",
         f"Negatives %: {negatives_pct:.2f}%",
+        f">1.2 reflectance %: {overbright_pct:.2f}%",
     ]
     ax_mask.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=9)
     ax_mask.axis("off")
@@ -668,8 +681,21 @@ def render_flightline_panel(
         issues.append(f"Header missing: {', '.join(header_report.keys_missing)}")
     if header_report.wavelengths_monotonic is False:
         issues.append("Wavelengths not strictly increasing")
+    if wavelength_source == "sensor_default":
+        issues.append("Wavelengths missing from header – using sensor defaults")
+    elif wavelength_source == "absent":
+        issues.append("Wavelength metadata absent from header")
     if negatives_pct > _NEGATIVE_WARN_THRESHOLD:
         issues.append(f"{negatives_pct:.2f}% negative pixels")
+    overbright_pct = float(
+        100.0
+        * np.count_nonzero((corr_cube > 1.2) & valid_mask)
+        / mask_report.n_valid
+        if mask_report.n_valid
+        else 0.0
+    )
+    if overbright_pct > _OVERBRIGHT_WARN_THRESHOLD:
+        issues.append(f"{overbright_pct:.2f}% pixels > 1.2 reflectance")
     if any(abs(val) > _DELTA_WARN_THRESHOLD for val in correction_report.delta_median):
         issues.append("Large correction deltas detected")
 
@@ -688,6 +714,7 @@ def render_flightline_panel(
         correction=correction_report,
         convolution=conv_reports,
         negatives_pct=negatives_pct,
+        overbright_pct=overbright_pct,
         issues=issues,
         brightness_coefficients=brightness_map,
         brightness_summary=brightness_summary,
@@ -728,6 +755,7 @@ def render_flightline_panel(
         "correction",
         "convolution",
         "negatives_pct",
+        "overbright_pct",
         "issues",
     ]
     metrics_dict = {key: metrics_dict_full[key] for key in core_keys}

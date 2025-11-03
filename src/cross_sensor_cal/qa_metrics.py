@@ -57,6 +57,7 @@ class QAMetrics:
     correction: Optional[CorrectionReport]
     convolution: List[ConvolutionReport]
     negatives_pct: float
+    overbright_pct: float
     issues: List[str]
     brightness_coefficients: Dict[str, Dict[int, float]] = field(default_factory=dict)
     brightness_summary: Dict[str, List[Dict[str, float]]] = field(default_factory=dict)

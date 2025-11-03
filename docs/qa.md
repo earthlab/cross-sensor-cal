@@ -22,11 +22,11 @@ Key sections on the panel:
 - **Δ median vs wavelength** – bandwise medians with IQR ribbon; uses header
   wavelengths or sensor defaults.
 - **Convolved scatter** – compares corrected data to any `*_convolved_envi`
-  outputs with a 1:1 reference line.
+  or `*_resampled_<sensor>_envi` outputs with a 1:1 reference line.
 
 Each PNG lives alongside `<prefix>_qa.json`, which mirrors the
 `QAMetrics` dataclass (`provenance`, `header`, `mask`, `correction`,
-`convolution`, `negatives_pct`, `issues`). When the brightness correction stage
+`convolution`, `negatives_pct`, `overbright_pct`, `issues`). When the brightness correction stage
 runs, the JSON also lists per-band gain/offsets so the QA team can trace changes
 back to illumination harmonisation.
 

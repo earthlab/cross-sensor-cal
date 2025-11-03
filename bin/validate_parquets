@@ -28,7 +28,7 @@ def main(p: str):
         try:
             schema = pq.read_schema(q)
         except Exception as exc:  # pragma: no cover - defensive, should rarely happen
-            bad.append((q.name, f"unable to read schema: {exc}"))
+            bad.append((q.name, f"unable to read schema ({exc}). Delete or regenerate this file."))
             continue
         cols = list(schema.names)
         if "lon" not in cols or "lat" not in cols:
