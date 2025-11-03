@@ -1032,7 +1032,16 @@
 <h1 id="qa-panel">QA panel<a class="headerlink" href="#qa-panel" title="Permanent link">&para;</a></h1>
 <p>The QA panel now couples a metrics JSON file with the annotated PNG so that
 engineering and science teams can track both spectral statistics and the visual
-context for every flightline.</p>
+context for every flightline. In addition to the PNG, the pipeline writes a
+three-page PDF report (<code>&lt;prefix&gt;_qa.pdf</code>) that includes:</p>
+<ul>
+<li><strong>Page 1:</strong> ENVI product overview (one row of RGB quicklooks for each ENVI
+  cube discovered).</li>
+<li><strong>Page 2:</strong> Topographic and BRDF diagnostics (histogram/Δ plots plus geometry
+  summaries).</li>
+<li><strong>Page 3:</strong> Remaining QA diagnostics (convolution scatter, header/mask
+  summaries, and issues list).</li>
+</ul>
 <hr />
 <h1 id="qa-panel-and-validation-tests">QA Panel and Validation Tests<a class="headerlink" href="#qa-panel-and-validation-tests" title="Permanent link">&para;</a></h1>
 <p>The QA panel is the final diagnostic step of the <strong>Cross-Sensor Calibration pipeline</strong>.<br />
