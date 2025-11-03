@@ -2,73 +2,118 @@
 
 The QA panel now couples a metrics JSON file with the annotated PNG so that
 engineering and science teams can track both spectral statistics and the visual
-context for every flightline. Each panel contains four sections:
+context for every flightline.
 
-1. **RGB quicklook** – 660/560/490 nm bands (or your overrides) stretched to
-   unitless reflectance. Red callouts appear when metrics flag issues such as
-   missing header keys or large correction deltas.
-2. **Pre vs post histograms** – fixed-bin histograms that show how the BRDF and
-   topographic corrections shift the reflectance distribution.
-3. **Δ median vs wavelength** – per-band median change with interquartile ribbons
-   (requires wavelengths from the ENVI header or sensor defaults).
-4. **Convolved scatter** – 1:1 scatter plot comparing corrected cubes to any
-   *_convolved_envi products, annotated with RMSE/SAM in the JSON.
+---
 
-## Running the panel generator
+# QA Panel and Validation Tests
 
-Use the QA CLI to regenerate PNG+JSON pairs. Quick mode is deterministic and
-caps sampling at ~25k pixels, while full mode uses the supplied sample budget.
+The QA panel is the final diagnostic step of the **Cross-Sensor Calibration pipeline**.  
+It provides both a visual and quantitative summary of how well each product behaved through all correction stages (topographic, BRDF, brightness, convolution).  
 
-```bash
-cscal-qa --base-folder workspace/processed --quick
-# or a more exhaustive pass
-cscal-qa --base-folder workspace/processed --full --n-sample 150000
+---
+
+## What the QA Tests Measure
+
+| Test | What It Checks | Why It Matters |
+|------|----------------|----------------|
+| **Reflectance Range & Negatives %** | Fraction of pixels below 0 or above 1.2 | Reflectance should remain physically bounded. Large negative or >1.2 values indicate poor radiometric scaling or unmasked clouds/shadows. |
+| **Header & Wavelength Integrity** | Presence, count, and monotonicity of `wavelength` values in ENVI headers | Ensures each band is correctly aligned; missing or non-monotonic wavelengths break convolution and spectral analyses. |
+| **ΔReflectance (Pre→Post Correction)** | Median and IQR difference in reflectance before and after BRDF/topo correction | Quantifies how much the correction changed the data. Large deltas in flat terrain suggest over-correction; near-zero deltas in complex terrain may suggest under-correction. |
+| **Brightness Normalization (if applied)** | Per-band gain and offset used in brightness correction | Tracks whether correction parameters remain within expected limits (e.g., gain ∈ [0.9, 1.1]). Large deviations imply inconsistent illumination normalization. |
+| **Convolution Accuracy (per target sensor)** | RMSE and Spectral Angle Mapper (SAM) between expected vs computed bands | Confirms spectral resampling is physically consistent. High RMSE or large SAM (>0.05 radians) indicates wavelength misalignment or incorrect response functions. |
+| **Mask Coverage** | % of valid pixels used for metrics | Low valid coverage (<60%) signals missing masks or unfiltered NaNs. |
+| **Histogram Shape Consistency** | Visual histogram overlay of pre/post corrections | Skewed or bimodal shapes suggest scene heterogeneity or masking issues. |
+
+---
+
+## Why These Tests Are Appropriate
+
+These diagnostics are **physically interpretable** and **sensor-agnostic**:
+
+- **Radiometric realism:** Reflectance outside [0,1.2] is physically implausible and signals calibration drift or shadow contamination.  
+- **Spectral continuity:** Monotonic wavelengths ensure that per-band corrections and convolutions follow real sensor band order.  
+- **Conservation principle:** ΔReflectance checks whether corrections preserve brightness globally (no systematic over-darkening).  
+- **Geometric realism:** Mask coverage and illumination correlation prevent interpreting shadowed or topographically inverted pixels as valid reflectance.  
+- **Spectral fidelity:** RMSE and SAM compare corrected spectra to expected bandpasses, verifying physical sensor compatibility.
+
+---
+
+## How to Interpret the Panel
+
+Each panel includes:
+
+1. **Left:** RGB quicklook using auto-selected bands (660, 560, 490 nm).  
+   - *Uniform color tone*: good illumination normalization.  
+   - *Patchy shadows or gradients*: check DTM alignment or BRDF model.
+2. **Top-right:** Pre (gray) vs Post (green) histograms.  
+   - *Slight narrowing*: normal (flattening illumination gradients).  
+   - *Severe shift left/right*: over- or under-correction.
+3. **Middle-right:** ΔReflectance vs Wavelength curve (median ± IQR).  
+   - *Smooth near-zero line*: ideal.  
+   - *Large band-specific spikes*: band-specific sensor noise or cloud edges.
+4. **Bottom-right:** Convolution scatter (expected vs computed).  
+   - *Points close to 1:1 line*: good.  
+   - *Systematic bias or slope ≠ 1*: check wavelength alignment or FWHM mismatch.
+5. **Footer:** Metadata (flightline ID, date, package version, git SHA).
+
+---
+
+## Quantitative Thresholds for “Not Good”
+
+| Metric | Acceptable Range | “Needs Review” | “Problematic” |
+|---------|------------------|----------------|----------------|
+| Negatives % | < 0.5 % | 0.5–2 % | > 2 % |
+| Reflectance > 1.2 | < 0.5 % | 0.5–2 % | > 2 % |
+| ΔReflectance median | | < 0.02 (normally good) | > 0.05 (over/under-correction) |
+| Brightness gain | 0.9–1.1 | 0.85–0.9 / 1.1–1.15 | < 0.85 or > 1.15 |
+| Convolution RMSE | < 0.02 | 0.02–0.05 | > 0.05 |
+| SAM (radians) | < 0.03 | 0.03–0.05 | > 0.05 |
+| Mask coverage | > 80 % | 60–80 % | < 60 % |
+
+---
+
+## Deciding When a Product Fails QA
+
+Mark a product as **Needs Review** when:
+- ≥ 2 metrics fall in the “Needs Review” column, **or**
+- Any single metric hits the “Problematic” range.
+
+Mark a product as **Fail** when:
+- > 10 % of bands exceed thresholds (e.g., ΔReflectance > 0.05),
+- Wavelengths are missing or non-monotonic,
+- Convolution RMSE > 0.05 **and** SAM > 0.05,
+- Mask coverage < 60 %.
+
+All QA results are summarized in the sidecar JSON (`*_qa.json`), enabling programmatic filtering.
+
+---
+
+## Next Steps After QA Flags
+
+| Issue | Likely Cause | Recommended Fix |
+|-------|---------------|----------------|
+| Many negatives or high reflectance | Mis-scaled input, wrong gain offset | Re-run brightness correction or check calibration constants. |
+| Non-monotonic wavelengths | Corrupted or edited header | Re-export ENVI or fix `wavelength` list manually. |
+| Large ΔReflectance | Over-aggressive BRDF correction | Adjust BRDF parameters or review illumination mask. |
+| High RMSE/SAM | Wrong sensor response curves | Verify target sensor config file. |
+| Low mask coverage | Cloud or DTM mask mismatch | Improve masking or fill small gaps before QA. |
+
+---
+
+## Automating QA Review
+
+Each QA JSON includes numeric thresholds.
+You can quickly summarize or flag tiles programmatically:
+
+```python
+import json, glob
+bad = []
+for f in glob.glob("*/**/*_qa.json", recursive=True):
+    q = json.load(open(f))
+    if q["negatives_pct"] > 2.0 or q["mask"]["valid_pct"] < 60:
+        bad.append(f)
+print("Tiles needing review:", bad)
+
 ```
 
-Flags worth remembering:
-
-* `--rgb-bands 650,550,480` to override the RGB targets.
-* `--no-save-json` to skip emitting the metrics file (PNG only).
-
-## Metrics JSON
-
-Each PNG is accompanied by `<prefix>_qa.json`. The JSON mirrors the
-`QAMetrics` dataclass and captures provenance, header health, mask coverage, and
-spectral deltas. Below is a trimmed example:
-
-```json
-{
-  "provenance": {
-    "flightline_id": "NEON_TEST_FLIGHT",
-    "created_utc": "2024-04-08T12:00:00Z",
-    "package_version": "2.2.0",
-    "git_sha": "abc1234",
-    "input_hashes": {"NEON_TEST_FLIGHT_envi.img": "..."}
-  },
-  "header": {
-    "n_bands": 426,
-    "wavelength_unit": "Nanometers",
-    "wavelength_source": "header"
-  },
-  "mask": {"valid_pct": 99.2},
-  "correction": {"delta_median": [-0.01, 0.02, ...]},
-  "convolution": [{"sensor": "oli", "sam": 0.004}],
-  "negatives_pct": 0.3,
-  "issues": []
-}
-```
-
-When the pipeline runs brightness correction, the `correction` block will also
-contain per-band gain/offset diagnostics to support downstream QA reviews.
-
-## Troubleshooting cues
-
-* **Red callout referencing header gaps** – confirm the ENVI header exports
-  `wavelength`, `fwhm`, and `band names`.
-* **Large Δ median spikes** – revisit correction coefficients or rerun with a
-  denser sample (`--full`).
-* **High negative percentage** – inspect masks and solar-geometry inputs for the
-  BRDF/topo stage.
-
-Re-running `cscal-qa` after a fix overwrites both the PNG and the JSON so you
-always have up-to-date metrics.

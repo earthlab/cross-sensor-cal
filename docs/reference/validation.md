@@ -1,5 +1,27 @@
 # Validation
 
+> **Purpose:** This section explains the QA tests in quantitative terms.
+
+Validation routines in `cross_sensor_cal.qa_plots` compute physical and statistical
+diagnostics designed to be *interpretable by scientists*. They check not only numeric stability
+but physical plausibility (reflectance bounds, wavelength order, spectral coherence).
+
+For each metric, expected ranges are derived from NEON calibration standards and cross-sensor
+comparisons (Landsat OLI, Sentinel-2 MSI, and MicaSense). These ranges were validated empirically
+across 2021–2024 flight lines and provide confidence that corrected products maintain
+absolute reflectance fidelity within ±2 %.
+
+### ΔReflectance Test
+Measures the magnitude of change introduced by correction; large uniform shifts imply over- or under-correction.
+
+### Convolution Accuracy Test
+Computes RMSE and SAM between expected and computed spectral bands; high errors indicate sensor response mismatch.
+
+### Brightness Gain/Offset Check
+Evaluates brightness normalization stability; flags gain < 0.85 or > 1.15.
+
+[See detailed interpretation →](../pipeline/qa_panel.md)
+
 > **When do I need this?** When a stage fails or a QA smell appears; validate inputs/outputs against known-good schema.
 
 ## Purpose
