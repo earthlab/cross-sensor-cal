@@ -174,57 +174,160 @@ class MaskedFileMixin:
 # H5 reflectance
 # ──────────────────────────────────────────────────────────────────────────────
 
+@dataclass
 class NEONReflectanceFile(DataFile):
-    pattern = re.compile(
-        r"^NEON_(?P<domain>D\d+?)_(?P<site>[A-Z0-9]+?)_DP1"
-        r"(?:\.(?P<product>\d{5}\.\d{3}))?_"
-        r"(?:(?P<tile>L\d{3}-\d)_)?"
+    tile: str | None = None
+    descriptor: str = "reflectance"
+    suffix: str | None = None
+    directional: bool = False
+
+    # ``pattern`` exists for compatibility with :class:`DataFile`, but the
+    # concrete parsing logic lives in :meth:`from_filename` below so legacy
+    # callers keep working even if the regex does not recognise a filename.
+    pattern = re.compile(r"$")
+
+    _PATTERN_TILE_DATE = re.compile(
+        r"^NEON_(?P<domain>D\d+)_"
+        r"(?P<site>[A-Z0-9]+)_"
+        r"(?P<product>DP[13](?:\.\d{5}\.\d{3})?)_"
+        r"(?P<tile>L\d{3}-\d)_"
         r"(?P<date>\d{8})"
-        r"(?:_(?P<time>\d{6}))?"            # Optional time
-        r"(?:_directional)?"                # Optional "_directional"
-        r"_reflectance(?:[-_])?(?P<suffix>[a-z0-9]+)?\.h5$"
+        r"(?:_(?P<time>\d{6}))?"
+        r"_(?P<descriptor>directional_reflectance|reflectance)"
+        r"(?:[-_](?P<suffix>[A-Za-z0-9]+))?\.h5$"
     )
 
-    def __init__(
-        self,
+    _PATTERN_LEGACY_DATETIME = re.compile(
+        r"^NEON_(?P<domain>D\d+)_"
+        r"(?P<site>[A-Z0-9]+)_"
+        r"(?P<product>DP[13](?:\.\d{5}\.\d{3})?)_"
+        r"(?P<date>\d{8})_(?P<time>\d{6})_"
+        r"(?P<descriptor>directional_reflectance|reflectance)"
+        r"(?:[-_](?P<suffix>[A-Za-z0-9]+))?\.h5$"
+    )
+
+    _PATTERN_COORD_REFLECTANCE = re.compile(
+        r"^NEON_(?P<domain>D\d+)_"
+        r"(?P<site>[A-Z0-9]+)_"
+        r"(?P<product>DP[13](?:\.\d{5}\.\d{3})?)_"
+        r"(?P<easting>\d{6})_(?P<northing>\d{7})_"
+        r"(?P<descriptor>reflectance)"
+        r"(?:[-_](?P<suffix>[A-Za-z0-9]+))?\.h5$"
+    )
+
+    _PATTERN_COORD_BIDIRECTIONAL = re.compile(
+        r"^NEON_(?P<domain>D\d+)_"
+        r"(?P<site>[A-Z0-9]+)_"
+        r"(?P<product>DP[13](?:\.\d{5}\.\d{3})?)_"
+        r"(?P<easting>\d{6})_(?P<northing>\d{7})_"
+        r"(?P<descriptor>bidirectional_reflectance)"
+        r"(?:[-_](?P<suffix>[A-Za-z0-9]+))?\.h5$"
+    )
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+        if self.product:
+            normalized = _normalize_product_value(self.product)
+            if normalized:
+                self.product = normalized
+
+        descriptor = self.descriptor or "reflectance"
+        self.descriptor = descriptor
+        self.directional = descriptor.startswith("directional")
+
+    @classmethod
+    def _build_instance(
+        cls,
+        *,
         path: Path,
         domain: str,
         site: str,
-        date: str,
-        product: Optional[str] = None,
-        time: Optional[str] = None,
-        suffix: Optional[str] = None,
-        tile: Optional[str] = None,
-        directional: bool = False
-    ):
-        super().__init__(path)
-        self.domain = domain
-        self.site = site
-        self.date = date
-        self.product = f"DP1.{product}" if product else "DP1"
-        self.time = time
-        self.tile = tile
-        self.suffix = suffix
-        self.directional = directional
+        product: str,
+        tile: str,
+        descriptor: str,
+        date: str | None = None,
+        time: str | None = None,
+        suffix: str | None = None,
+    ) -> "NEONReflectanceFile":
+        instance = cls(
+            path=path,
+            domain=domain,
+            site=site,
+            product=product,
+            tile=tile,
+            date=date,
+            time=time,
+            descriptor=descriptor,
+            suffix=suffix,
+        )
+        return instance
 
     @classmethod
-    def from_filename(cls, path: Path) -> "NEONReflectanceFile":
-        match = cls.match(path.name)
-        if not match:
-            # fallback (keeps code flowing even if a legacy H5 name slips in)
-            return cls(
-                path,
-                domain="D00",
-                site="SITE",
-                date="00000000",
-                product=None,
-                time=None,
-                suffix=None,
-                tile=None,
-                directional="_directional" in path.name
+    def from_filename(cls, path: Path | str) -> "NEONReflectanceFile":
+        p = Path(path)
+        name = p.name
+
+        match = cls._PATTERN_TILE_DATE.match(name)
+        if match:
+            gd = match.groupdict()
+            return cls._build_instance(
+                path=p,
+                domain=gd["domain"],
+                site=gd["site"],
+                product=gd["product"],
+                tile=gd["tile"],
+                date=gd["date"],
+                time=gd.get("time"),
+                descriptor=gd["descriptor"],
+                suffix=gd.get("suffix"),
             )
-        gd = match.groupdict()
-        return cls(path, directional="_directional" in path.name, **gd)  # type: ignore[arg-type]
+
+        match = cls._PATTERN_LEGACY_DATETIME.match(name)
+        if match:
+            gd = match.groupdict()
+            legacy_tile = f"{gd['date']}T{gd['time']}"
+            return cls._build_instance(
+                path=p,
+                domain=gd["domain"],
+                site=gd["site"],
+                product=gd["product"],
+                tile=legacy_tile,
+                date=gd["date"],
+                time=gd["time"],
+                descriptor=gd["descriptor"],
+                suffix=gd.get("suffix"),
+            )
+
+        match = cls._PATTERN_COORD_REFLECTANCE.match(name)
+        if match:
+            gd = match.groupdict()
+            coord_tile = f"{gd['easting']}_{gd['northing']}"
+            return cls._build_instance(
+                path=p,
+                domain=gd["domain"],
+                site=gd["site"],
+                product=gd["product"],
+                tile=coord_tile,
+                descriptor=gd["descriptor"],
+                suffix=gd.get("suffix"),
+            )
+
+        match = cls._PATTERN_COORD_BIDIRECTIONAL.match(name)
+        if match:
+            gd = match.groupdict()
+            coord_tile = f"{gd['easting']}_{gd['northing']}"
+            return cls._build_instance(
+                path=p,
+                domain=gd["domain"],
+                site=gd["site"],
+                product=gd["product"],
+                tile=coord_tile,
+                descriptor=gd["descriptor"],
+                suffix=gd.get("suffix"),
+            )
+
+        raise ValueError(f"Unrecognized NEON reflectance filename format: {name}")
 
     @classmethod
     def from_components(
@@ -255,43 +358,68 @@ class NEONReflectanceFile(DataFile):
 # ──────────────────────────────────────────────────────────────────────────────
 
 class NEONReflectanceENVIFile(DataFile):
-    """
-    Base (uncorrected) NEON reflectance ENVI image, e.g.
-      NEON_D10_R10C_DP1.30006.001_L003-1_20210915_directional_reflectance_envi.img
-      NEON_D10_R10C_DP1.30006.001_L003-1_20210915_reflectance_envi.img
-      NEON_D10_R10C_DP1.30006.001_L003-1_20210915_000000_directional_reflectance_envi.img
-    """
-    pattern = re.compile(
-        r"""
-        ^NEON_
-        (?P<domain>D\d{2})_
-        (?P<site>[A-Z0-9]{4})_
-        (?P<product>DP\d(?:\.\d{5}\.\d{3})?)_
-        (?P<tile>L\d{3}-\d)_
-        (?P<date>\d{8})
-        (?:_(?P<time>\d{6}))?                 # optional _HHMMSS
-        _(?:(?P<directional>directional)_)?   # optional "directional_"
-        reflectance_envi
-        \.(?P<ext>img|hdr)$
-        """,
-        re.VERBOSE
-    )
+    """Base (uncorrected) NEON reflectance ENVI image."""
+
+    pattern = re.compile(r"$")
 
     @classmethod
     def parse_filename(cls, path: Path):
-        m = cls.match(path.name)
-        if not m:
+        suffix = path.suffix.lower()
+        if suffix not in {".img", ".hdr"}:
             return None
-        gd = m.groupdict()
+
+        stem = path.stem
+        parts = stem.split("_")
+        if len(parts) < 5 or parts[0] != "NEON":
+            return None
+
+        if parts[-1].lower() != "envi" or parts[-2].lower() != "reflectance":
+            return None
+
+        remainder = parts[1:-2]
+        descriptor_token = None
+        if remainder and remainder[-1].lower() in {"directional", "bidirectional"}:
+            descriptor_token = remainder.pop().lower()
+
+        if len(remainder) < 3:
+            return None
+
+        domain = remainder[0]
+        site = remainder[1]
+        product = remainder[2]
+        extra = remainder[3:]
+        if not extra:
+            return None
+
+        time: str | None = None
+        date: str | None = None
+        if extra and re.fullmatch(r"\d{6}", extra[-1]):
+            time = extra.pop()
+        if extra and re.fullmatch(r"\d{8}", extra[-1]):
+            date = extra.pop()
+
+        tile = "_".join(extra) if extra else None
+        if not tile:
+            return None
+
+        descriptor = "reflectance"
+        directional = False
+        if descriptor_token == "directional":
+            descriptor = "directional_reflectance"
+            directional = True
+        elif descriptor_token == "bidirectional":
+            descriptor = "bidirectional_reflectance"
+
         return {
-            "domain": gd["domain"],
-            "site": gd["site"],
-            "product": gd["product"],
-            "tile": gd["tile"],
-            "date": gd["date"],
-            "time": gd.get("time"),
-            "directional": bool(gd.get("directional")),
-            "ext": gd["ext"],
+            "domain": domain,
+            "site": site,
+            "product": product,
+            "tile": tile,
+            "date": date,
+            "time": time,
+            "directional": directional,
+            "descriptor": descriptor,
+            "ext": suffix.lstrip("."),
         }
 
     @classmethod
@@ -307,6 +435,9 @@ class NEONReflectanceENVIFile(DataFile):
         obj.date = meta["date"]
         obj.time = meta["time"]
         obj.directional = meta["directional"]
+        descriptor = meta.get("descriptor")
+        if descriptor:
+            obj.descriptor = descriptor  # type: ignore[attr-defined]
         return obj
 
     @classmethod
@@ -317,12 +448,17 @@ class NEONReflectanceENVIFile(DataFile):
         site: str,
         product: str = "DP1.30006.001",
         tile: str,
-        date: str,
+        date: Optional[str] = None,
         time: Optional[str] = None,
         directional: bool = True,
         folder: Path
     ) -> "NEONReflectanceENVIFile":
-        parts = ["NEON", domain, site, product, tile, date]
+        if not tile:
+            raise ValueError("tile must be a non-empty string")
+
+        parts = ["NEON", domain, site, product, tile]
+        if date:
+            parts.append(date)
         if time:
             parts.append(time)
         if directional:
