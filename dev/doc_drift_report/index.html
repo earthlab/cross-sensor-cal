@@ -1105,6 +1105,8 @@
 <ul>
 <li>[merge] ⚠️ QA panel after merge failed for {prefix}: {e}</li>
 <li>[merge] 🖼️  QA panel → {out_png_path} </li>
+<li>[{flight_stem}] ⬇️ Download already complete — reusing existing files ({h5_path.name})</li>
+<li>[{flight_stem}] 🌐 Downloading {flight_stem} ({site_code}, {year_month}) into {h5_path} ...</li>
 <li>⏭️ Parquet already present for %s -&gt; %s (skipping)</li>
 <li>⚠️ Cannot create Parquet work directory for %s: %s</li>
 <li>⚠️ Cannot export Parquet for %s because .hdr is missing or empty</li>
@@ -1118,17 +1120,17 @@
 <li>✅ BRDF+topo correction already complete for %s, skipping</li>
 <li>✅ BRDF+topo correction completed for %s -&gt; %s / %s</li>
 <li>✅ Download complete for %s → %s</li>
-<li>✅ ENVI export already complete for %s -&gt; %s / %s (skipping heavy export)</li>
-<li>✅ ENVI export completed for %s -&gt; %s / %s</li>
+<li>✅ ENVI export created successfully → {raw_img_path.name} / {raw_hdr_path.name}</li>
+<li>✅ Existing ENVI export found — skipping heavy export ({raw_img_path.name} / {raw_hdr_path.name})</li>
 <li>✅ Parquet stage complete for %s</li>
 <li>✅ Wrote Parquet for %s -&gt; %s</li>
-<li>🌐 Downloading %s (%s, %s) into %s ...</li>
+<li>✨ Existing ENVI exports detected — pipeline will reuse validated files automatically.</li>
 <li>🎉 Finished pipeline for %s</li>
 <li>🎉 Finished pipeline for %s (parallel worker join)</li>
 <li>🎯 Convolving corrected reflectance for %s</li>
-<li>📦 ENVI export not found or invalid for %s, generating from %s</li>
+<li>📍 Preparing ENVI export at: {raw_img_path.name} / {raw_hdr_path.name}</li>
+<li>📦 No existing ENVI export detected — creating a new one from source data {h5_path.name}</li>
 <li>📦 Parquet export for %s ...</li>
-<li>🔎 ENVI export target for %s is %s / %s</li>
 </ul>
 <p>TODO: Review sensor labels in docs for formatting issues.</p>
 

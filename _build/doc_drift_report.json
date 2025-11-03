@@ -85,6 +85,8 @@
   "stages_found": [
     "[merge] \u26a0\ufe0f QA panel after merge failed for {prefix}: {e}",
     "[merge] \ud83d\uddbc\ufe0f  QA panel \u2192 {out_png_path} ",
+    "[{flight_stem}] \u2b07\ufe0f Download already complete \u2014 reusing existing files ({h5_path.name})",
+    "[{flight_stem}] \ud83c\udf10 Downloading {flight_stem} ({site_code}, {year_month}) into {h5_path} ...",
     "\u23ed\ufe0f Parquet already present for %s -> %s (skipping)",
     "\u26a0\ufe0f Cannot create Parquet work directory for %s: %s",
     "\u26a0\ufe0f Cannot export Parquet for %s because .hdr is missing or empty",
@@ -98,17 +100,17 @@
     "\u2705 BRDF+topo correction already complete for %s, skipping",
     "\u2705 BRDF+topo correction completed for %s -> %s / %s",
     "\u2705 Download complete for %s \u2192 %s",
-    "\u2705 ENVI export already complete for %s -> %s / %s (skipping heavy export)",
-    "\u2705 ENVI export completed for %s -> %s / %s",
+    "\u2705 ENVI export created successfully \u2192 {raw_img_path.name} / {raw_hdr_path.name}",
+    "\u2705 Existing ENVI export found \u2014 skipping heavy export ({raw_img_path.name} / {raw_hdr_path.name})",
     "\u2705 Parquet stage complete for %s",
     "\u2705 Wrote Parquet for %s -> %s",
-    "\ud83c\udf10 Downloading %s (%s, %s) into %s ...",
+    "\u2728 Existing ENVI exports detected \u2014 pipeline will reuse validated files automatically.",
     "\ud83c\udf89 Finished pipeline for %s",
     "\ud83c\udf89 Finished pipeline for %s (parallel worker join)",
     "\ud83c\udfaf Convolving corrected reflectance for %s",
-    "\ud83d\udce6 ENVI export not found or invalid for %s, generating from %s",
-    "\ud83d\udce6 Parquet export for %s ...",
-    "\ud83d\udd0e ENVI export target for %s is %s / %s"
+    "\ud83d\udccd Preparing ENVI export at: {raw_img_path.name} / {raw_hdr_path.name}",
+    "\ud83d\udce6 No existing ENVI export detected \u2014 creating a new one from source data {h5_path.name}",
+    "\ud83d\udce6 Parquet export for %s ..."
   ],
   "entry_points": {
     "cscal-download": "cross_sensor_cal.cli:download_main",
