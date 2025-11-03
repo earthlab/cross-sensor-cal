@@ -528,6 +528,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#quality-assurance-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quality Assurance Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#release-highlights" class="md-nav__link">
     <span class="md-ellipsis">
       Release highlights
@@ -1200,6 +1209,13 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 </tr>
 </tbody>
 </table>
+<hr />
+<h2 id="quality-assurance-overview">Quality Assurance Overview<a class="headerlink" href="#quality-assurance-overview" title="Permanent link">&para;</a></h2>
+<p>All processed tiles automatically undergo a <strong>QA panel</strong> and <strong>JSON validation</strong> stage.</p>
+<p>✅ <strong>Good:</strong> reflectance within [0, 1.2], low ΔReflectance, high mask coverage.<br />
+⚠️ <strong>Needs Review:</strong> 1–2 metrics outside thresholds.<br />
+❌ <strong>Fail:</strong> large brightness shifts, missing wavelengths, or high spectral error.</p>
+<p><a href="pipeline/qa_panel/">Read full QA interpretation →</a></p>
 <h2 id="release-highlights">Release highlights<a class="headerlink" href="#release-highlights" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Per-flightline master table written as <strong><code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code></strong></li>

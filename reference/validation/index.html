@@ -860,6 +860,33 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#reflectance-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      ΔReflectance Test
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#convolution-accuracy-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      Convolution Accuracy Test
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#brightness-gainoffset-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      Brightness Gain/Offset Check
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#purpose" class="md-nav__link">
     <span class="md-ellipsis">
       Purpose
@@ -1107,6 +1134,23 @@
 
 
 <h1 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>Purpose:</strong> This section explains the QA tests in quantitative terms.</p>
+</blockquote>
+<p>Validation routines in <code>cross_sensor_cal.qa_plots</code> compute physical and statistical
+diagnostics designed to be <em>interpretable by scientists</em>. They check not only numeric stability
+but physical plausibility (reflectance bounds, wavelength order, spectral coherence).</p>
+<p>For each metric, expected ranges are derived from NEON calibration standards and cross-sensor
+comparisons (Landsat OLI, Sentinel-2 MSI, and MicaSense). These ranges were validated empirically
+across 2021–2024 flight lines and provide confidence that corrected products maintain
+absolute reflectance fidelity within ±2 %.</p>
+<h3 id="reflectance-test">ΔReflectance Test<a class="headerlink" href="#reflectance-test" title="Permanent link">&para;</a></h3>
+<p>Measures the magnitude of change introduced by correction; large uniform shifts imply over- or under-correction.</p>
+<h3 id="convolution-accuracy-test">Convolution Accuracy Test<a class="headerlink" href="#convolution-accuracy-test" title="Permanent link">&para;</a></h3>
+<p>Computes RMSE and SAM between expected and computed spectral bands; high errors indicate sensor response mismatch.</p>
+<h3 id="brightness-gainoffset-check">Brightness Gain/Offset Check<a class="headerlink" href="#brightness-gainoffset-check" title="Permanent link">&para;</a></h3>
+<p>Evaluates brightness normalization stability; flags gain &lt; 0.85 or &gt; 1.15.</p>
+<p><a href="../../pipeline/qa_panel/">See detailed interpretation →</a></p>
 <blockquote>
 <p><strong>When do I need this?</strong> When a stage fails or a QA smell appears; validate inputs/outputs against known-good schema.</p>
 </blockquote>

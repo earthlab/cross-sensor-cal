@@ -604,19 +604,6 @@
         
       
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    QA panel
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -628,52 +615,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#running-the-panel-generator" class="md-nav__link">
-    <span class="md-ellipsis">
-      Running the panel generator
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#metrics-json" class="md-nav__link">
-    <span class="md-ellipsis">
-      Metrics JSON
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting-cues" class="md-nav__link">
-    <span class="md-ellipsis">
-      Troubleshooting cues
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -1091,67 +1032,204 @@
 <h1 id="qa-panel">QA panel<a class="headerlink" href="#qa-panel" title="Permanent link">&para;</a></h1>
 <p>The QA panel now couples a metrics JSON file with the annotated PNG so that
 engineering and science teams can track both spectral statistics and the visual
-context for every flightline. Each panel contains four sections:</p>
+context for every flightline.</p>
+<hr />
+<h1 id="qa-panel-and-validation-tests">QA Panel and Validation Tests<a class="headerlink" href="#qa-panel-and-validation-tests" title="Permanent link">&para;</a></h1>
+<p>The QA panel is the final diagnostic step of the <strong>Cross-Sensor Calibration pipeline</strong>.<br />
+It provides both a visual and quantitative summary of how well each product behaved through all correction stages (topographic, BRDF, brightness, convolution).  </p>
+<hr />
+<h2 id="what-the-qa-tests-measure">What the QA Tests Measure<a class="headerlink" href="#what-the-qa-tests-measure" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>What It Checks</th>
+<th>Why It Matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Reflectance Range &amp; Negatives %</strong></td>
+<td>Fraction of pixels below 0 or above 1.2</td>
+<td>Reflectance should remain physically bounded. Large negative or &gt;1.2 values indicate poor radiometric scaling or unmasked clouds/shadows.</td>
+</tr>
+<tr>
+<td><strong>Header &amp; Wavelength Integrity</strong></td>
+<td>Presence, count, and monotonicity of <code>wavelength</code> values in ENVI headers</td>
+<td>Ensures each band is correctly aligned; missing or non-monotonic wavelengths break convolution and spectral analyses.</td>
+</tr>
+<tr>
+<td><strong>ΔReflectance (Pre→Post Correction)</strong></td>
+<td>Median and IQR difference in reflectance before and after BRDF/topo correction</td>
+<td>Quantifies how much the correction changed the data. Large deltas in flat terrain suggest over-correction; near-zero deltas in complex terrain may suggest under-correction.</td>
+</tr>
+<tr>
+<td><strong>Brightness Normalization (if applied)</strong></td>
+<td>Per-band gain and offset used in brightness correction</td>
+<td>Tracks whether correction parameters remain within expected limits (e.g., gain ∈ [0.9, 1.1]). Large deviations imply inconsistent illumination normalization.</td>
+</tr>
+<tr>
+<td><strong>Convolution Accuracy (per target sensor)</strong></td>
+<td>RMSE and Spectral Angle Mapper (SAM) between expected vs computed bands</td>
+<td>Confirms spectral resampling is physically consistent. High RMSE or large SAM (&gt;0.05 radians) indicates wavelength misalignment or incorrect response functions.</td>
+</tr>
+<tr>
+<td><strong>Mask Coverage</strong></td>
+<td>% of valid pixels used for metrics</td>
+<td>Low valid coverage (&lt;60%) signals missing masks or unfiltered NaNs.</td>
+</tr>
+<tr>
+<td><strong>Histogram Shape Consistency</strong></td>
+<td>Visual histogram overlay of pre/post corrections</td>
+<td>Skewed or bimodal shapes suggest scene heterogeneity or masking issues.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="why-these-tests-are-appropriate">Why These Tests Are Appropriate<a class="headerlink" href="#why-these-tests-are-appropriate" title="Permanent link">&para;</a></h2>
+<p>These diagnostics are <strong>physically interpretable</strong> and <strong>sensor-agnostic</strong>:</p>
+<ul>
+<li><strong>Radiometric realism:</strong> Reflectance outside [0,1.2] is physically implausible and signals calibration drift or shadow contamination.  </li>
+<li><strong>Spectral continuity:</strong> Monotonic wavelengths ensure that per-band corrections and convolutions follow real sensor band order.  </li>
+<li><strong>Conservation principle:</strong> ΔReflectance checks whether corrections preserve brightness globally (no systematic over-darkening).  </li>
+<li><strong>Geometric realism:</strong> Mask coverage and illumination correlation prevent interpreting shadowed or topographically inverted pixels as valid reflectance.  </li>
+<li><strong>Spectral fidelity:</strong> RMSE and SAM compare corrected spectra to expected bandpasses, verifying physical sensor compatibility.</li>
+</ul>
+<hr />
+<h2 id="how-to-interpret-the-panel">How to Interpret the Panel<a class="headerlink" href="#how-to-interpret-the-panel" title="Permanent link">&para;</a></h2>
+<p>Each panel includes:</p>
 <ol>
-<li><strong>RGB quicklook</strong> – 660/560/490 nm bands (or your overrides) stretched to
-   unitless reflectance. Red callouts appear when metrics flag issues such as
-   missing header keys or large correction deltas.</li>
-<li><strong>Pre vs post histograms</strong> – fixed-bin histograms that show how the BRDF and
-   topographic corrections shift the reflectance distribution.</li>
-<li><strong>Δ median vs wavelength</strong> – per-band median change with interquartile ribbons
-   (requires wavelengths from the ENVI header or sensor defaults).</li>
-<li><strong>Convolved scatter</strong> – 1:1 scatter plot comparing corrected cubes to any
-   *_convolved_envi products, annotated with RMSE/SAM in the JSON.</li>
+<li><strong>Left:</strong> RGB quicklook using auto-selected bands (660, 560, 490 nm).  </li>
+<li><em>Uniform color tone</em>: good illumination normalization.  </li>
+<li><em>Patchy shadows or gradients</em>: check DTM alignment or BRDF model.</li>
+<li><strong>Top-right:</strong> Pre (gray) vs Post (green) histograms.  </li>
+<li><em>Slight narrowing</em>: normal (flattening illumination gradients).  </li>
+<li><em>Severe shift left/right</em>: over- or under-correction.</li>
+<li><strong>Middle-right:</strong> ΔReflectance vs Wavelength curve (median ± IQR).  </li>
+<li><em>Smooth near-zero line</em>: ideal.  </li>
+<li><em>Large band-specific spikes</em>: band-specific sensor noise or cloud edges.</li>
+<li><strong>Bottom-right:</strong> Convolution scatter (expected vs computed).  </li>
+<li><em>Points close to 1:1 line</em>: good.  </li>
+<li><em>Systematic bias or slope ≠ 1</em>: check wavelength alignment or FWHM mismatch.</li>
+<li><strong>Footer:</strong> Metadata (flightline ID, date, package version, git SHA).</li>
 </ol>
-<h2 id="running-the-panel-generator">Running the panel generator<a class="headerlink" href="#running-the-panel-generator" title="Permanent link">&para;</a></h2>
-<p>Use the QA CLI to regenerate PNG+JSON pairs. Quick mode is deterministic and
-caps sampling at ~25k pixels, while full mode uses the supplied sample budget.</p>
-<div class="highlight"><pre><span></span><code>cscal-qa<span class="w"> </span>--base-folder<span class="w"> </span>workspace/processed<span class="w"> </span>--quick
-<span class="c1"># or a more exhaustive pass</span>
-cscal-qa<span class="w"> </span>--base-folder<span class="w"> </span>workspace/processed<span class="w"> </span>--full<span class="w"> </span>--n-sample<span class="w"> </span><span class="m">150000</span>
+<hr />
+<h2 id="quantitative-thresholds-for-not-good">Quantitative Thresholds for “Not Good”<a class="headerlink" href="#quantitative-thresholds-for-not-good" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Acceptable Range</th>
+<th>“Needs Review”</th>
+<th>“Problematic”</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Negatives %</td>
+<td>&lt; 0.5 %</td>
+<td>0.5–2 %</td>
+<td>&gt; 2 %</td>
+</tr>
+<tr>
+<td>Reflectance &gt; 1.2</td>
+<td>&lt; 0.5 %</td>
+<td>0.5–2 %</td>
+<td>&gt; 2 %</td>
+</tr>
+<tr>
+<td>ΔReflectance median</td>
+<td></td>
+<td>&lt; 0.02 (normally good)</td>
+<td>&gt; 0.05 (over/under-correction)</td>
+</tr>
+<tr>
+<td>Brightness gain</td>
+<td>0.9–1.1</td>
+<td>0.85–0.9 / 1.1–1.15</td>
+<td>&lt; 0.85 or &gt; 1.15</td>
+</tr>
+<tr>
+<td>Convolution RMSE</td>
+<td>&lt; 0.02</td>
+<td>0.02–0.05</td>
+<td>&gt; 0.05</td>
+</tr>
+<tr>
+<td>SAM (radians)</td>
+<td>&lt; 0.03</td>
+<td>0.03–0.05</td>
+<td>&gt; 0.05</td>
+</tr>
+<tr>
+<td>Mask coverage</td>
+<td>&gt; 80 %</td>
+<td>60–80 %</td>
+<td>&lt; 60 %</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="deciding-when-a-product-fails-qa">Deciding When a Product Fails QA<a class="headerlink" href="#deciding-when-a-product-fails-qa" title="Permanent link">&para;</a></h2>
+<p>Mark a product as <strong>Needs Review</strong> when:
+- ≥ 2 metrics fall in the “Needs Review” column, <strong>or</strong>
+- Any single metric hits the “Problematic” range.</p>
+<p>Mark a product as <strong>Fail</strong> when:
+- &gt; 10 % of bands exceed thresholds (e.g., ΔReflectance &gt; 0.05),
+- Wavelengths are missing or non-monotonic,
+- Convolution RMSE &gt; 0.05 <strong>and</strong> SAM &gt; 0.05,
+- Mask coverage &lt; 60 %.</p>
+<p>All QA results are summarized in the sidecar JSON (<code>*_qa.json</code>), enabling programmatic filtering.</p>
+<hr />
+<h2 id="next-steps-after-qa-flags">Next Steps After QA Flags<a class="headerlink" href="#next-steps-after-qa-flags" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Issue</th>
+<th>Likely Cause</th>
+<th>Recommended Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Many negatives or high reflectance</td>
+<td>Mis-scaled input, wrong gain offset</td>
+<td>Re-run brightness correction or check calibration constants.</td>
+</tr>
+<tr>
+<td>Non-monotonic wavelengths</td>
+<td>Corrupted or edited header</td>
+<td>Re-export ENVI or fix <code>wavelength</code> list manually.</td>
+</tr>
+<tr>
+<td>Large ΔReflectance</td>
+<td>Over-aggressive BRDF correction</td>
+<td>Adjust BRDF parameters or review illumination mask.</td>
+</tr>
+<tr>
+<td>High RMSE/SAM</td>
+<td>Wrong sensor response curves</td>
+<td>Verify target sensor config file.</td>
+</tr>
+<tr>
+<td>Low mask coverage</td>
+<td>Cloud or DTM mask mismatch</td>
+<td>Improve masking or fill small gaps before QA.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="automating-qa-review">Automating QA Review<a class="headerlink" href="#automating-qa-review" title="Permanent link">&para;</a></h2>
+<p>Each QA JSON includes numeric thresholds.
+You can quickly summarize or flag tiles programmatically:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span><span class="o">,</span><span class="w"> </span><span class="nn">glob</span>
+<span class="n">bad</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;*/**/*_qa.json&quot;</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">q</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;negatives_pct&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">2.0</span> <span class="ow">or</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;mask&quot;</span><span class="p">][</span><span class="s2">&quot;valid_pct&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">60</span><span class="p">:</span>
+        <span class="n">bad</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Tiles needing review:&quot;</span><span class="p">,</span> <span class="n">bad</span><span class="p">)</span>
 </code></pre></div>
-<p>Flags worth remembering:</p>
-<ul>
-<li><code>--rgb-bands 650,550,480</code> to override the RGB targets.</li>
-<li><code>--no-save-json</code> to skip emitting the metrics file (PNG only).</li>
-</ul>
-<h2 id="metrics-json">Metrics JSON<a class="headerlink" href="#metrics-json" title="Permanent link">&para;</a></h2>
-<p>Each PNG is accompanied by <code>&lt;prefix&gt;_qa.json</code>. The JSON mirrors the
-<code>QAMetrics</code> dataclass and captures provenance, header health, mask coverage, and
-spectral deltas. Below is a trimmed example:</p>
-<div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;provenance&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;flightline_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;NEON_TEST_FLIGHT&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;created_utc&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-04-08T12:00:00Z&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;package_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.2.0&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;git_sha&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc1234&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;input_hashes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;NEON_TEST_FLIGHT_envi.img&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">}</span>
-<span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;header&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;n_bands&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">426</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;wavelength_unit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Nanometers&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;wavelength_source&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;header&quot;</span>
-<span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;mask&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;valid_pct&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">99.2</span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;correction&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;delta_median&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mf">-0.01</span><span class="p">,</span><span class="w"> </span><span class="mf">0.02</span><span class="p">,</span><span class="w"> </span><span class="err">...</span><span class="p">]},</span>
-<span class="w">  </span><span class="nt">&quot;convolution&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;sensor&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;oli&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;sam&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.004</span><span class="p">}],</span>
-<span class="w">  </span><span class="nt">&quot;negatives_pct&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.3</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;issues&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
-<span class="p">}</span>
-</code></pre></div>
-<p>When the pipeline runs brightness correction, the <code>correction</code> block will also
-contain per-band gain/offset diagnostics to support downstream QA reviews.</p>
-<h2 id="troubleshooting-cues">Troubleshooting cues<a class="headerlink" href="#troubleshooting-cues" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Red callout referencing header gaps</strong> – confirm the ENVI header exports
-  <code>wavelength</code>, <code>fwhm</code>, and <code>band names</code>.</li>
-<li><strong>Large Δ median spikes</strong> – revisit correction coefficients or rerun with a
-  denser sample (<code>--full</code>).</li>
-<li><strong>High negative percentage</strong> – inspect masks and solar-geometry inputs for the
-  BRDF/topo stage.</li>
-</ul>
-<p>Re-running <code>cscal-qa</code> after a fix overwrites both the PNG and the JSON so you
-always have up-to-date metrics.</p>
 
 
 
