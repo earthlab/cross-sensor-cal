@@ -1119,7 +1119,7 @@
 <h2 id="full-pipeline-one-tile">Full pipeline (one tile)<a class="headerlink" href="#full-pipeline-one-tile" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Run every stage end-to-end for a single flight line.</p>
 <p><strong>Inputs</strong> Base folder, NEON site/month/product, flight line IDs.</p>
-<p><strong>Outputs</strong> Per-flight directory with ENVI exports, corrected/convolved cubes, Parquet tables, merged parquet, QA panel PNG, QA PDF, and QA JSON.</p>
+<p><strong>Outputs</strong> Per-flight directory with ENVI exports, corrected/resampled cubes, Parquet tables, merged parquet, QA panel PNG, QA PDF, and QA JSON.</p>
 <p><strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cscal-pipeline<span class="w"> </span>--base-folder<span class="w"> </span>out<span class="w"> </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
@@ -1136,17 +1136,17 @@ Only <code>WARNING</code> or <code>ERROR</code> messages require attention.</p>
 <h2 id="convolve-only">Convolve only<a class="headerlink" href="#convolve-only" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Resample corrected ENVI cubes to a target sensor.</p>
 <p><strong>Inputs</strong> Corrected ENVI <code>.img</code> files, target sensor code, output folder.</p>
-<p><strong>Outputs</strong> <code>_brdfandtopo_corrected_envi_&lt;sensor&gt;.img/.hdr</code> for each input cube.</p>
+<p><strong>Outputs</strong> <code>&lt;prefix&gt;_resampled_&lt;sensor&gt;_envi.img/.hdr</code> inside per-sensor resample folders.</p>
 <p><strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>convolve<span class="w"> </span>--in<span class="w"> </span>corrected/*_brdfandtopo_corrected_envi.img<span class="w"> </span>--sensor<span class="w"> </span>OLI<span class="w"> </span>--out<span class="w"> </span>convolved/
 </code></pre></div>
 <strong>Pitfalls</strong> Ensure corrected HDR files include valid wavelength metadata.</p>
 <h2 id="export-parquet-only">Export parquet only<a class="headerlink" href="#export-parquet-only" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Flatten ENVI products into tidy Parquet files.</p>
-<p><strong>Inputs</strong> One or more ENVI <code>.img</code> paths (corrected and/or convolved) and an output directory.</p>
+<p><strong>Inputs</strong> One or more ENVI <code>.img</code> paths (corrected and/or resampled) and an output directory.</p>
 <p><strong>Outputs</strong> One Parquet per ENVI input plus logs describing chunk sizes.</p>
 <p><strong>Run it</strong>
-<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>export-parquet<span class="w"> </span>--in<span class="w"> </span>corrected/*.img<span class="w"> </span>convolved/*.img<span class="w"> </span>--out<span class="w"> </span>parquet/
+<div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>export-parquet<span class="w"> </span>--in<span class="w"> </span>corrected/*.img<span class="w"> </span>Convolution_Reflectance_Resample_*/*.img<span class="w"> </span>--out<span class="w"> </span>parquet/
 </code></pre></div>
 <strong>Pitfalls</strong> Use <code>--chunksize</code> when RAM is limited.</p>
 <h2 id="merge-qa">Merge + QA<a class="headerlink" href="#merge-qa" title="Permanent link">&para;</a></h2>

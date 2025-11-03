@@ -1109,8 +1109,8 @@ writes a multi-page PDF report (<code>&lt;prefix&gt;_qa.pdf</code>) with three p
 <p><strong>Page 3 – Remaining QA diagnostics</strong>  </p>
 </li>
 <li>Convolution scatter plots (expected vs computed bands).  </li>
-<li>Header and wavelength integrity summary.  </li>
-<li>Mask coverage &amp; negatives summary.  </li>
+<li>Header and wavelength integrity summary (flags when sensor defaults are used).</li>
+<li>Mask coverage, negatives %, and &gt;1.2 reflectance % summary.</li>
 <li>Issues/warnings, including brightness coefficients that were applied.</li>
 </ol>
 <hr />
@@ -1129,14 +1129,14 @@ It provides both a visual and quantitative summary of how well each product beha
 </thead>
 <tbody>
 <tr>
-<td><strong>Reflectance Range &amp; Negatives %</strong></td>
+<td><strong>Reflectance Range (negatives &amp; &gt;1.2 %)</strong></td>
 <td>Fraction of pixels below 0 or above 1.2</td>
 <td>Reflectance should remain physically bounded. Large negative or &gt;1.2 values indicate poor radiometric scaling or unmasked clouds/shadows.</td>
 </tr>
 <tr>
 <td><strong>Header &amp; Wavelength Integrity</strong></td>
-<td>Presence, count, and monotonicity of <code>wavelength</code> values in ENVI headers</td>
-<td>Ensures each band is correctly aligned; missing or non-monotonic wavelengths break convolution and spectral analyses.</td>
+<td>Presence, count, monotonicity, and provenance of <code>wavelength</code> values in ENVI headers</td>
+<td>Ensures each band is correctly aligned; missing, non-monotonic, or defaulted wavelengths break convolution and spectral analyses.</td>
 </tr>
 <tr>
 <td><strong>ΔReflectance (Pre→Post Correction)</strong></td>
@@ -1230,7 +1230,7 @@ audit the exact per-band values.</p>
 <td>&gt; 2 %</td>
 </tr>
 <tr>
-<td>Reflectance &gt; 1.2</td>
+<td>&gt;1.2 reflectance %</td>
 <td>&lt; 0.5 %</td>
 <td>0.5–2 %</td>
 <td>&gt; 2 %</td>
@@ -1324,7 +1324,11 @@ You can quickly summarize or flag tiles programmatically:</p>
 <span class="n">bad</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;*/**/*_qa.json&quot;</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
     <span class="n">q</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
-    <span class="k">if</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;negatives_pct&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">2.0</span> <span class="ow">or</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;mask&quot;</span><span class="p">][</span><span class="s2">&quot;valid_pct&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">60</span><span class="p">:</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">q</span><span class="p">[</span><span class="s2">&quot;negatives_pct&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">2.0</span>
+        <span class="ow">or</span> <span class="n">q</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;overbright_pct&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">2.0</span>
+        <span class="ow">or</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;mask&quot;</span><span class="p">][</span><span class="s2">&quot;valid_pct&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">60</span>
+    <span class="p">):</span>
         <span class="n">bad</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Tiles needing review:&quot;</span><span class="p">,</span> <span class="n">bad</span><span class="p">)</span>
 </code></pre></div>

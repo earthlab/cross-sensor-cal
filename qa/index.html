@@ -1028,11 +1028,11 @@ cscal-qa<span class="w"> </span>--base-folder<span class="w"> </span>output_demo
 <li><strong>Δ median vs wavelength</strong> – bandwise medians with IQR ribbon; uses header
   wavelengths or sensor defaults.</li>
 <li><strong>Convolved scatter</strong> – compares corrected data to any <code>*_convolved_envi</code>
-  outputs with a 1:1 reference line.</li>
+  or <code>*_resampled_&lt;sensor&gt;_envi</code> outputs with a 1:1 reference line.</li>
 </ul>
 <p>Each PNG lives alongside <code>&lt;prefix&gt;_qa.json</code>, which mirrors the
 <code>QAMetrics</code> dataclass (<code>provenance</code>, <code>header</code>, <code>mask</code>, <code>correction</code>,
-<code>convolution</code>, <code>negatives_pct</code>, <code>issues</code>). When the brightness correction stage
+<code>convolution</code>, <code>negatives_pct</code>, <code>overbright_pct</code>, <code>issues</code>). When the brightness correction stage
 runs, the JSON also lists per-band gain/offsets so the QA team can trace changes
 back to illumination harmonisation.</p>
 <p>Use <code>--out-dir</code> if you want to collect all PNG/JSON pairs into a single folder
