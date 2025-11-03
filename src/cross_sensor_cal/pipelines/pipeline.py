@@ -1238,7 +1238,7 @@ def stage_export_envi_from_h5(
 
     if _looks_valid(raw_img_path, raw_hdr_path):
         logger.info(
-            f"✅ Existing ENVI export found — skipping regeneration ({raw_img_path.name} / {raw_hdr_path.name})"
+            f"✅ Existing ENVI export found — skipping heavy export ({raw_img_path.name} / {raw_hdr_path.name})"
         )
         return raw_img_path, raw_hdr_path
 
