@@ -19,6 +19,7 @@ def test_render_panel_writes_png_and_json(qa_fixture_dir: Path) -> None:
     assert data["provenance"]["flightline_id"] == qa_fixture_dir.name
     assert data["mask"]["valid_pct"] >= 0
     assert data["negatives_pct"] >= 0
+    assert data["overbright_pct"] >= 0
     assert isinstance(metrics["header"]["n_bands"], int)
     assert len(data["correction"]["delta_median"]) == data["header"]["n_bands"]
     assert all(isinstance(idx, int) for idx in data["correction"]["largest_delta_indices"])
@@ -37,5 +38,6 @@ def test_metrics_arrays_are_serialisable(qa_fixture_dir: Path) -> None:
         "correction",
         "convolution",
         "negatives_pct",
+        "overbright_pct",
         "issues",
     }

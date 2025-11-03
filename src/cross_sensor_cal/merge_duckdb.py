@@ -40,7 +40,7 @@ import traceback
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import duckdb
 
@@ -83,6 +83,26 @@ def _exclude_parquets(paths):
             continue
         keep.append(Path(p))
     return keep
+
+
+def _filter_valid_parquets(paths: Iterable[Path]) -> Tuple[List[Path], List[Tuple[Path, str]]]:
+    valid: List[Path] = []
+    skipped: List[Tuple[Path, str]] = []
+    try:
+        import pyarrow.parquet as pq
+    except ModuleNotFoundError as exc:  # pragma: no cover - environment expectation
+        raise RuntimeError(
+            "pyarrow is required to validate parquet inputs before merge"
+        ) from exc
+
+    for path in paths:
+        try:
+            pq.ParquetFile(path.as_posix())
+        except Exception as exc:  # pragma: no cover - corruption varies by test data
+            skipped.append((path, str(exc)))
+        else:
+            valid.append(path)
+    return valid, skipped
 
 
 @contextmanager
@@ -188,6 +208,21 @@ def _register_union(
 ) -> None:
     escaped_name = _quote_identifier(f"{name}_raw")
     path_list = sorted(Path(p) for p in paths)
+
+    if path_list:
+        valid_paths, skipped = _filter_valid_parquets(path_list)
+        for bad_path, message in skipped:
+            print(
+                f"[merge] ⚠️ Skipping invalid parquet {bad_path.name}: {message}\n"
+                f"        Delete or regenerate this file before re-running the merge."
+            )
+        if not valid_paths and skipped:
+            raise FileNotFoundError(
+                "No valid parquet files remain for "
+                f"'{name}'. Remove or recreate the invalid files: "
+                + ", ".join(bad.name for bad, _ in skipped)
+            )
+        path_list = valid_paths
 
     if not path_list:
         con.execute(
@@ -560,14 +595,11 @@ def merge_flightline(
 
     if emit_qa_panel:
         try:
-            from cross_sensor_cal.qa_plots import make_flightline_panel
+            from cross_sensor_cal.qa_plots import render_flightline_panel
+
             with _progress("QA: render panel"):
-                out_png_path = make_flightline_panel(
-                    flightline_dir, flightline_dir / f"{prefix}_qa.png"
-                )
-            if out_png_path is None:
-                raise FileNotFoundError(
-                    f"QA panel did not materialize: {flightline_dir / f'{prefix}_qa.png'}"
+                out_png_path, _ = render_flightline_panel(
+                    flightline_dir, quick=True, save_json=True
                 )
             print(
                 f"[merge] 🖼️  QA panel → {out_png_path} "

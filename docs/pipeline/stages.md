@@ -43,7 +43,8 @@ cross-sensor-cal correct --in envi/*_envi.img --dtm dtm/NIWO.tif --out corrected
 
 ## 4) Cross-sensor convolution
 **Purpose** Resample to target sensor bandpasses.  
-**Inputs → Outputs** corrected ENVI → `*_..._envi_<sensor>.img/.hdr`.  
+**Inputs → Outputs** corrected ENVI → `*_resampled_<sensor>_envi.img/.hdr` inside
+`Convolution_Reflectance_Resample_<sensor>` directories.
 **Run it**
 ```bash
 cross-sensor-cal convolve --in corrected/*_brdfandtopo_corrected_envi.img --sensor OLI --out convolved/
@@ -55,7 +56,7 @@ cross-sensor-cal convolve --in corrected/*_brdfandtopo_corrected_envi.img --sens
 **Inputs → Outputs** ENVI products → `*.parquet`.  
 **Run it**
 ```bash
-cross-sensor-cal export-parquet --in corrected/*.img convolved/*.img --out parquet/
+cross-sensor-cal export-parquet --in corrected/*.img Convolution_Reflectance_Resample_*/*.img --out parquet/
 ```
 **Pitfalls** Use `--chunksize` to keep memory low.
 

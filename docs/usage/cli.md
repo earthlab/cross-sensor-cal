@@ -5,7 +5,7 @@
 
 **Inputs** Base folder, NEON site/month/product, flight line IDs.
 
-**Outputs** Per-flight directory with ENVI exports, corrected/convolved cubes, Parquet tables, merged parquet, QA panel PNG, QA PDF, and QA JSON.
+**Outputs** Per-flight directory with ENVI exports, corrected/resampled cubes, Parquet tables, merged parquet, QA panel PNG, QA PDF, and QA JSON.
 
 **Run it**
 ```bash
@@ -28,7 +28,7 @@ Only `WARNING` or `ERROR` messages require attention.
 
 **Inputs** Corrected ENVI `.img` files, target sensor code, output folder.
 
-**Outputs** `_brdfandtopo_corrected_envi_<sensor>.img/.hdr` for each input cube.
+**Outputs** `<prefix>_resampled_<sensor>_envi.img/.hdr` inside per-sensor resample folders.
 
 **Run it**
 ```bash
@@ -39,13 +39,13 @@ cross-sensor-cal convolve --in corrected/*_brdfandtopo_corrected_envi.img --sens
 ## Export parquet only
 **Purpose** Flatten ENVI products into tidy Parquet files.
 
-**Inputs** One or more ENVI `.img` paths (corrected and/or convolved) and an output directory.
+**Inputs** One or more ENVI `.img` paths (corrected and/or resampled) and an output directory.
 
 **Outputs** One Parquet per ENVI input plus logs describing chunk sizes.
 
 **Run it**
 ```bash
-cross-sensor-cal export-parquet --in corrected/*.img convolved/*.img --out parquet/
+cross-sensor-cal export-parquet --in corrected/*.img Convolution_Reflectance_Resample_*/*.img --out parquet/
 ```
 **Pitfalls** Use `--chunksize` when RAM is limited.
 
