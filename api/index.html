@@ -1024,66 +1024,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#cross_sensor_cal.apply_brightness_correction" class="md-nav__link">
-    <span class="md-ellipsis">
-      apply_brightness_correction
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="apply_brightness_correction">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.apply_brightness_correction--mathematical-form" class="md-nav__link">
-    <span class="md-ellipsis">
-      Mathematical form
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.apply_brightness_correction--parameters" class="md-nav__link">
-    <span class="md-ellipsis">
-      Parameters
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.apply_brightness_correction--returns" class="md-nav__link">
-    <span class="md-ellipsis">
-      Returns
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.apply_brightness_correction--examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      Examples
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cross_sensor_cal.apply_brightness_correction--notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      Notes
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1285,66 +1225,6 @@ will surface the per-band gain/offsets when this stage runs.</p>
 
 
     <div class="doc doc-contents ">
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="cross_sensor_cal.apply_brightness_correction" class="doc doc-heading">
-            <code class=" language-python"><span class="n">apply_brightness_correction</span><span class="p">(</span><span class="n">cube</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;percentile_match&#39;</span><span class="p">,</span> <span class="n">reference_cube</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reference_stats</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">p_lo</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">p_hi</span><span class="o">=</span><span class="mf">95.0</span><span class="p">,</span> <span class="n">clip_min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">clip_max</span><span class="o">=</span><span class="mf">1.2</span><span class="p">,</span> <span class="n">huber_delta</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span></code>
-
-<a href="#cross_sensor_cal.apply_brightness_correction" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Apply a per-band brightness correction to hyperspectral/multispectral data.</p>
-<p>This normalizes scene brightness under varying illumination (sun angle, terrain shadow)
-or sensor gain drift. Typically used after ENVI export and before BRDF correction.</p>
-<h4 id="cross_sensor_cal.apply_brightness_correction--mathematical-form">Mathematical form<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--mathematical-form" title="Permanent link">&para;</a></h4>
-<p>For band b:
-    y_corr[b] = gain[b] * y_raw[b] + offset[b]
-where gain/offset come from robust percentile matching or regression vs a reference.</p>
-<h4 id="cross_sensor_cal.apply_brightness_correction--parameters">Parameters<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--parameters" title="Permanent link">&para;</a></h4>
-<p>cube : np.ndarray
-    Array shaped (B, Y, X) or (Y, X, B).
-mask : np.ndarray, optional
-    Boolean mask: True = valid pixel used for stats.
-method : {'percentile_match', 'linear_regression', 'unit_gain_offset_only'}, default='percentile_match'
-    Strategy for estimating per-band gain/offset.
-reference_cube : np.ndarray, optional
-    Reference to match brightness against (required for 'linear_regression').
-reference_stats : tuple[np.ndarray, np.ndarray], optional
-    (p_lo, p_hi) per band for reference distribution (each shape (B,)).
-p_lo, p_hi : float
-    Robust percentile bounds, default (5, 95).
-clip_min, clip_max : float
-    Optional post-correction clipping, default (0.0, 1.2).
-huber_delta : float
-    Huber delta for robust regression.</p>
-<h4 id="cross_sensor_cal.apply_brightness_correction--returns">Returns<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--returns" title="Permanent link">&para;</a></h4>
-<p>np.ndarray
-    Corrected cube with same shape as input.
-dict
-    Metadata with per-band gain/offset and diagnostics.</p>
-<h4 id="cross_sensor_cal.apply_brightness_correction--examples">Examples<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--examples" title="Permanent link">&para;</a></h4>
-<blockquote>
-<blockquote>
-<blockquote>
-<p>corr, meta = apply_brightness_correction(cube, mask=mask)
-corr2, meta = apply_brightness_correction(cube, reference_cube=panel, method='linear_regression')</p>
-</blockquote>
-</blockquote>
-</blockquote>
-<h4 id="cross_sensor_cal.apply_brightness_correction--notes">Notes<a class="headerlink" href="#cross_sensor_cal.apply_brightness_correction--notes" title="Permanent link">&para;</a></h4>
-<ul>
-<li>NaNs preserved. Bandwise affine transform.</li>
-<li>See also: topo+BRDF correction stage and QA JSON (gain/offset are included there when run).</li>
-</ul>
 
 
     </div>
