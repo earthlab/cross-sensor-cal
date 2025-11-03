@@ -136,7 +136,10 @@ def ensure_coord_columns(df: pd.DataFrame, transform, crs_epsg: int | str) -> pd
     need_xy = any(k not in df for k in ("x","y"))
     if need_xy and all(k in df for k in ("row","col")) and transform is not None:
         # x = col * a + x0 ; y = row * e + y0 (for north-up affine)
-        a = transform.a; e = transform.e; x0 = transform.c; y0 = transform.f
+        a = transform.a
+        e = transform.e
+        x0 = transform.c
+        y0 = transform.f
         df["x"] = df["col"] * a + x0 + a/2.0
         df["y"] = df["row"] * e + y0 + e/2.0
 

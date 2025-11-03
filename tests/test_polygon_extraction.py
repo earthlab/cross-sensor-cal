@@ -1,21 +1,16 @@
 
-import os
-import sys
 from pathlib import Path
 
 import pytest
+
+from cross_sensor_cal.file_types import NEONReflectanceENVIFile, SpectralDataParquetFile
+from cross_sensor_cal.polygon_extraction import _process_single_raster, process_raster_in_chunks
 from tests.conftest import MODE, require_mode
 
 pytestmark = require_mode("full")
 
 if MODE != "full":
     pytest.skip("CSCAL_TEST_MODE!='full'", allow_module_level=True)
-
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from cross_sensor_cal.file_types import NEONReflectanceENVIFile, SpectralDataParquetFile
-from cross_sensor_cal.polygon_extraction import _process_single_raster, process_raster_in_chunks
 
 class DummyDataFile:
     def __init__(self, path: Path):
