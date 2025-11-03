@@ -1,14 +1,19 @@
 name: Docs Drift Check
+
 on:
   pull_request:
+    branches: [ main ]
     paths:
+      - "docs/**"
       - "src/**"
       - "bin/**"
       - "pyproject.toml"
       - "README.md"
-      - "docs/**"
+      - ".github/workflows/docs-drift.yml"
+
 jobs:
   audit:
+    name: Docs Drift Check / audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

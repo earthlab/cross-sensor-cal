@@ -1,12 +1,14 @@
 name: QA quick check
 
 on:
-  push:
+  pull_request:
+    branches: [ main ]
     paths:
       - 'src/cross_sensor_cal/**'
       - 'tests/test_qa/**'
       - '.github/workflows/qa-ci.yml'
-  pull_request:
+  push:
+    branches: [ main ]
     paths:
       - 'src/cross_sensor_cal/**'
       - 'tests/test_qa/**'
@@ -15,6 +17,7 @@ on:
 
 jobs:
   qa:
+    name: QA quick check / qa
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

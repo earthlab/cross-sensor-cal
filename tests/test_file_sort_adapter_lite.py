@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os
+
 import pytest
 from pathlib import Path
 from cross_sensor_cal.file_sort_adapter import scan_and_categorize

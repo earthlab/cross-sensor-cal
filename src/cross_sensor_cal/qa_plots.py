@@ -9,7 +9,7 @@ import subprocess
 import json
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Sequence
 
 import numpy as np
 

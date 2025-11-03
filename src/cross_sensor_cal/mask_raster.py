@@ -174,6 +174,7 @@ def mask_raster_with_polygons(
         """
         Saves the masked raster to a new file.
         """
+        rasterio = require_rasterio()
         meta = raster.meta.copy()
         meta.update({
             'dtype': masked_data.dtype,
@@ -286,7 +287,7 @@ def mask_raster_with_polygons(
             plt.close(fig)
 
     if envi_file.masked_path.exists():
-        print(f'Masked ')
+        print("Masked raster already exists; skipping generation.")
         return
 
     # Start of the masking function logic

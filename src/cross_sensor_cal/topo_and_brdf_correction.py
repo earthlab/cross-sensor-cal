@@ -1,10 +1,23 @@
+import glob
 import json
+import os
 import warnings
 from pathlib import Path
 from typing import Iterable, Optional
-import glob
-import os
+
 import numpy as np
+
+from ._optional import require_ray, require_rasterio
+from .file_types import (
+    NEONReflectanceAncillaryENVIFile,
+    NEONReflectanceBRDFCorrectedENVIFile,
+    NEONReflectanceBRDFMaskENVIFile,
+    NEONReflectanceConfigFile,
+    NEONReflectanceCoefficientsFile,
+    NEONReflectanceENVIFile,
+)
+from .hytools_compat import get_write_envi
+from .ray_utils import init_ray
 
 # HyTools is an optional dependency. Import lazily so that other utilities in this module
 # remain usable even when the package is not installed.  This mirrors the runtime behaviour
@@ -14,20 +27,6 @@ calc_topo_coeffs = None  # type: ignore[assignment]
 calc_brdf_coeffs = None  # type: ignore[assignment]
 set_glint_parameters = None  # type: ignore[assignment]
 mask_create = None  # type: ignore[assignment]
-
-from ._optional import require_ray, require_rasterio
-from .hytools_compat import get_write_envi
-
-from .file_types import (
-    NEONReflectanceENVIFile,
-    NEONReflectanceConfigFile,
-    NEONReflectanceCoefficientsFile,
-    NEONReflectanceAncillaryENVIFile,
-    NEONReflectanceBRDFCorrectedENVIFile,
-    NEONReflectanceBRDFMaskENVIFile,
-    NEONReflectanceBRDFCorrectedENVIHDRFile,  # imported in case you later need HDR
-)
-from .ray_utils import init_ray
 
 warnings.filterwarnings("ignore")
 np.seterr(divide='ignore', invalid='ignore')
@@ -52,7 +51,7 @@ def _import_hytools() -> None:
 
     try:  # pragma: no cover - import layout differs across hytools releases
         from hytools import HyTools as _HyTools  # type: ignore[attr-defined]
-    except ImportError as exc:  # pragma: no cover - handled in runtime environments
+    except ImportError:  # pragma: no cover - handled in runtime environments
         try:
             from hytools.hytools import HyTools as _HyTools  # type: ignore[attr-defined]
         except ImportError as inner_exc:  # pragma: no cover - handled in runtime environments

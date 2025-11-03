@@ -119,7 +119,7 @@ def plot_qa_dashboard(df_summary: pd.DataFrame, out_png: Path) -> None:
     plt.tight_layout()
     plt.savefig(out_png, dpi=200)
     plt.close()
-    logger.info("\N{framed picture} Saved dashboard → %s", out_png)
+    logger.info("🖼️ Saved dashboard → %s", out_png)
 
 
 def _default_outputs(base_folder: Path) -> tuple[Path, Path]:

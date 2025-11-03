@@ -4,10 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import json
-import matplotlib.pyplot as plt
-import sys
 from scipy.interpolate import interp1d
-import glob
 
 from ._optional import require_spectral
 from .utils import get_package_data_path
