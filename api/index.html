@@ -1066,6 +1066,24 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal.make_micasense_vs_landsat_panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      make_micasense_vs_landsat_panels
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross_sensor_cal.make_sensor_vs_neon_panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      make_sensor_vs_neon_panels
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1219,7 +1237,7 @@ will surface the per-band gain/offsets when this stage runs.</p>
 
 
 <h2 id="cross_sensor_cal.__all__" class="doc doc-heading">
-            <code class=" language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">__all__</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;apply_brightness_correction&#39;</span><span class="p">,</span> <span class="n">load_brightness_coefficients</span><span class="o">.</span><span class="vm">__name__</span><span class="p">]))</span></code>
+            <code class=" language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">__all__</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;apply_brightness_correction&#39;</span><span class="p">,</span> <span class="n">load_brightness_coefficients</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">make_sensor_vs_neon_panels</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">make_micasense_vs_landsat_panels</span><span class="o">.</span><span class="vm">__name__</span><span class="p">]))</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
@@ -1295,6 +1313,38 @@ will surface the per-band gain/offsets when this stage runs.</p>
 <ul>
 <li>Values are stored in percent (e.g., -7.3959 means "reduce by 7.3959%").</li>
 </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="cross_sensor_cal.make_micasense_vs_landsat_panels" class="doc doc-heading">
+            <code class=" language-python"><span class="n">make_micasense_vs_landsat_panels</span><span class="p">(</span><span class="n">merged_dir</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_points</span><span class="o">=</span><span class="mi">50000</span><span class="p">,</span> <span class="n">sentinel_at_or_below</span><span class="o">=-</span><span class="mf">9999.0</span><span class="p">)</span></code>
+
+<a href="#cross_sensor_cal.make_micasense_vs_landsat_panels" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="cross_sensor_cal.make_sensor_vs_neon_panels" class="doc doc-heading">
+            <code class=" language-python"><span class="n">make_sensor_vs_neon_panels</span><span class="p">(</span><span class="n">merged_dir</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_points</span><span class="o">=</span><span class="mi">50000</span><span class="p">,</span> <span class="n">sentinel_at_or_below</span><span class="o">=-</span><span class="mf">9999.0</span><span class="p">)</span></code>
+
+<a href="#cross_sensor_cal.make_sensor_vs_neon_panels" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents ">
 
 
     </div>

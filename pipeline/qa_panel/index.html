@@ -1076,6 +1076,17 @@ engineering and science teams can track both spectral statistics and the visual
 context for every flightline. See <a href="#how-to-interpret-the-panel">How to Interpret the Panel</a>
 and the <a href="../../reference/validation/">validation reference</a> for deeper guidance
 on each metric.</p>
+<p>Additional QA products created from the merged Parquet:</p>
+<ul>
+<li>
+<p><code>&lt;prefix&gt;_merged__BY_SENSOR_vs_NEON_directional_BRDFTopo.png</code><br />
+  Sensor-by-sensor scatter panels versus NEON directional BRDFTopo.</p>
+</li>
+<li>
+<p><code>&lt;prefix&gt;_merged__MS_vs_Landsat_FIXED.png</code><br />
+  MicaSense-matched (X) versus Landsat (Y) scatter panels by band.</p>
+</li>
+</ul>
 <h2 id="multi-page-qa-report">Multi-page QA report<a class="headerlink" href="#multi-page-qa-report" title="Permanent link">&para;</a></h2>
 <p>In addition to the single PNG QA panel (<code>&lt;prefix&gt;_qa.png</code>), the pipeline now
 writes a multi-page PDF report (<code>&lt;prefix&gt;_qa.pdf</code>) with three pages:</p>
