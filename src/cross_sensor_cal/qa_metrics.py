@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Optional, List, Dict
 import json
@@ -58,6 +58,8 @@ class QAMetrics:
     convolution: List[ConvolutionReport]
     negatives_pct: float
     issues: List[str]
+    brightness_coefficients: Dict[str, Dict[int, float]] = field(default_factory=dict)
+    brightness_summary: Dict[str, List[Dict[str, float]]] = field(default_factory=dict)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)

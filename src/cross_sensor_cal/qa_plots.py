@@ -22,6 +22,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from .brightness_config import load_brightness_coefficients
 from .envi import hdr_to_dict, read_envi_cube
 from .header_utils import wavelengths_from_hdr
 from .qa_metrics import (
@@ -210,20 +211,79 @@ def _spectral_angle(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.nanmean(angles))
 
 
+def _build_brightness_summary_table(
+    brightness_map: dict[str, dict[int, float]]
+) -> dict[str, list[dict[str, float | str]]]:
+    summary: dict[str, list[dict[str, float | str]]] = {}
+
+    if not brightness_map:
+        default_coeffs = load_brightness_coefficients()
+        summary["landsat_to_micasense"] = [
+            {
+                "band": band_idx,
+                "config_coeff_pct": coeff,
+                "applied_coeff_pct": coeff,
+                "brightness_coeff_pct": coeff,
+                "brightness_coeff_label": f"{coeff:+.3f}%",
+            }
+            for band_idx, coeff in sorted(default_coeffs.items())
+        ]
+        return summary
+
+    for system_pair, applied in brightness_map.items():
+        config_coeffs = load_brightness_coefficients(system_pair)
+        rows: list[dict[str, float | str]] = []
+        for band_idx, config_value in sorted(config_coeffs.items()):
+            applied_value = applied.get(band_idx, config_value)
+            rows.append(
+                {
+                    "band": band_idx,
+                    "config_coeff_pct": config_value,
+                    "applied_coeff_pct": applied_value,
+                    "brightness_coeff_pct": applied_value,
+                    "brightness_coeff_label": f"{applied_value:+.3f}%",
+                }
+            )
+        summary[system_pair] = rows
+
+    return summary
+
+
 def _convolution_reports(
     base_dir: Path,
     prefix: str,
     corr_cube: np.ndarray,
     sample_mask: np.ndarray,
-) -> tuple[list[ConvolutionReport], dict[str, tuple[np.ndarray, np.ndarray]]]:
+) -> tuple[
+    list[ConvolutionReport],
+    dict[str, tuple[np.ndarray, np.ndarray]],
+    dict[str, dict[int, float]],
+]:
     reports: list[ConvolutionReport] = []
     scatter_data: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    brightness_map: dict[str, dict[int, float]] = {}
     for img_path in sorted(base_dir.glob(f"{prefix}_*_convolved_envi.img")):
         sensor = img_path.stem.replace(f"{prefix}_", "").replace("_convolved_envi", "")
         hdr = hdr_to_dict(img_path.with_suffix(".hdr"))
         cube = read_envi_cube(img_path, hdr)
         if cube.shape != corr_cube.shape:
             continue
+        brightness_entry = hdr.get("brightness_coefficients")
+        if isinstance(brightness_entry, str):
+            try:
+                parsed = json.loads(brightness_entry)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                for system_pair, coeffs in parsed.items():
+                    if not isinstance(coeffs, dict):
+                        continue
+                    dest = brightness_map.setdefault(system_pair, {})
+                    for key, value in coeffs.items():
+                        try:
+                            dest[int(key)] = float(value)
+                        except (TypeError, ValueError):
+                            continue
         flat_cube = cube.reshape(cube.shape[0], -1)
         flat_corr = corr_cube.reshape(corr_cube.shape[0], -1)
         rmse = np.sqrt(np.nanmean((flat_corr - flat_cube) ** 2, axis=1))
@@ -237,7 +297,7 @@ def _convolution_reports(
         corrected_vals = flat_corr[:, valid].flatten()
         convolved_vals = flat_cube[:, valid].flatten()
         scatter_data[sensor] = (corrected_vals, convolved_vals)
-    return reports, scatter_data
+    return reports, scatter_data, brightness_map
 
 
 def _render_page1_envi_overview(
@@ -430,13 +490,26 @@ def _render_page3_remaining(
     ax_mask.set_title("Mask coverage & negatives")
 
     ax_issues = axes[1, 1]
+    lines = []
     if metrics.issues:
-        text = "\n".join(f"⚠ {issue}" for issue in metrics.issues)
+        lines.extend(f"⚠ {issue}" for issue in metrics.issues)
     else:
-        text = "No issues flagged."
-    ax_issues.text(0.01, 0.99, text, va="top", ha="left", fontsize=9)
+        lines.append("No general QA issues flagged.")
+
+    if metrics.brightness_coefficients:
+        lines.append("")
+        lines.append("Brightness coefficients (percent):")
+        for system_pair, coeffs in metrics.brightness_coefficients.items():
+            lines.append(f"{system_pair}:")
+            for band_idx in sorted(coeffs):
+                lines.append(f"  Band {band_idx}: {coeffs[band_idx]:.3f}%")
+    else:
+        lines.append("")
+        lines.append("No brightness adjustment applied.")
+
+    ax_issues.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=9)
     ax_issues.axis("off")
-    ax_issues.set_title("Issues / warnings")
+    ax_issues.set_title("Issues & brightness adjustments")
 
     pdf.savefig(fig, bbox_inches="tight")
     plt.close(fig)
@@ -600,9 +673,11 @@ def render_flightline_panel(
     if any(abs(val) > _DELTA_WARN_THRESHOLD for val in correction_report.delta_median):
         issues.append("Large correction deltas detected")
 
-    conv_reports, scatter_data = _convolution_reports(
+    conv_reports, scatter_data, brightness_map = _convolution_reports(
         flightline_dir, prefix, corr_cube, sample_mask
     )
+
+    brightness_summary = _build_brightness_summary_table(brightness_map)
 
     provenance = _provenance(prefix, [raw_path, corr_path])
 
@@ -614,6 +689,8 @@ def render_flightline_panel(
         convolution=conv_reports,
         negatives_pct=negatives_pct,
         issues=issues,
+        brightness_coefficients=brightness_map,
+        brightness_summary=brightness_summary,
     )
 
     rgb_image, rgb_indices = _rgb_preview(corr_cube, wavelengths, rgb_targets)
@@ -643,7 +720,17 @@ def render_flightline_panel(
     fig.savefig(png_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
-    metrics_dict = json.loads(metrics.to_json())
+    metrics_dict_full = json.loads(metrics.to_json())
+    core_keys = [
+        "provenance",
+        "header",
+        "mask",
+        "correction",
+        "convolution",
+        "negatives_pct",
+        "issues",
+    ]
+    metrics_dict = {key: metrics_dict_full[key] for key in core_keys}
 
     if save_json:
         json_path = flightline_dir / f"{prefix}_qa.json"

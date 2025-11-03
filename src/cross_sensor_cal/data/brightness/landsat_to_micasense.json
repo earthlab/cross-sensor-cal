@@ -1,0 +1,14 @@
+{
+  "system_pair": "landsat_to_micasense",
+  "description": "Brightness coefficients to adjust Landsat convolutions relative to MicaSense (subtracting NEON->Landsat median percent differences by band).",
+  "unit": "percent",
+  "bands": {
+    "1": -7.395941,
+    "2": -2.754196,
+    "3": -6.936788,
+    "4": -10.122885,
+    "5": -6.652030,
+    "6": -2.735572,
+    "7": -1.106920
+  }
+}

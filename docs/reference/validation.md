@@ -20,6 +20,18 @@ Computes RMSE and SAM between expected and computed spectral bands; high errors 
 ### Brightness Gain/Offset Check
 Evaluates brightness normalization stability; flags gain < 0.85 or > 1.15.
 
+### Landsat↔MicaSense brightness adjustment
+
+When the pipeline convolves corrected NEON cubes to Landsat bands, it now applies a
+small per-band brightness adjustment so the results align with a MicaSense reference.
+
+- Coefficients live in `data/brightness/landsat_to_micasense.json` and are shipped with the
+  package.
+- The applied values are written into QA JSON files under `brightness_coefficients` and are
+  also rendered on Page 3 of the QA PDF alongside other issues.
+- The Landsat ENVI headers record the same coefficients so downstream tools can reproduce
+  the exact multiplicative adjustment (`L_adj = L_raw * (1 + coeff / 100)`).
+
 [See detailed interpretation →](../pipeline/qa_panel.md)
 
 > **When do I need this?** When a stage fails or a QA smell appears; validate inputs/outputs against known-good schema.
