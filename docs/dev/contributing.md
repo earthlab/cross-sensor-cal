@@ -17,3 +17,16 @@
 - [ ] Include a CLI copy block and (when relevant) a short Python snippet
 - [ ] Link Stages ↔ Schemas ↔ Outputs ↔ Troubleshooting
 - [ ] `mkdocs build` passes locally
+
+## Continuous integration checks
+
+Pull requests to `main` run four main checks:
+
+1. **CI / lite** – fast linting and smoke tests.
+2. **CI / unit** – full Python test suite.
+3. **Docs Drift Check / audit** – verifies docs and code stay in sync.
+4. **QA quick check / qa** – runs a minimal QA pipeline on a small fixture and uploads the PNG/JSON/PDF artifacts.
+
+This layout keeps feedback fast while ensuring the QA pipeline and docs stay
+healthy. The QA quick check now runs once per PR (and optionally on pushes to
+`main`) instead of duplicating work on every branch push.

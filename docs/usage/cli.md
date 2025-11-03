@@ -5,7 +5,7 @@
 
 **Inputs** Base folder, NEON site/month/product, flight line IDs.
 
-**Outputs** Per-flight directory with ENVI exports, corrected/convolved cubes, Parquet tables, merged parquet, QA panel.
+**Outputs** Per-flight directory with ENVI exports, corrected/convolved cubes, Parquet tables, merged parquet, QA panel PNG, QA PDF, and QA JSON.
 
 **Run it**
 ```bash
@@ -15,6 +15,13 @@ cscal-pipeline --base-folder out --site-code NIWO --year-month 2023-08 \
   --max-workers 2
 ```
 **Pitfalls** High worker counts can exhaust `/dev/shm`; rerun with the same arguments to resume safely.
+
+The CLI logs are designed to be affirmative. Messages like:
+
+> 📦 No existing ENVI export detected — creating a new one from source data ...
+
+are normal and indicate that the tool is creating outputs for the first time.
+Only `WARNING` or `ERROR` messages require attention.
 
 ## Convolve only
 **Purpose** Resample corrected ENVI cubes to a target sensor.
@@ -47,7 +54,7 @@ cross-sensor-cal export-parquet --in corrected/*.img convolved/*.img --out parqu
 
 **Inputs** Set of Parquet files, target merged filename, optional QA output directory.
 
-**Outputs** `<prefix>_merged_pixel_extraction.parquet` and `<prefix>_qa.png`.
+**Outputs** `<prefix>_merged_pixel_extraction.parquet`, `<prefix>_qa.png`, `<prefix>_qa.pdf`, and `<prefix>_qa.json`.
 
 **Run it**
 ```bash
@@ -69,3 +76,11 @@ go_forth_and_multiply(
     max_workers=2,
 )
 ```
+
+## QA
+
+The pipeline saves:
+
+- `<prefix>_qa.png` – a compact single-page QA panel.
+- `<prefix>_qa.pdf` – a multi-page QA report (ENVI overview, topo/BRDF diagnostics, and additional QA metrics).
+- `<prefix>_qa.json` – machine-readable QA metrics, including header, mask, convolution error, and brightness coefficients when applied.
