@@ -18,6 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
@@ -64,6 +65,26 @@ def _discover_primary_cube(flightline_dir: Path) -> tuple[Path, Path]:
     if not corrected.exists():
         raise FileNotFoundError(f"Missing corrected cube: {corrected}")
     return raw_path, corrected
+
+
+def _list_envi_products(flightline_dir: Path, prefix: str) -> list[Path]:
+    """Return all ENVI .img products for this flightline (for page 1 overview).
+
+    Includes the raw ENVI, corrected ENVI, and any convolved ENVI products,
+    but excludes QA images and non-ENVI artifacts.
+    """
+
+    products: list[Path] = []
+    for img_path in sorted(flightline_dir.glob(f"{prefix}*_envi.img")):
+        if "qa" in img_path.stem:
+            continue
+        products.append(img_path)
+    if not products:
+        for img_path in sorted(flightline_dir.glob("*_envi.img")):
+            if "qa" in img_path.stem:
+                continue
+            products.append(img_path)
+    return products
 
 
 def _flightline_prefix(raw_path: Path) -> str:
@@ -219,6 +240,208 @@ def _convolution_reports(
     return reports, scatter_data
 
 
+def _render_page1_envi_overview(
+    pdf: PdfPages,
+    flightline_dir: Path,
+    prefix: str,
+    rgb_targets: Sequence[float],
+) -> None:
+    """Page 1: one row with one panel per ENVI product, to show they exist & render."""
+
+    envi_paths = _list_envi_products(flightline_dir, prefix)
+    if not envi_paths:
+        fig, ax = plt.subplots(figsize=(8, 3))
+        ax.text(0.5, 0.5, "No ENVI products found", ha="center", va="center")
+        ax.axis("off")
+        fig.suptitle(f"ENVI overview – {prefix}")
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+        return
+
+    n = len(envi_paths)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 4), squeeze=False)
+    fig.suptitle(f"ENVI product overview – {prefix}")
+    axes_row = axes[0]
+
+    for ax, img_path in zip(axes_row, envi_paths):
+        hdr = hdr_to_dict(img_path.with_suffix(".hdr"))
+        cube = read_envi_cube(img_path, hdr)
+        if cube.ndim != 3:
+            ax.text(0.5, 0.5, "Non-3D ENVI cube", ha="center", va="center")
+            ax.axis("off")
+            continue
+        wavelengths, _ = wavelengths_from_hdr(hdr)
+        rgb_image, _ = _rgb_preview(cube, wavelengths, rgb_targets)
+        ax.imshow(np.clip(rgb_image, 0, 1))
+        ax.set_title(img_path.stem, fontsize=8)
+        ax.axis("off")
+
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _load_correction_geometry_json(
+    flightline_dir: Path,
+    corr_path: Path,
+) -> dict | None:
+    """Try to load the BRDF/topo correction JSON for extra diagnostics (optional)."""
+
+    json_path = corr_path.with_suffix(".json")
+    if not json_path.exists():
+        candidates = sorted(flightline_dir.glob("*brdfandtopo_corrected_envi.json"))
+        json_path = candidates[0] if candidates else None
+    if not json_path or not json_path.exists():
+        return None
+    try:
+        with json_path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _render_page2_topo_brdf(
+    pdf: PdfPages,
+    prefix: str,
+    wavelengths: np.ndarray,
+    correction_report: CorrectionReport,
+    raw_sample: np.ndarray,
+    corr_sample: np.ndarray,
+    sample_mask: np.ndarray,
+    corr_path: Path,
+) -> None:
+    """Page 2: diagnostics specific to topo (row 1) and BRDF (row 2) corrections."""
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig.suptitle(f"Topographic + BRDF diagnostics – {prefix}")
+
+    ax_topo_hist = axes[0, 0]
+    _render_hist(ax_topo_hist, raw_sample, corr_sample, sample_mask)
+    ax_topo_hist.set_title("Topographic + BRDF: pre vs post histograms")
+
+    ax_topo_delta = axes[0, 1]
+    _render_delta(ax_topo_delta, wavelengths, correction_report)
+    ax_topo_delta.set_title("Topographic + BRDF: Δ median vs λ")
+
+    params = _load_correction_geometry_json(corr_path.parent, corr_path) or {}
+    geom = params.get("geometry", {}) if isinstance(params, dict) else {}
+    topo_keys = ["slope", "aspect"]
+    brdf_keys = ["solar_zn", "solar_az", "sensor_zn", "sensor_az"]
+
+    ax_brdf_geom = axes[1, 0]
+    if geom:
+        topo_present = [k for k in topo_keys if k in geom]
+        if topo_present:
+            means = []
+            for k in topo_present:
+                value = geom[k]
+                if isinstance(value, dict):
+                    means.append(value.get("mean"))
+                else:
+                    means.append(value)
+            ax_brdf_geom.bar(topo_present, means)
+            ax_brdf_geom.set_title("Topographic geometry (mean)")
+            ax_brdf_geom.set_ylabel("Value (radians)")
+        else:
+            ax_brdf_geom.text(
+                0.5,
+                0.5,
+                "No topo geometry stats in JSON",
+                ha="center",
+                va="center",
+            )
+        ax_brdf_geom.grid(True, alpha=0.2)
+    else:
+        ax_brdf_geom.text(
+            0.5, 0.5, "No BRDF/topo JSON geometry available", ha="center", va="center"
+        )
+        ax_brdf_geom.grid(False)
+
+    ax_brdf_geom2 = axes[1, 1]
+    if geom:
+        brdf_present = [k for k in brdf_keys if k in geom]
+        if brdf_present:
+            means = []
+            for k in brdf_present:
+                value = geom[k]
+                if isinstance(value, dict):
+                    means.append(value.get("mean"))
+                else:
+                    means.append(value)
+            ax_brdf_geom2.bar(brdf_present, means)
+            ax_brdf_geom2.set_title("BRDF geometry (mean)")
+            ax_brdf_geom2.set_ylabel("Value (radians)")
+        else:
+            ax_brdf_geom2.text(
+                0.5, 0.5, "No BRDF geometry stats in JSON", ha="center", va="center"
+            )
+    else:
+        ax_brdf_geom2.text(
+            0.5, 0.5, "No BRDF/topo JSON available", ha="center", va="center"
+        )
+    ax_brdf_geom2.grid(True, alpha=0.2)
+
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _render_page3_remaining(
+    pdf: PdfPages,
+    prefix: str,
+    metrics: QAMetrics,
+    scatter_data: dict[str, tuple[np.ndarray, np.ndarray]],
+) -> None:
+    """Page 3: remaining QA diagnostics (convolution + header/mask/issue summary)."""
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig.suptitle(f"Additional QA diagnostics – {prefix}")
+
+    ax_scatter = axes[0, 0]
+    _render_scatter(ax_scatter, scatter_data)
+    ax_scatter.set_title("Convolved vs corrected (all sensors)")
+
+    ax_header = axes[0, 1]
+    header = metrics.header
+    lines = [
+        f"Header keys present: {', '.join(header.keys_present) or 'none'}",
+        f"Header keys missing: {', '.join(header.keys_missing) or 'none'}",
+        f"Wavelength unit: {header.wavelength_unit or 'unknown'}",
+        f"n_bands: {header.n_bands}",
+        f"finite wavelengths: {header.n_wavelengths_finite}",
+        f"first_nm: {header.first_nm}",
+        f"last_nm: {header.last_nm}",
+        f"monotonic: {header.wavelengths_monotonic}",
+        f"source: {header.wavelength_source}",
+    ]
+    ax_header.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=9)
+    ax_header.axis("off")
+    ax_header.set_title("Header / wavelength integrity")
+
+    ax_mask = axes[1, 0]
+    mask = metrics.mask
+    negatives_pct = metrics.negatives_pct
+    lines = [
+        f"Total pixels: {mask.n_total}",
+        f"Valid pixels: {mask.n_valid}",
+        f"Valid %: {mask.valid_pct:.2f}%",
+        f"Negatives %: {negatives_pct:.2f}%",
+    ]
+    ax_mask.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=9)
+    ax_mask.axis("off")
+    ax_mask.set_title("Mask coverage & negatives")
+
+    ax_issues = axes[1, 1]
+    if metrics.issues:
+        text = "\n".join(f"⚠ {issue}" for issue in metrics.issues)
+    else:
+        text = "No issues flagged."
+    ax_issues.text(0.01, 0.99, text, va="top", ha="left", fontsize=9)
+    ax_issues.axis("off")
+    ax_issues.set_title("Issues / warnings")
+
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+
+
 def _package_version() -> str:
     try:
         return version("cross-sensor-cal")
@@ -275,7 +498,7 @@ def _render_delta(ax: Axes, wavelengths: np.ndarray, report: CorrectionReport) -
     ax.legend(loc="upper right")
 
 
-def _render_scatter(ax: Axes, data: dict[str, np.ndarray]) -> None:
+def _render_scatter(ax: Axes, data: dict[str, tuple[np.ndarray, np.ndarray]]) -> None:
     ax.set_title("Convolved vs Corrected")
     if not data:
         ax.text(0.5, 0.5, "No convolved sensors", ha="center", va="center")
@@ -329,7 +552,7 @@ def render_flightline_panel(
     n_sample: int = 100_000,
     rgb_bands: str | None = None,
 ) -> tuple[Path, dict]:
-    """Return (png_path, metrics_dict); also writes <prefix>_qa.json when save_json."""
+    """Return (png_path, metrics_dict); also writes _qa.json/_qa.pdf when requested."""
 
     flightline_dir = Path(flightline_dir)
     raw_path, corr_path = _discover_primary_cube(flightline_dir)
@@ -425,6 +648,26 @@ def render_flightline_panel(
     if save_json:
         json_path = flightline_dir / f"{prefix}_qa.json"
         write_json(metrics, json_path)
+
+    pdf_path = flightline_dir / f"{prefix}_qa.pdf"
+    with PdfPages(pdf_path) as pdf:
+        _render_page1_envi_overview(pdf, flightline_dir, prefix, rgb_targets)
+        _render_page2_topo_brdf(
+            pdf=pdf,
+            prefix=prefix,
+            wavelengths=wavelengths,
+            correction_report=correction_report,
+            raw_sample=raw_sample,
+            corr_sample=corr_sample,
+            sample_mask=sample_mask,
+            corr_path=corr_path,
+        )
+        _render_page3_remaining(
+            pdf=pdf,
+            prefix=prefix,
+            metrics=metrics,
+            scatter_data=scatter_data,
+        )
 
     return png_path, metrics_dict
 

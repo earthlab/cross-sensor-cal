@@ -2,7 +2,15 @@
 
 The QA panel now couples a metrics JSON file with the annotated PNG so that
 engineering and science teams can track both spectral statistics and the visual
-context for every flightline.
+context for every flightline. In addition to the PNG, the pipeline writes a
+three-page PDF report (`<prefix>_qa.pdf`) that includes:
+
+- **Page 1:** ENVI product overview (one row of RGB quicklooks for each ENVI
+  cube discovered).
+- **Page 2:** Topographic and BRDF diagnostics (histogram/Δ plots plus geometry
+  summaries).
+- **Page 3:** Remaining QA diagnostics (convolution scatter, header/mask
+  summaries, and issues list).
 
 ---
 
