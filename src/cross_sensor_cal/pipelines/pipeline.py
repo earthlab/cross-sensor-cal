@@ -77,6 +77,10 @@ from cross_sensor_cal.brightness_config import load_brightness_coefficients
 from cross_sensor_cal.paths import normalize_brdf_model_path
 from cross_sensor_cal.qa_plots import render_flightline_panel
 from cross_sensor_cal.resample import resample_chunk_to_sensor
+from cross_sensor_cal.sensor_panel_plots import (
+    make_micasense_vs_landsat_panels,
+    make_sensor_vs_neon_panels,
+)
 from cross_sensor_cal.utils import get_package_data_path
 from cross_sensor_cal.utils_checks import is_valid_json
 
@@ -1649,6 +1653,26 @@ def stage_convolve_all_sensors(
     if parquet_outputs:
         merge_out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
         logger.info("✅ DuckDB master → %s", merge_out)
+        qa_plots_dir = flightline_dir / "qa_plots"
+        qa_plots_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            sensor_pngs = make_sensor_vs_neon_panels(
+                merge_out.parent, out_dir=qa_plots_dir
+            )
+            ms_vs_ls_pngs = make_micasense_vs_landsat_panels(
+                merge_out.parent, out_dir=qa_plots_dir
+            )
+            logger.info(
+                "Sensor comparison plots created: %d sensor-vs-NEON panels, %d MS-vs-Landsat panels",
+                len(sensor_pngs),
+                len(ms_vs_ls_pngs),
+            )
+        except Exception as exc:  # pragma: no cover - plotting is best effort
+            logger.warning(
+                "⚠️  Sensor comparison plots failed for %s: %s",
+                flight_stem,
+                exc,
+            )
     else:
         logger.warning(
             "⚠️ Skipping DuckDB merge for %s because no Parquet outputs were produced",
