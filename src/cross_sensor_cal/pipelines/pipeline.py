@@ -1093,9 +1093,7 @@ def stage_download_h5(
     try:
         if h5_path.exists() and h5_path.stat().st_size > 0:
             logger.info(
-                "⏭️  Skipped download for %s (already present: %s)",
-                flight_stem,
-                h5_path.name,
+                f"[{flight_stem}] ⬇️ Download already complete — reusing existing files ({h5_path.name})"
             )
             return h5_path
     except OSError as exc:  # pragma: no cover - filesystem permission issues
@@ -1104,11 +1102,7 @@ def stage_download_h5(
         ) from exc
 
     logger.info(
-        "🌐 Downloading %s (%s, %s) into %s ...",
-        flight_stem,
-        site_code,
-        year_month,
-        h5_path,
+        f"[{flight_stem}] 🌐 Downloading {flight_stem} ({site_code}, {year_month}) into {h5_path} ..."
     )
 
     try:
@@ -1196,10 +1190,7 @@ def stage_export_envi_from_h5(
 
     # Announce what we *expect* the raw ENVI export to be called.
     logger.info(
-        "🔎 ENVI export target for %s is %s / %s",
-        flight_stem,
-        raw_img_path.name,
-        raw_hdr_path.name,
+        f"📍 Preparing ENVI export at: {raw_img_path.name} / {raw_hdr_path.name}"
     )
 
     corrected_img = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
@@ -1224,9 +1215,7 @@ def stage_export_envi_from_h5(
                     f"Recovery failed: expected {raw_img_path.name} / {raw_hdr_path.name}"
                 )
             logger.info(
-                "✅ Rebuilt raw ENVI -> %s / %s",
-                raw_img_path.name,
-                raw_hdr_path.name,
+                f"✅ Rebuilt raw ENVI files → {raw_img_path.name} / {raw_hdr_path.name}"
             )
         else:
             raise FileNotFoundError(
@@ -1249,18 +1238,13 @@ def stage_export_envi_from_h5(
 
     if _looks_valid(raw_img_path, raw_hdr_path):
         logger.info(
-            "✅ ENVI export already complete for %s -> %s / %s (skipping heavy export)",
-            flight_stem,
-            raw_img_path.name,
-            raw_hdr_path.name,
+            f"✅ Existing ENVI export found — skipping regeneration ({raw_img_path.name} / {raw_hdr_path.name})"
         )
         return raw_img_path, raw_hdr_path
 
     # Not valid yet: we'll try to generate it.
     logger.info(
-        "📦 ENVI export not found or invalid for %s, generating from %s",
-        flight_stem,
-        h5_path.name,
+        f"📦 No existing ENVI export detected — creating a new one from source data {h5_path.name}"
     )
 
     # Snapshot directory state BEFORE export so we can diff.
@@ -1284,10 +1268,7 @@ def stage_export_envi_from_h5(
     # Now that export has run, re-check the canonical expected outputs.
     if _looks_valid(raw_img_path, raw_hdr_path):
         logger.info(
-            "✅ ENVI export completed for %s -> %s / %s",
-            flight_stem,
-            raw_img_path.name,
-            raw_hdr_path.name,
+            f"✅ ENVI export created successfully → {raw_img_path.name} / {raw_hdr_path.name}"
         )
         return raw_img_path, raw_hdr_path
 
@@ -1661,7 +1642,7 @@ def process_one_flightline(
     trigger recomputation so partial runs recover safely.
     """
 
-    logger.info("🚀 Processing %s ...", flight_stem)
+    logger.info(f"✅ Starting processing for {flight_stem}")
 
     flight_paths = get_flight_paths(base_folder, flight_stem)
     Path(flight_paths["work_dir"]).mkdir(parents=True, exist_ok=True)
@@ -1815,6 +1796,30 @@ def go_forth_and_multiply(
 
     method_norm = (resample_method or "convolution").lower()
     parallel_mode = max_workers is not None and max_workers > 1
+
+    first_run_detected = False
+    if flight_lines:
+        for stem in flight_lines:
+            try:
+                paths = get_flight_paths(base_path, stem)
+            except Exception:  # pragma: no cover - defensive fallback
+                first_run_detected = True
+                break
+            work_dir = Path(paths["work_dir"])
+            raw_img = work_dir / f"{stem}_envi.img"
+            raw_hdr = work_dir / f"{stem}_envi.hdr"
+            if not (raw_img.exists() and raw_hdr.exists()):
+                first_run_detected = True
+                break
+
+    if first_run_detected:
+        logger.info(
+            "✨ First run detected: outputs will be created as needed. Existing files will be reused automatically."
+        )
+    else:
+        logger.info(
+            "✨ Existing ENVI exports detected — pipeline will reuse validated files automatically."
+        )
 
     # Phase A: ensure downloads exist before spinning up heavy processing
     for flight_stem in flight_lines:
