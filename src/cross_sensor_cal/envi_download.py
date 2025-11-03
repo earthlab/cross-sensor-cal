@@ -88,15 +88,42 @@ def download_neon_file(
     if not year_month:
         raise ValueError("year_month is required")
 
-    session = session or requests.Session()
+    created_session = False
+    if session is None:
+        session = requests.Session()
+        created_session = True
+
+    def _session_get(url: str, *, stream: bool = False) -> requests.Response:
+        """Wrapper around ``session.get`` that retries once with proxies disabled."""
+
+        proxies_disabled = False
+        while True:
+            try:
+                response = session.get(url, stream=stream, timeout=60)
+                response.raise_for_status()
+                return response
+            except requests.ProxyError:
+                if (
+                    created_session
+                    and getattr(session, "trust_env", True)
+                    and not proxies_disabled
+                ):
+                    # ``requests`` respects ``HTTP(S)_PROXY`` environment variables by
+                    # default, which can inject corporate MITM proxies that block the
+                    # NEON API.  When we construct the session internally we retry
+                    # once with proxies disabled so sandboxed CI environments that
+                    # inject failing proxies can still reach the API directly.
+                    session.trust_env = False
+                    proxies_disabled = True
+                    continue
+                raise
 
     base_dir = Path(output_path).parent if output_path is not None else Path(out_dir)
     base_dir.mkdir(parents=True, exist_ok=True)
 
     data_url = f"{_NEON_API_BASE}/data/{product_code}/{site_code}/{year_month}"
     try:
-        response = session.get(data_url, timeout=60)
-        response.raise_for_status()
+        response = _session_get(data_url)
     except requests.RequestException as exc:  # pragma: no cover - network issues
         raise RuntimeError(
             f"Failed to query NEON data API for {site_code}/{year_month}: {exc}"
@@ -124,8 +151,7 @@ def download_neon_file(
 
     temp_path = destination.with_suffix(destination.suffix + ".download")
     try:
-        with session.get(url, stream=True, timeout=60) as download_resp:
-            download_resp.raise_for_status()
+        with _session_get(url, stream=True) as download_resp:
             total_bytes_header = download_resp.headers.get("Content-Length")
             try:
                 total_bytes = int(total_bytes_header) if total_bytes_header else 0
