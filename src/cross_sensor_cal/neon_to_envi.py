@@ -73,6 +73,7 @@ def neon_to_envi_no_hytools(
         date=refl_file.date,
         time=refl_file.time,
         directional=getattr(refl_file, "directional", False),
+        descriptor=getattr(refl_file, "descriptor", None),
         folder=output_dir_path,
     )
 

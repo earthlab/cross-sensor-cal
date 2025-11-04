@@ -1,6 +1,10 @@
 import pytest
 
-from cross_sensor_cal.file_types import NEONReflectanceENVIFile, NEONReflectanceFile
+from cross_sensor_cal.file_types import (
+    NEONReflectanceENVIFile,
+    NEONReflectanceENVIHDRFile,
+    NEONReflectanceFile,
+)
 
 
 @pytest.mark.parametrize(
@@ -93,3 +97,45 @@ def test_envi_filename_with_synthetic_tile(tmp_path):
     assert parsed.tile == "20200720T163210"
     assert parsed.date == "20200720"
     assert not parsed.directional
+
+
+def test_envi_bidirectional_filename_round_trip(tmp_path):
+    envi_file = NEONReflectanceENVIFile.from_components(
+        domain="D05",
+        site="LIRO",
+        product="DP3.30006.002",
+        tile="290000_5097000",
+        descriptor="bidirectional_reflectance",
+        directional=False,
+        folder=tmp_path,
+    )
+    assert envi_file.tile == "290000_5097000"
+    assert envi_file.descriptor == "bidirectional_reflectance"
+    assert not envi_file.directional
+    assert (
+        envi_file.path.name
+        == "NEON_D05_LIRO_DP3.30006.002_290000_5097000_bidirectional_reflectance_envi.img"
+    )
+
+    parsed = NEONReflectanceENVIFile.from_filename(envi_file.path)
+    assert parsed.tile == "290000_5097000"
+    assert parsed.descriptor == "bidirectional_reflectance"
+    assert not parsed.directional
+
+
+def test_envi_hdr_with_synthetic_tile(tmp_path):
+    hdr_path = tmp_path / (
+        "NEON_D13_NIWO_DP1.30006.001_20200720T163210_20200720_reflectance_envi.hdr"
+    )
+    hdr_file = NEONReflectanceENVIHDRFile.from_filename(hdr_path)
+    assert hdr_file.tile == "20200720T163210"
+    assert hdr_file.date == "20200720"
+    assert not hdr_file.directional
+
+    bidi_hdr_path = tmp_path / (
+        "NEON_D05_LIRO_DP3.30006.002_290000_5097000_20230815_bidirectional_reflectance_envi.hdr"
+    )
+    bidi_hdr = NEONReflectanceENVIHDRFile.from_filename(bidi_hdr_path)
+    assert bidi_hdr.tile == "290000_5097000"
+    assert bidi_hdr.date == "20230815"
+    assert not bidi_hdr.directional

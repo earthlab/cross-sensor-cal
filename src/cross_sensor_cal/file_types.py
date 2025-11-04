@@ -451,6 +451,7 @@ class NEONReflectanceENVIFile(DataFile):
         date: Optional[str] = None,
         time: Optional[str] = None,
         directional: bool = True,
+        descriptor: str | None = None,
         folder: Path
     ) -> "NEONReflectanceENVIFile":
         if not tile:
@@ -461,8 +462,16 @@ class NEONReflectanceENVIFile(DataFile):
             parts.append(date)
         if time:
             parts.append(time)
-        if directional:
-            parts.append("directional")
+        descriptor_value = descriptor
+        if descriptor_value is None:
+            descriptor_value = "directional_reflectance" if directional else "reflectance"
+        descriptor_token: str | None = None
+        if descriptor_value.startswith("directional"):
+            descriptor_token = "directional"
+        elif descriptor_value.startswith("bidirectional"):
+            descriptor_token = "bidirectional"
+        if descriptor_token:
+            parts.append(descriptor_token)
         name = "_".join(parts) + "_reflectance_envi.img"
         return cls.from_filename(folder / name)
 
@@ -482,9 +491,9 @@ class NEONReflectanceENVIFile(DataFile):
 class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
     pattern = re.compile(
         r"^NEON_(?P<domain>D\d+?)_(?P<site>[A-Z0-9]+?)_(?P<product>DP\d(?:\.\d{5}\.\d{3})?)_"
-        r"(?:(?P<tile>L\d{3}-\d)_)?"
+        r"(?:(?P<tile>[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*)_)?"
         r"(?P<date>\d{8})(?:_(?P<time>\d{6}))?"
-        r"(?:_directional)?_reflectance_envi\.hdr$"
+        r"(?:_(?P<direction_token>directional|bidirectional))?_reflectance_envi\.hdr$"
     )
 
     tile: str | None = None
@@ -530,16 +539,34 @@ class NEONReflectanceENVIHDRFile(MaskedFileMixin, DataFile):
         if not match:
             raise ValueError(f"{cls.__name__} could not parse {path.name}")
         groups = match.groupdict()
-        return cls(path, directional="_directional" in path.name, **groups)
+        direction_token = groups.pop("direction_token", None)
+        directional = direction_token == "directional"
+        return cls(path, directional=directional, **groups)
 
     @classmethod
     def from_components(
-        cls, domain: str, site: str, product: str, date: str, folder: Path,
-        time: Optional[str] = None, tile: Optional[str] = None, directional: bool = False
+        cls,
+        domain: str,
+        site: str,
+        product: str,
+        date: str,
+        folder: Path,
+        time: Optional[str] = None,
+        tile: Optional[str] = None,
+        directional: bool = False,
+        descriptor: str | None = None,
     ) -> "NEONReflectanceENVIHDRFile":
         tile_part = f"{tile}_" if tile else ""
         time_part = f"_{time}" if time else ""
-        directional_part = "_directional" if directional else ""
+        descriptor_value = descriptor
+        if descriptor_value is None:
+            descriptor_value = "directional_reflectance" if directional else "reflectance"
+        direction_token: str | None = None
+        if descriptor_value.startswith("directional"):
+            direction_token = "directional"
+        elif descriptor_value.startswith("bidirectional"):
+            direction_token = "bidirectional"
+        directional_part = f"_{direction_token}" if direction_token else ""
         filename = (
             f"NEON_{domain}_{site}_{product}_{tile_part}{date}{time_part}"
             f"{directional_part}_reflectance_envi.hdr"
