@@ -5,6 +5,12 @@ from importlib import import_module
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from cross_sensor_cal.exports.geo_utils import (
+    GeoContext,
+    add_lonlat_inplace,
+    write_parquet_with_lonlat,
+)
+
 
 class _LazyModule:
     """Delay importing optional heavy dependencies until they are accessed."""
@@ -34,12 +40,6 @@ class _LazyModule:
 np = _LazyModule("numpy", install_hint="`pip install numpy`")
 pd = _LazyModule("pandas", install_hint="`pip install pandas`")
 Transformer = _LazyModule("pyproj", attr="Transformer", install_hint="`pip install pyproj`")
-
-from cross_sensor_cal.exports.geo_utils import (
-    GeoContext,
-    add_lonlat_inplace,
-    write_parquet_with_lonlat,
-)
 
 # --- Known band centers (nm) for resampled products (adjust if your repo stores these elsewhere) ---
 SENSOR_WAVELENGTHS_NM = {

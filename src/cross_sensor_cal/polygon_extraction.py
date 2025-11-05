@@ -6,6 +6,23 @@ from importlib import import_module
 from pathlib import Path
 from typing import Callable, List, Optional, Set
 
+from cross_sensor_cal.exports.schema_utils import (
+    SENSOR_WAVELENGTHS_NM,
+    ensure_coord_columns,
+    infer_stage_from_name,
+    parse_envi_wavelengths_nm,
+    sort_and_rename_spectral_columns,
+)
+
+from ._optional import require_geopandas, require_rasterio
+from .file_types import (
+    DataFile,
+    NEONReflectanceBRDFCorrectedENVIFile,
+    NEONReflectanceENVIFile,
+    NEONReflectanceResampledENVIFile,
+    SpectralDataParquetFile,
+)
+
 
 class _LazyModule:
     """Thin wrapper that defers importing optional dependencies until accessed."""
@@ -48,23 +65,6 @@ _tqdm_factory: Callable[..., object] = _LazyModule(
 
 def tqdm(*args, **kwargs):  # pragma: no cover - lightweight passthrough
     return _tqdm_factory(*args, **kwargs)
-
-from cross_sensor_cal.exports.schema_utils import (
-    SENSOR_WAVELENGTHS_NM,
-    ensure_coord_columns,
-    infer_stage_from_name,
-    parse_envi_wavelengths_nm,
-    sort_and_rename_spectral_columns,
-)
-
-from ._optional import require_geopandas, require_rasterio
-from .file_types import (
-    DataFile,
-    NEONReflectanceBRDFCorrectedENVIFile,
-    NEONReflectanceENVIFile,
-    NEONReflectanceResampledENVIFile,
-    SpectralDataParquetFile,
-)
 
 
 def _require_pyarrow():
