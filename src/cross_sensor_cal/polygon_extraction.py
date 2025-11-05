@@ -2,13 +2,52 @@ import math
 import re
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from importlib import import_module
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Callable, List, Optional, Set
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
+
+class _LazyModule:
+    """Thin wrapper that defers importing optional dependencies until accessed."""
+
+    def __init__(self, module_path: str, *, attr: str | None = None, install_hint: str):
+        self._module_path = module_path
+        self._attr = attr
+        self._install_hint = install_hint
+        self._cached = None
+
+    def _load(self):
+        if self._cached is None:
+            try:
+                module = import_module(self._module_path)
+            except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency path
+                raise ModuleNotFoundError(
+                    "Optional dependency '{name}' is required for polygon extraction. "
+                    "Install it via {hint}.".format(name=self._module_path, hint=self._install_hint)
+                ) from exc
+            self._cached = getattr(module, self._attr) if self._attr else module
+        return self._cached
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+    def __call__(self, *args, **kwargs):
+        target = self._load()
+        if not callable(target):  # pragma: no cover - defensive guard
+            raise TypeError(f"Loaded object '{self._module_path}' is not callable")
+        return target(*args, **kwargs)
+
+
+np = _LazyModule("numpy", install_hint="`pip install numpy`")
+pd = _LazyModule("pandas", install_hint="`pip install pandas`")
+plt = _LazyModule("matplotlib.pyplot", install_hint="`pip install matplotlib`")
+_tqdm_factory: Callable[..., object] = _LazyModule(
+    "tqdm.auto", attr="tqdm", install_hint="`pip install tqdm`"
+)
+
+
+def tqdm(*args, **kwargs):  # pragma: no cover - lightweight passthrough
+    return _tqdm_factory(*args, **kwargs)
 
 from cross_sensor_cal.exports.schema_utils import (
     SENSOR_WAVELENGTHS_NM,
