@@ -1,18 +1,45 @@
 from __future__ import annotations
 
 import re
+from importlib import import_module
 from pathlib import Path
 from typing import List, Optional, Tuple
-
-import numpy as np
-import pandas as pd
-from pyproj import Transformer
 
 from cross_sensor_cal.exports.geo_utils import (
     GeoContext,
     add_lonlat_inplace,
     write_parquet_with_lonlat,
 )
+
+
+class _LazyModule:
+    """Delay importing optional heavy dependencies until they are accessed."""
+
+    def __init__(self, module_path: str, *, attr: str | None = None, install_hint: str):
+        self._module_path = module_path
+        self._attr = attr
+        self._install_hint = install_hint
+        self._cached = None
+
+    def _load(self):
+        if self._cached is None:
+            try:
+                module = import_module(self._module_path)
+            except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency path
+                raise ModuleNotFoundError(
+                    "Optional dependency '{name}' is required for export schema utilities. "
+                    "Install it via {hint}.".format(name=self._module_path, hint=self._install_hint)
+                ) from exc
+            self._cached = getattr(module, self._attr) if self._attr else module
+        return self._cached
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
+
+
+np = _LazyModule("numpy", install_hint="`pip install numpy`")
+pd = _LazyModule("pandas", install_hint="`pip install pandas`")
+Transformer = _LazyModule("pyproj", attr="Transformer", install_hint="`pip install pyproj`")
 
 # --- Known band centers (nm) for resampled products (adjust if your repo stores these elsewhere) ---
 SENSOR_WAVELENGTHS_NM = {

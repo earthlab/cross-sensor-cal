@@ -2,10 +2,35 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Optional, Tuple
 
-from pyproj import Transformer
+
+class _LazyModule:
+    def __init__(self, module_path: str, *, attr: str | None = None, install_hint: str):
+        self._module_path = module_path
+        self._attr = attr
+        self._install_hint = install_hint
+        self._cached = None
+
+    def _load(self):
+        if self._cached is None:
+            try:
+                module = import_module(self._module_path)
+            except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency path
+                raise ModuleNotFoundError(
+                    "Optional dependency '{name}' is required for geospatial helpers. "
+                    "Install it via {hint}.".format(name=self._module_path, hint=self._install_hint)
+                ) from exc
+            self._cached = getattr(module, self._attr) if self._attr else module
+        return self._cached
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
+
+
+Transformer = _LazyModule("pyproj", attr="Transformer", install_hint="`pip install pyproj`")
 
 
 @dataclass

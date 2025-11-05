@@ -3,8 +3,6 @@ import re
 from pathlib import Path
 from typing import List, Optional, Type
 
-import pandas as pd
-
 from .file_types import (
     DataFile,
     NEONReflectanceFile,
@@ -30,6 +28,23 @@ from .file_types import (
     UnmixingModelRMSETIF,
     SensorType,
 )
+
+
+try:  # pragma: no cover - exercised in lite environments without pandas
+    import pandas as pd
+except Exception as _pandas_exc:  # pragma: no cover - dependency optional in tests
+    pd = None  # type: ignore[assignment]
+else:  # pragma: no cover - import succeeded
+    _pandas_exc = None  # type: ignore[assignment]
+
+
+def _require_pandas():  # pragma: no cover - trivial helper
+    if pd is None:  # type: ignore[truthy-function]
+        raise RuntimeError(
+            "Optional dependency 'pandas' is required for file sorting reports. "
+            "Install cross-sensor-cal with the 'full' extra or add pandas to your environment."
+        ) from _pandas_exc
+    return pd
 
 
 RESAMPLED_RE = re.compile(
@@ -121,7 +136,9 @@ def categorize_file(file_obj: DataFile) -> str:
     return "Generic"
 
 
-def generate_file_move_list(base_folder: str, destination_folder: str, remote_path_prefix: str = "") -> pd.DataFrame:
+def generate_file_move_list(
+    base_folder: str, destination_folder: str, remote_path_prefix: str = ""
+) -> "pd.DataFrame":
     """
     Scans base_folder recursively to find all files matching the defined file types
     and generates a move list with local and iRODS paths.
@@ -161,6 +178,8 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
         UnmixingModelRMSETIF
     ]
     
+    pandas = _require_pandas()
+
     move_list = []
     base_path = Path(base_folder)
     
@@ -236,7 +255,7 @@ def generate_file_move_list(base_folder: str, destination_folder: str, remote_pa
             continue
     
     # Create DataFrame
-    df = pd.DataFrame(move_list, columns=["Source Path", "Destination Path"])
+    df = pandas.DataFrame(move_list, columns=["Source Path", "Destination Path"])
     
     # Save the move list
     os.makedirs(os.path.join(destination_folder, "sorted_files"), exist_ok=True)

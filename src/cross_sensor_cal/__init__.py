@@ -4,10 +4,20 @@ from __future__ import annotations
 from importlib import import_module
 
 from .brightness_config import load_brightness_coefficients
-from .sensor_panel_plots import (
-    make_micasense_vs_landsat_panels,
-    make_sensor_vs_neon_panels,
-)
+try:  # pragma: no cover - exercised when optional plotting deps missing
+    from .sensor_panel_plots import (
+        make_micasense_vs_landsat_panels,
+        make_sensor_vs_neon_panels,
+    )
+except Exception:  # pragma: no cover - importing plotting is optional in lite envs
+    make_micasense_vs_landsat_panels = None  # type: ignore[assignment]
+    make_sensor_vs_neon_panels = None  # type: ignore[assignment]
+    _PLOT_EXPORTS: tuple[str, ...] = ()
+else:
+    _PLOT_EXPORTS = (
+        make_micasense_vs_landsat_panels.__name__,
+        make_sensor_vs_neon_panels.__name__,
+    )
 
 __version__ = "2.2.0"
 
@@ -17,12 +27,13 @@ __all__ = ["__version__"]
 __all__ = sorted(
     set(
         __all__
-        + [
-            "apply_brightness_correction",
-            load_brightness_coefficients.__name__,
-            make_sensor_vs_neon_panels.__name__,
-            make_micasense_vs_landsat_panels.__name__,
-        ]
+        + (
+            [
+                "apply_brightness_correction",
+                load_brightness_coefficients.__name__,
+            ]
+            + list(_PLOT_EXPORTS)
+        )
     )
 )
 
