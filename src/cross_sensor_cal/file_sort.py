@@ -3,22 +3,6 @@ import re
 from pathlib import Path
 from typing import List, Optional, Type
 
-try:  # pragma: no cover - exercised in lite environments without pandas
-    import pandas as pd
-except Exception as _pandas_exc:  # pragma: no cover - dependency optional in tests
-    pd = None  # type: ignore[assignment]
-else:  # pragma: no cover - import succeeded
-    _pandas_exc = None  # type: ignore[assignment]
-
-
-def _require_pandas():  # pragma: no cover - trivial helper
-    if pd is None:  # type: ignore[truthy-function]
-        raise RuntimeError(
-            "Optional dependency 'pandas' is required for file sorting reports. "
-            "Install cross-sensor-cal with the 'full' extra or add pandas to your environment."
-        ) from _pandas_exc
-    return pd
-
 from .file_types import (
     DataFile,
     NEONReflectanceFile,
@@ -44,6 +28,23 @@ from .file_types import (
     UnmixingModelRMSETIF,
     SensorType,
 )
+
+
+try:  # pragma: no cover - exercised in lite environments without pandas
+    import pandas as pd
+except Exception as _pandas_exc:  # pragma: no cover - dependency optional in tests
+    pd = None  # type: ignore[assignment]
+else:  # pragma: no cover - import succeeded
+    _pandas_exc = None  # type: ignore[assignment]
+
+
+def _require_pandas():  # pragma: no cover - trivial helper
+    if pd is None:  # type: ignore[truthy-function]
+        raise RuntimeError(
+            "Optional dependency 'pandas' is required for file sorting reports. "
+            "Install cross-sensor-cal with the 'full' extra or add pandas to your environment."
+        ) from _pandas_exc
+    return pd
 
 
 RESAMPLED_RE = re.compile(
