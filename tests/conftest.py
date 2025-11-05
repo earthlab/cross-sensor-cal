@@ -66,18 +66,44 @@ if "pyarrow" not in sys.modules:  # pragma: no cover - testing fallback
         payload = {"columns": list(data.keys())}
         path.write_text(json.dumps(payload), encoding="utf-8")
 
+    def _read_schema_via_duckdb(path: Path) -> _FakeSchema:
+        try:
+            import duckdb  # type: ignore
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+            raise ValueError(
+                "unable to read schema (duckdb is required to inspect parquet files without pyarrow)"
+            ) from exc
+
+        try:
+            with duckdb.connect() as con:  # type: ignore[attr-defined]
+                relation = con.from_parquet(str(path))
+                names = list(relation.columns)
+        except Exception as exc:  # pragma: no cover - mirror pyarrow failure text
+            raise ValueError(str(exc)) from exc
+        return _FakeSchema(names)
+
     def read_table(path):
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(path)
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return _FakeTable({name: [] for name in data.get("columns", [])})
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError:
+            schema = _read_schema_via_duckdb(path)
+            return _FakeTable({name: [] for name in schema.names})
+        names = data.get("columns")
+        if not isinstance(names, list):  # pragma: no cover - malformed shim payloads
+            raise ValueError("unable to read schema (missing columns list)")
+        return _FakeTable({name: [] for name in names})
 
     def read_schema(path):
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(path)
-        raw = path.read_text(encoding="utf-8")
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return _read_schema_via_duckdb(path)
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
