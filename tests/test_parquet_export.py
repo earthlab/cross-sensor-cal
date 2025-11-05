@@ -147,6 +147,10 @@ if "pandas" not in sys.modules:  # pragma: no cover - dependency shim for unit t
     sys.modules["pandas"] = fake_pandas
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+
+
 def _stub_module(name: str, **attrs) -> None:
     module = types.ModuleType(name)
     for key, value in attrs.items():
@@ -156,7 +160,7 @@ def _stub_module(name: str, **attrs) -> None:
 
 
 _stub_module("cross_sensor_cal")
-sys.modules["cross_sensor_cal"].__path__ = []  # type: ignore[attr-defined]
+sys.modules["cross_sensor_cal"].__path__ = [str(SRC_ROOT / "cross_sensor_cal")]  # type: ignore[attr-defined]
 _stub_module("cross_sensor_cal.pipelines")
 sys.modules["cross_sensor_cal.pipelines"].__path__ = []  # type: ignore[attr-defined]
 _stub_module("cross_sensor_cal.utils", get_package_data_path=lambda *a, **k: Path("data"))
