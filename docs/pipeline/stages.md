@@ -52,22 +52,29 @@ cross-sensor-cal convolve --in corrected/*_brdfandtopo_corrected_envi.img --sens
 **Pitfalls** HDR must contain a valid wavelength block.
 
 ## 5) Parquet export
-**Purpose** Flatten ENVI to tidy Parquet.  
-**Inputs → Outputs** ENVI products → `*.parquet`.  
+**Purpose** Flatten ENVI to tidy Parquet and self-heal corrupted sidecars.
+**Behavior** For each ENVI product the stage checks whether `<product>.parquet` exists,
+validates existing files with `pyarrow.parquet.read_schema`, reuses the valid ones, and
+deletes + rebuilds any that fail validation. Manual cleanup is rarely needed.
+**Inputs → Outputs** ENVI products → `*.parquet`.
 **Run it**
 ```bash
 cross-sensor-cal export-parquet --in corrected/*.img Convolution_Reflectance_Resample_*/*.img --out parquet/
 ```
-**Pitfalls** Use `--chunksize` to keep memory low.
+**Pitfalls** Use `--chunksize` to keep memory low; reruns are restart-safe.
 
 ## 6) DuckDB merge
-**Purpose** Merge parquet tables into one analysis-ready file.  
-**Inputs → Outputs** `parquet/*.parquet` → `<prefix>_merged_pixel_extraction.parquet`.  
+**Purpose** Merge parquet tables into one analysis-ready file while skipping corrupt inputs.
+**Behavior** Each candidate Parquet is validated once. Invalid files trigger warnings such
+as `[merge] ⚠️ Skipping invalid parquet <file>: <error>` and are ignored. The merge
+continues as long as at least one valid file remains; it errors only when none are usable
+for the prefix.
+**Inputs → Outputs** `parquet/*.parquet` → `<prefix>_merged_pixel_extraction.parquet`.
 **Run it**
 ```bash
 cross-sensor-cal merge-duckdb --in parquet/*.parquet --out merged/<prefix>_merged_pixel_extraction.parquet
 ```
-**Pitfalls** Ensure filenames follow [Outputs](outputs.md) conventions before merging.
+**Pitfalls** Review warnings for skipped files; regenerate them if the merge aborts because nothing was valid.
 
 ## 7) QA panel
 **Purpose** Visual checks and metrics; saves `<prefix>_qa.png` and `<prefix>_qa.json`.

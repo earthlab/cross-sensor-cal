@@ -19,8 +19,10 @@
 - **Next**: [Parquet export](stages.md#5-parquet-export) • [Schemas](../reference/schemas.md)
 
 ## Parquet (per product)
-- **What**: Tidy columns for pixels and bands.
+- **What**: Tidy columns for pixels and bands, validated before reuse.
 - **Produced by**: Stage 5
+- **Behavior**: Existing `*.parquet` sidecars are checked with `pyarrow.parquet.read_schema`.
+  Invalid or corrupted files are deleted and regenerated automatically during export.
 - **Next**: [Merge](stages.md#6-duckdb-merge) • [Preview](../usage/parquet_preview.md)
 
 ## Merged parquet
