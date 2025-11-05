@@ -99,6 +99,8 @@
     "\u26a0\ufe0f Cannot export Parquet for %s because .hdr is missing or empty",
     "\u26a0\ufe0f Cannot export Parquet for %s because .img is missing or empty",
     "\u26a0\ufe0f Cannot locate work directory for Parquet export: %s",
+    "\u26a0\ufe0f Cannot remove invalid Parquet for %s (%s)",
+    "\u26a0\ufe0f Existing Parquet for %s is invalid (%s); regenerating",
     "\u26a0\ufe0f Failed Parquet export for %s: %s",
     "\u26a0\ufe0f Merge failed for {future_map[future]}: {exc}",
     "\u26a0\ufe0f Parquet validation reported an issue for %s: %s",
