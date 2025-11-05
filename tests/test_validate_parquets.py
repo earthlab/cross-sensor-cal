@@ -10,13 +10,11 @@ import pyarrow.parquet as pq
 
 def _load_validator():
     script_path = Path(__file__).resolve().parents[1] / "bin" / "validate_parquets"
-    spec = importlib.util.spec_from_file_location("validate_parquets", script_path)
-    if spec is None or spec.loader is None:
-        loader = SourceFileLoader("validate_parquets", str(script_path))
-        spec = importlib.util.spec_from_loader(loader.name, loader)
+    loader = SourceFileLoader("validate_parquets", str(script_path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    assert spec is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
+    loader.exec_module(module)
     return module
 
 
