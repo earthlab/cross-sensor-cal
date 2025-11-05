@@ -62,8 +62,10 @@ if "pyarrow" not in sys.modules:  # pragma: no cover - testing fallback
             raise ValueError("unable to read schema (missing columns list)")
         return _FakeSchema(names)
 
+    fake_pa.__version__ = "0.0.0"
     fake_pa.table = table
     fake_pa.Table = _FakeTable
+    fake_pa.parquet = fake_parquet
     fake_parquet.write_table = write_table
     fake_parquet.read_table = read_table
     fake_parquet.read_schema = read_schema
