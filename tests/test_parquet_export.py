@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 import types
 
+import pandas as pd
+
 if "h5py" not in sys.modules:  # pragma: no cover - dependency shim for unit tests
     fake_h5py = types.ModuleType("h5py")
 
@@ -130,45 +132,83 @@ def test_export_parquet_stage_creates_sidecars_for_all_envi(tmp_path: Path, monk
     assert mask_img.name not in calls
 
 
-def test_ensure_parquet_for_envi_skip_and_write(tmp_path: Path, monkeypatch) -> None:
+def test_ensure_parquet_for_envi_creates_and_skips_valid(tmp_path: Path, monkeypatch) -> None:
     class DummyLogger2(DummyLogger):
         pass
 
-    img1 = tmp_path / "f1_envi.img"
-    hdr1 = tmp_path / "f1_envi.hdr"
-    img1.write_bytes(b"xx")
-    hdr1.write_bytes(b"hdr")
-
-    def fake_build(envi_img: Path, envi_hdr: Path, parquet_path: Path, chunk_size: int = 2048) -> None:
-        parquet_path.write_bytes(b"pq")
+    img = tmp_path / "f1_envi.img"
+    hdr = tmp_path / "f1_envi.hdr"
+    img.write_bytes(b"xx")
+    hdr.write_bytes(b"hdr")
 
     import cross_sensor_cal.parquet_export as px
+
+    build_calls = {"count": 0}
+
+    def fake_build(envi_img: Path, envi_hdr: Path, parquet_path: Path, chunk_size: int = 2048) -> None:
+        build_calls["count"] += 1
+        df = pd.DataFrame(
+            {
+                "pixel_id": [1],
+                "row": [0],
+                "col": [0],
+                "lon": [0.0],
+                "lat": [0.0],
+            }
+        )
+        df.to_parquet(parquet_path)
 
     monkeypatch.setattr(px, "build_parquet_from_envi", fake_build)
 
     logger1 = DummyLogger2()
-    result_path = ensure_parquet_for_envi(img1, logger1)
-    assert result_path is not None
-    assert result_path.exists()
+    parquet_path = ensure_parquet_for_envi(img, logger1)
+    assert parquet_path is not None and parquet_path.exists()
+    assert build_calls["count"] == 1
     assert any("Wrote Parquet" in msg for msg in logger1.infos)
 
-    img2 = tmp_path / "f2_envi.img"
-    hdr2 = tmp_path / "f2_envi.hdr"
-    pq2 = tmp_path / "f2_envi.parquet"
-    img2.write_bytes(b"xx")
-    hdr2.write_bytes(b"hdr")
-    pq2.write_bytes(b"already here")
+    def fail_build(*_args, **_kwargs) -> None:
+        raise AssertionError("should not run because parquet exists already")
+
+    monkeypatch.setattr(px, "build_parquet_from_envi", fail_build)
+
+    logger2 = DummyLogger2()
+    result_path = ensure_parquet_for_envi(img, logger2)
+    assert result_path == parquet_path
+    assert any("Parquet already present" in msg for msg in logger2.infos)
+
+
+def test_ensure_parquet_for_envi_regenerates_invalid(tmp_path: Path, monkeypatch) -> None:
+    class DummyLogger2(DummyLogger):
+        pass
+
+    img = tmp_path / "f_invalid_envi.img"
+    hdr = tmp_path / "f_invalid_envi.hdr"
+    parquet_path = tmp_path / "f_invalid_envi.parquet"
+    img.write_bytes(b"xx")
+    hdr.write_bytes(b"hdr")
+    parquet_path.write_text("not a parquet", encoding="utf-8")
+
+    import cross_sensor_cal.parquet_export as px
 
     calls = {"count": 0}
 
-    def fake_build2(*args, **kwargs) -> None:
+    def fake_build(envi_img: Path, envi_hdr: Path, out_path: Path, chunk_size: int = 2048) -> None:
         calls["count"] += 1
-        raise AssertionError("should not run because parquet exists already")
+        df = pd.DataFrame(
+            {
+                "pixel_id": [1],
+                "row": [0],
+                "col": [0],
+                "lon": [0.0],
+                "lat": [0.0],
+            }
+        )
+        df.to_parquet(out_path)
 
-    monkeypatch.setattr(px, "build_parquet_from_envi", fake_build2)
+    monkeypatch.setattr(px, "build_parquet_from_envi", fake_build)
 
-    logger2 = DummyLogger2()
-    result_path2 = ensure_parquet_for_envi(img2, logger2)
-    assert result_path2 == pq2
-    assert calls["count"] == 0
-    assert any("Parquet already present" in msg for msg in logger2.infos)
+    logger = DummyLogger2()
+    result_path = ensure_parquet_for_envi(img, logger)
+    assert result_path == parquet_path
+    assert calls["count"] == 1
+    assert any("invalid" in msg for msg in logger.warnings)

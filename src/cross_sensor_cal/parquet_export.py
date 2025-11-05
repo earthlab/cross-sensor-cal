@@ -8,6 +8,7 @@ heavy geospatial dependencies. Expensive libraries (``rasterio``, ``pandas``,
 
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 import re
 
@@ -42,7 +43,18 @@ def pq_write_table(obj, path: Path):
         else:
             df = pd.DataFrame(obj)
         table = pa.Table.from_pandas(df, preserve_index=False)
-    pq.write_table(table, path)
+    path = Path(path)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with suppress(FileNotFoundError):
+        tmp_path.unlink()
+
+    try:
+        pq.write_table(table, tmp_path)
+        tmp_path.replace(path)
+    finally:
+        with suppress(FileNotFoundError):
+            tmp_path.unlink()
+
     return path
 
 
@@ -97,12 +109,17 @@ def _add_lonlat_columns(df, img_path: Path, *, transform=None, crs=None):
 
 
 def parquet_exists_and_valid(parquet_path: Path) -> bool:
-    """Return ``True`` when ``parquet_path`` exists and is non-empty."""
+    """Return ``True`` when ``parquet_path`` exists and has a readable schema."""
 
+    path = Path(parquet_path)
     try:
-        path = Path(parquet_path)
-        return path.is_file() and path.stat().st_size > 0
-    except OSError:
+        if not (path.is_file() and path.stat().st_size > 0):
+            return False
+        import pyarrow.parquet as pq
+
+        pq.read_schema(path)
+        return True
+    except Exception:
         return False
 
 
@@ -160,8 +177,9 @@ def build_parquet_from_envi(
     envi_hdr = Path(envi_hdr)
     parquet_path = Path(parquet_path)
     parquet_path.parent.mkdir(parents=True, exist_ok=True)
-    if parquet_path.exists():
-        parquet_path.unlink()
+    tmp_path = parquet_path.with_suffix(parquet_path.suffix + ".tmp")
+    with suppress(FileNotFoundError):
+        tmp_path.unlink()
 
     stage_key = infer_stage_from_name(parquet_path.name)
 
@@ -179,58 +197,60 @@ def build_parquet_from_envi(
                 wavelengths_nm = centers
                 break
 
-    with rasterio.open(envi_img) as src:
-        band_count = src.count
-        height = src.height
-        width = src.width
-        transform = src.transform
-        src_crs = src.crs
+    band_wavelengths: list[int] = []
+    wrote_rows = False
+    writer: pq.ParquetWriter | None = None
+    try:
+        with rasterio.open(envi_img) as src:
+            band_count = src.count
+            height = src.height
+            width = src.width
+            transform = src.transform
+            src_crs = src.crs
 
-        crs_candidate: int | str | None = None
-        if src.crs is not None:
-            try:
-                crs_candidate = src.crs.to_epsg()
-            except Exception:
-                crs_candidate = None
-            if crs_candidate is None:
+            crs_candidate: int | str | None = None
+            if src.crs is not None:
                 try:
-                    crs_candidate = src.crs.to_string()
+                    crs_candidate = src.crs.to_epsg()
                 except Exception:
                     crs_candidate = None
-        if crs_candidate is None and header_text:
-            crs_candidate = _crs_from_header_text(header_text)
-        if crs_candidate is None:
-            raise ValueError(f"Cannot determine CRS for {envi_img}")
+                if crs_candidate is None:
+                    try:
+                        crs_candidate = src.crs.to_string()
+                    except Exception:
+                        crs_candidate = None
+            if crs_candidate is None and header_text:
+                crs_candidate = _crs_from_header_text(header_text)
+            if crs_candidate is None:
+                raise ValueError(f"Cannot determine CRS for {envi_img}")
 
-        if src.block_shapes:
-            block_y, block_x = src.block_shapes[0]
-            if block_y <= 0:
+            if src.block_shapes:
+                block_y, block_x = src.block_shapes[0]
+                if block_y <= 0:
+                    block_y = chunk_size
+                if block_x <= 0:
+                    block_x = chunk_size
+            else:
                 block_y = chunk_size
-            if block_x <= 0:
                 block_x = chunk_size
-        else:
-            block_y = chunk_size
-            block_x = chunk_size
 
-        block_y = max(1, min(chunk_size, block_y))
-        block_x = max(1, min(chunk_size, block_x))
+            block_y = max(1, min(chunk_size, block_y))
+            block_x = max(1, min(chunk_size, block_x))
 
-        if wavelengths_nm:
-            band_wavelengths: list[int] = []
-            for idx in range(band_count):
-                if idx < len(wavelengths_nm):
-                    band_wavelengths.append(int(round(wavelengths_nm[idx])))
-                elif band_wavelengths:
-                    band_wavelengths.append(band_wavelengths[-1] + 1)
-                else:
-                    band_wavelengths.append(idx + 1)
-        else:
-            band_wavelengths = [idx + 1 for idx in range(band_count)]
+            if wavelengths_nm:
+                band_wavelengths = []
+                for idx in range(band_count):
+                    if idx < len(wavelengths_nm):
+                        band_wavelengths.append(int(round(wavelengths_nm[idx])))
+                    elif band_wavelengths:
+                        band_wavelengths.append(band_wavelengths[-1] + 1)
+                    else:
+                        band_wavelengths.append(idx + 1)
+            else:
+                band_wavelengths = [idx + 1 for idx in range(band_count)]
 
-        nodata = src.nodata
-        writer: pq.ParquetWriter | None = None
-        wrote_rows = False
-        try:
+            nodata = src.nodata
+
             for row_start in range(0, height, block_y):
                 row_end = min(row_start + block_y, height)
                 for col_start in range(0, width, block_x):
@@ -307,13 +327,20 @@ def build_parquet_from_envi(
                     wrote_rows = True
                     table = pa.Table.from_pandas(df_chunk, preserve_index=False)
                     if writer is None:
-                        writer = pq.ParquetWriter(parquet_path, table.schema)
+                        writer = pq.ParquetWriter(tmp_path, table.schema)
                     writer.write_table(table)
-        finally:
+    except Exception:
+        with suppress(Exception):
             if writer is not None:
                 writer.close()
+        with suppress(FileNotFoundError):
+            tmp_path.unlink()
+        raise
+    else:
+        if writer is not None:
+            writer.close()
 
-    if not parquet_path.exists() or not wrote_rows:
+    if not tmp_path.exists() or not wrote_rows:
         meta_fields = [
             ("pixel_id", pa.int64()),
             ("row", pa.int32()),
@@ -338,7 +365,9 @@ def build_parquet_from_envi(
             [pa.array([], type=field.type) for field in schema],
             names=[field.name for field in schema],
         )
-        pq.write_table(empty_table, parquet_path)
+        pq.write_table(empty_table, tmp_path)
+
+    tmp_path.replace(parquet_path)
 
 
 def repair_lonlat_in_place(folder: Path):
@@ -378,13 +407,41 @@ def ensure_parquet_for_envi(envi_img: Path, logger) -> Path | None:
         return None
 
     parquet_path = envi_img.with_suffix(".parquet")
-    if parquet_exists_and_valid(parquet_path):
-        logger.info(
-            "⏭️ Parquet already present for %s -> %s (skipping)",
+
+    if parquet_path.exists():
+        if parquet_exists_and_valid(parquet_path):
+            logger.info(
+                "⏭️ Parquet already present for %s -> %s (skipping)",
+                envi_img.name,
+                parquet_path.name,
+            )
+            return parquet_path
+
+        issue = "missing or empty file"
+        if parquet_path.is_file() and parquet_path.stat().st_size > 0:
+            try:
+                import pyarrow.parquet as pq
+
+                pq.read_schema(parquet_path)
+            except Exception as exc:  # pragma: no cover - exact errors vary
+                issue = exc
+            else:  # pragma: no cover - defensive, should not occur
+                issue = "unknown validation issue"
+
+        logger.warning(
+            "⚠️ Existing Parquet for %s is invalid (%s); regenerating",
             envi_img.name,
-            parquet_path.name,
+            issue,
         )
-        return parquet_path
+        try:
+            parquet_path.unlink()
+        except OSError as unlink_exc:
+            logger.warning(
+                "⚠️ Cannot remove invalid Parquet for %s (%s)",
+                envi_img.name,
+                unlink_exc,
+            )
+            return None
 
     envi_hdr = envi_img.with_suffix(".hdr")
     if not envi_hdr.exists() or envi_hdr.stat().st_size == 0:

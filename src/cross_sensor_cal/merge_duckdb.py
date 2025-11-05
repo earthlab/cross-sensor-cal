@@ -97,7 +97,7 @@ def _filter_valid_parquets(paths: Iterable[Path]) -> Tuple[List[Path], List[Tupl
 
     for path in paths:
         try:
-            pq.ParquetFile(path.as_posix())
+            pq.read_schema(path)
         except Exception as exc:  # pragma: no cover - corruption varies by test data
             skipped.append((path, str(exc)))
         else:
