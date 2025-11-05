@@ -1059,6 +1059,11 @@
 <td>Reduce <code>--max-workers</code>; use <code>--chunksize</code></td>
 </tr>
 <tr>
+<td>Parquet magic bytes / skipping invalid parquet</td>
+<td>Parquet sidecar truncated, empty, or not parquet</td>
+<td>Re-run the pipeline so export rebuilds it automatically; optionally remove the file and run <code>bin/validate_parquets --soft &lt;dir&gt;</code></td>
+</tr>
+<tr>
 <td>QA issues: “Wavelengths not strictly increasing”</td>
 <td>ENVI header wavelengths out of order or missing</td>
 <td>Re-export header from HyTools/ENVI; ensure <code>wavelength</code> block is numeric and ordered</td>

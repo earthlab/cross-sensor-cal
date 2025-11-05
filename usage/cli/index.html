@@ -745,6 +745,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#validate-parquet-sidecars" class="md-nav__link">
+    <span class="md-ellipsis">
+      Validate parquet sidecars
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#merge-qa" class="md-nav__link">
     <span class="md-ellipsis">
       Merge + QA
@@ -1148,7 +1157,17 @@ Only <code>WARNING</code> or <code>ERROR</code> messages require attention.</p>
 <p><strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>export-parquet<span class="w"> </span>--in<span class="w"> </span>corrected/*.img<span class="w"> </span>Convolution_Reflectance_Resample_*/*.img<span class="w"> </span>--out<span class="w"> </span>parquet/
 </code></pre></div>
-<strong>Pitfalls</strong> Use <code>--chunksize</code> when RAM is limited.</p>
+<strong>Pitfalls</strong> Use <code>--chunksize</code> when RAM is limited. Existing sidecars are validated on
+startup; corrupted files are deleted and regenerated automatically.</p>
+<h2 id="validate-parquet-sidecars">Validate parquet sidecars<a class="headerlink" href="#validate-parquet-sidecars" title="Permanent link">&para;</a></h2>
+<p><strong>Purpose</strong> Audit <code>.parquet</code> sidecars on disk.</p>
+<p><strong>Run it</strong>
+<div class="highlight"><pre><span></span><code>bin/validate_parquets<span class="w"> </span>path/to/flightline_dir
+bin/validate_parquets<span class="w"> </span>--soft<span class="w"> </span>path/to/flightline_dir
+</code></pre></div>
+<strong>Behavior</strong> Default mode checks every file with <code>pyarrow.parquet.read_schema</code> and exits 1
+if any are invalid. <code>--soft</code> logs the same issues but exits 0 so callers can treat the
+report as a warning.</p>
 <h2 id="merge-qa">Merge + QA<a class="headerlink" href="#merge-qa" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Consolidate product Parquet tables and rebuild QA panels.</p>
 <p><strong>Inputs</strong> Set of Parquet files, target merged filename, optional QA output directory.</p>
@@ -1157,7 +1176,9 @@ Only <code>WARNING</code> or <code>ERROR</code> messages require attention.</p>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>merge-duckdb<span class="w"> </span>--in<span class="w"> </span>parquet/*.parquet<span class="w"> </span>--out<span class="w"> </span>merged/demo_merged_pixel_extraction.parquet
 cross-sensor-cal<span class="w"> </span>qa-panel<span class="w"> </span>--merged<span class="w"> </span>merged/demo_merged_pixel_extraction.parquet<span class="w"> </span>--out<span class="w"> </span>qa/
 </code></pre></div>
-<strong>Pitfalls</strong> <code>merge-duckdb</code> expects consistent schemas; if QA fails, check <a href="../../troubleshooting/">Troubleshooting</a>.</p>
+<strong>Pitfalls</strong> <code>merge-duckdb</code> validates each input once and skips corrupt files with warnings;
+it only fails if none of the candidates are usable. If QA fails, check
+<a href="../../troubleshooting/">Troubleshooting</a>.</p>
 <h2 id="minimal-python-equivalent">Minimal Python equivalent<a class="headerlink" href="#minimal-python-equivalent" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal</span><span class="w"> </span><span class="kn">import</span> <span class="n">go_forth_and_multiply</span>
 

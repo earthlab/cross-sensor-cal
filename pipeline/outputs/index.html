@@ -1130,8 +1130,10 @@
 </ul>
 <h2 id="parquet-per-product">Parquet (per product)<a class="headerlink" href="#parquet-per-product" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>What</strong>: Tidy columns for pixels and bands.</li>
+<li><strong>What</strong>: Tidy columns for pixels and bands, validated before reuse.</li>
 <li><strong>Produced by</strong>: Stage 5</li>
+<li><strong>Behavior</strong>: Existing <code>*.parquet</code> sidecars are checked with <code>pyarrow.parquet.read_schema</code>.
+  Invalid or corrupted files are deleted and regenerated automatically during export.</li>
 <li><strong>Next</strong>: <a href="../stages/#6-duckdb-merge">Merge</a> • <a href="../../usage/parquet_preview/">Preview</a></li>
 </ul>
 <h2 id="merged-parquet">Merged parquet<a class="headerlink" href="#merged-parquet" title="Permanent link">&para;</a></h2>

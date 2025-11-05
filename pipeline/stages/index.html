@@ -1177,19 +1177,26 @@ to harmonise illumination; the QA JSON will expose the per-band gain/offsets.</e
 </code></pre></div>
 <strong>Pitfalls</strong> HDR must contain a valid wavelength block.</p>
 <h2 id="5-parquet-export">5) Parquet export<a class="headerlink" href="#5-parquet-export" title="Permanent link">&para;</a></h2>
-<p><strong>Purpose</strong> Flatten ENVI to tidy Parquet.<br />
-<strong>Inputs → Outputs</strong> ENVI products → <code>*.parquet</code>.<br />
+<p><strong>Purpose</strong> Flatten ENVI to tidy Parquet and self-heal corrupted sidecars.
+<strong>Behavior</strong> For each ENVI product the stage checks whether <code>&lt;product&gt;.parquet</code> exists,
+validates existing files with <code>pyarrow.parquet.read_schema</code>, reuses the valid ones, and
+deletes + rebuilds any that fail validation. Manual cleanup is rarely needed.
+<strong>Inputs → Outputs</strong> ENVI products → <code>*.parquet</code>.
 <strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>export-parquet<span class="w"> </span>--in<span class="w"> </span>corrected/*.img<span class="w"> </span>Convolution_Reflectance_Resample_*/*.img<span class="w"> </span>--out<span class="w"> </span>parquet/
 </code></pre></div>
-<strong>Pitfalls</strong> Use <code>--chunksize</code> to keep memory low.</p>
+<strong>Pitfalls</strong> Use <code>--chunksize</code> to keep memory low; reruns are restart-safe.</p>
 <h2 id="6-duckdb-merge">6) DuckDB merge<a class="headerlink" href="#6-duckdb-merge" title="Permanent link">&para;</a></h2>
-<p><strong>Purpose</strong> Merge parquet tables into one analysis-ready file.<br />
-<strong>Inputs → Outputs</strong> <code>parquet/*.parquet</code> → <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code>.<br />
+<p><strong>Purpose</strong> Merge parquet tables into one analysis-ready file while skipping corrupt inputs.
+<strong>Behavior</strong> Each candidate Parquet is validated once. Invalid files trigger warnings such
+as <code>[merge] ⚠️ Skipping invalid parquet &lt;file&gt;: &lt;error&gt;</code> and are ignored. The merge
+continues as long as at least one valid file remains; it errors only when none are usable
+for the prefix.
+<strong>Inputs → Outputs</strong> <code>parquet/*.parquet</code> → <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code>.
 <strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>merge-duckdb<span class="w"> </span>--in<span class="w"> </span>parquet/*.parquet<span class="w"> </span>--out<span class="w"> </span>merged/&lt;prefix&gt;_merged_pixel_extraction.parquet
 </code></pre></div>
-<strong>Pitfalls</strong> Ensure filenames follow <a href="../outputs/">Outputs</a> conventions before merging.</p>
+<strong>Pitfalls</strong> Review warnings for skipped files; regenerate them if the merge aborts because nothing was valid.</p>
 <h2 id="7-qa-panel">7) QA panel<a class="headerlink" href="#7-qa-panel" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Visual checks and metrics; saves <code>&lt;prefix&gt;_qa.png</code> and <code>&lt;prefix&gt;_qa.json</code>.
 <strong>Run it</strong>
