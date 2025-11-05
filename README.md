@@ -205,7 +205,9 @@ flowchart LR
 2. **Export** to ENVI format (`*_envi.img/.hdr`)
 3. **Topographic and BRDF Correction** → produces `*_brdfandtopo_corrected_envi.img/.hdr`
 4. **Cross-Sensor Convolution** to target sensors (Landsat TM, ETM+, OLI/OLI-2, MicaSense, etc.)
-5. **Parquet Export** for all ENVI products
+5. **Parquet Export** for all ENVI products. Each rerun validates existing `*.parquet`
+   sidecars with `pyarrow.parquet.read_schema`. Valid files are reused; corrupt ones are
+   deleted and rebuilt so the stage self-heals bad exports automatically.
 6. **Merge Stage (new)** → merges all pixel tables (original, corrected, resampled) into one master parquet per flightline:
    `<prefix>_merged_pixel_extraction.parquet`
    Each row = one pixel, all wavelengths and metadata combined.
@@ -317,6 +319,41 @@ After a successful run you should see, for each flight line:
   - `<flight_stem>_merged_pixel_extraction.parquet` (all pixels + wavelengths merged).
   - `<flight_stem>_qa.png` (visual QA panel produced automatically).
   - Support files such as `NIWO_brdf_model.json` generated during correction.
+
+## Troubleshooting Parquet issues
+
+**Symptom**
+
+```text
+Parquet magic bytes not found in footer. Either the file is corrupted or this is not a parquet file.
+[merge] ⚠️ Skipping invalid parquet <file>: <error>
+❌ Issues found: - <file>.parquet → unable to read schema (...)
+```
+
+**What it means**
+
+The Parquet sidecar is empty, truncated, or not actually a Parquet file.
+
+**How it recovers**
+
+Re-run the pipeline for that flightline. During Parquet export the pipeline validates
+existing files, deletes any that fail `pyarrow.parquet.read_schema`, and rebuilds them
+from the ENVI source. `bin/validate_parquets --soft` surfaces the same issues without
+aborting the run, and the merge stage skips corrupt sidecars as long as at least one
+valid file remains for the prefix.
+
+**Manual recovery (optional)**
+
+```bash
+# 1. Optionally, manually remove a known-bad parquet file
+rm base_dir/NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance_envi.parquet
+
+# 2. Re-run the pipeline for that flightline; auto-heal will regenerate any missing/invalid parquet
+bin/go_forth_and_multiply base_dir/NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
+
+# 3. Optionally, re-validate in soft mode
+bin/validate_parquets --soft base_dir/NEON_D13_NIWO_DP1_L019-1_20230815_directional_reflectance
+```
 
 ## Quality Assurance (QA) panels
 

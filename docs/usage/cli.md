@@ -47,7 +47,20 @@ cross-sensor-cal convolve --in corrected/*_brdfandtopo_corrected_envi.img --sens
 ```bash
 cross-sensor-cal export-parquet --in corrected/*.img Convolution_Reflectance_Resample_*/*.img --out parquet/
 ```
-**Pitfalls** Use `--chunksize` when RAM is limited.
+**Pitfalls** Use `--chunksize` when RAM is limited. Existing sidecars are validated on
+startup; corrupted files are deleted and regenerated automatically.
+
+## Validate parquet sidecars
+**Purpose** Audit `.parquet` sidecars on disk.
+
+**Run it**
+```bash
+bin/validate_parquets path/to/flightline_dir
+bin/validate_parquets --soft path/to/flightline_dir
+```
+**Behavior** Default mode checks every file with `pyarrow.parquet.read_schema` and exits 1
+if any are invalid. `--soft` logs the same issues but exits 0 so callers can treat the
+report as a warning.
 
 ## Merge + QA
 **Purpose** Consolidate product Parquet tables and rebuild QA panels.
@@ -61,7 +74,9 @@ cross-sensor-cal export-parquet --in corrected/*.img Convolution_Reflectance_Res
 cross-sensor-cal merge-duckdb --in parquet/*.parquet --out merged/demo_merged_pixel_extraction.parquet
 cross-sensor-cal qa-panel --merged merged/demo_merged_pixel_extraction.parquet --out qa/
 ```
-**Pitfalls** `merge-duckdb` expects consistent schemas; if QA fails, check [Troubleshooting](../troubleshooting.md).
+**Pitfalls** `merge-duckdb` validates each input once and skips corrupt files with warnings;
+it only fails if none of the candidates are usable. If QA fails, check
+[Troubleshooting](../troubleshooting.md).
 
 ## Minimal Python equivalent
 ```python
