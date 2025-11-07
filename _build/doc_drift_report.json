@@ -90,6 +90,8 @@
   "notes": [],
   "naming_rule": "<prefix>_merged_pixel_extraction.parquet",
   "stages_found": [
+    "Streaming BRDF+topo correction for %s (shape %sx%sx%s) using %dx%d tiles (~%.2f MB/tile)",
+    "Streaming ENVI export from %s with shape %sx%sx%s \u2192 %dx%d tiles (~%.2f MB/tile)",
     "[merge] \u26a0\ufe0f QA panel after merge failed for {prefix}: {e}",
     "[merge] \ud83d\uddbc\ufe0f  QA panel \u2192 {out_png_path} ",
     "[{flight_stem}] \u2b07\ufe0f Download already complete \u2014 reusing existing files ({h5_path.name})",
