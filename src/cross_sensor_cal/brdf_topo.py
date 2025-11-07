@@ -15,7 +15,7 @@ from .corrections import (
     fit_and_save_brdf_model,
 )
 from .envi_writer import EnviWriter
-from .neon_cube import NeonCube
+from .neon_cube import NeonCube, resolve_tile_size
 from .progress_utils import TileProgressReporter
 from .utils_checks import is_valid_envi_pair, is_valid_json
 
@@ -195,9 +195,20 @@ def apply_brdf_topo_core(
 
     writer = EnviWriter(out_img_path.with_suffix(""), header)
 
-    chunk_y = 100
-    chunk_x = 100
-    total_chunks = cube.chunk_count(chunk_y=chunk_y, chunk_x=chunk_x)
+    tile_size = resolve_tile_size()
+    approx_tile_bytes = tile_size * tile_size * cube.bands * np.dtype("float32").itemsize
+    logger.info(
+        "Streaming BRDF+topo correction for %s (shape %sx%sx%s) using %dx%d tiles (~%.2f MB/tile)",
+        source_h5.name,
+        cube.lines,
+        cube.columns,
+        cube.bands,
+        tile_size,
+        tile_size,
+        approx_tile_bytes / (1024 ** 2),
+    )
+
+    total_chunks = cube.chunk_count(chunk_y=tile_size, chunk_x=tile_size)
     reporter = TileProgressReporter(
         stage_name="BRDF+topo correction",
         total_tiles=total_chunks,
@@ -221,10 +232,12 @@ def apply_brdf_topo_core(
 
     try:
         for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(
-            chunk_y=chunk_y, chunk_x=chunk_x
+            chunk_y=tile_size, chunk_x=tile_size
         ):
-            chunk = np.asarray(raw_chunk, dtype=np.float32)
-            corrected_chunk = apply_topo_correct(cube, chunk, ys, ye, xs, xe)
+            chunk = np.asarray(raw_chunk, dtype=np.float32, copy=False)
+            first_band = chunk[..., 0]
+            mask_tile = np.isfinite(first_band) & (first_band != cube.no_data)
+            corrected_chunk = apply_topo_correct(cube, chunk, ys, ye, xs, xe, mask=mask_tile)
             corrected_chunk = apply_brdf_correct(
                 cube,
                 corrected_chunk,
@@ -233,6 +246,7 @@ def apply_brdf_topo_core(
                 xs,
                 xe,
                 coeff_path=coeff_path,
+                mask=mask_tile,
             )
             corrected_chunk = corrected_chunk.astype(np.float32, copy=False)
             if brightness_offset_np is not None:
@@ -242,7 +256,11 @@ def apply_brdf_topo_core(
                         brightness_offset,
                     )
                     brightness_offset_logged = True
-                corrected_chunk = corrected_chunk + brightness_offset_np
+                corrected_chunk = np.where(
+                    mask_tile[..., np.newaxis],
+                    corrected_chunk + brightness_offset_np,
+                    corrected_chunk,
+                )
             writer.write_chunk(corrected_chunk, ys, xs)
             reporter.update(1)
     finally:
