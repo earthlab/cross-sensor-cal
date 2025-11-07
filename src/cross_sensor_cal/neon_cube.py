@@ -20,6 +20,8 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, Iterator, Optional, Tuple
 
+from .io.neon import _map_info_core, _prepare_map_info, read_neon_cube
+
 
 _RADIANS_COMPATIBLE_KEYS = {
     "slope",
@@ -64,136 +66,77 @@ class NeonCube:
 
         self._metadata_index: Dict[str, list[_MetadataEntry]] = {}
 
-        with h5py.File(self.h5_path, "r") as h5_file:
-            self.base_key = _find_base_key(h5_file)
-            base_group = h5_file[self.base_key]
+        cube_data, wavelengths, meta = read_neon_cube(self.h5_path)
 
-            reflectance_group = base_group["Reflectance"]
-            metadata_group = reflectance_group["Metadata"]
+        self.data = np.asarray(cube_data, dtype=np.float32)
+        if self.data.ndim != 3:
+            raise RuntimeError(
+                "Reflectance data does not have (lines, columns, bands) dimensions."
+            )
 
-            # Gather spectral metadata (wavelengths, fwhm, units).
-            spectral_group = metadata_group.get("Spectral_Data")
-            if spectral_group is None:
-                raise RuntimeError(
-                    "Missing 'Spectral_Data' group within NEON reflectance metadata."
-                )
+        self.lines, self.columns, self.bands = self.data.shape
 
-            wavelength_dataset = spectral_group.get("Wavelength")
-            if wavelength_dataset is None:
-                raise RuntimeError("NEON file missing spectral 'Wavelength' dataset.")
+        self.wavelengths = np.asarray(wavelengths, dtype=np.float32).reshape(-1)
+        if self.wavelengths.size != self.bands:
+            raise RuntimeError(
+                "Spectral wavelength metadata length does not match hyperspectral band count."
+            )
 
-            self.wavelengths = np.asarray(wavelength_dataset[()], dtype=np.float32)
+        fwhm = meta.get("fwhm")
+        self.fwhm = np.asarray(fwhm, dtype=np.float32).reshape(-1) if fwhm is not None else None
+        if self.fwhm is not None and self.fwhm.shape != self.wavelengths.shape:
+            raise RuntimeError(
+                "Spectral wavelength and FWHM arrays do not share the same length."
+            )
 
-            units: Optional[str] = None
-            for attr_name in ("Units", "Unit", "units"):
-                if attr_name in wavelength_dataset.attrs:
-                    attr_value = wavelength_dataset.attrs[attr_name]
-                    if isinstance(attr_value, bytes):
-                        attr_value = attr_value.decode("utf-8")
-                    units = str(attr_value)
-                    break
+        self.wavelength_units = str(meta.get("wavelength_units", "Unknown"))
+        self.map_info_list = list(meta.get("map_info", []))
+        self.projection_wkt = str(meta.get("projection", ""))
 
-            if units is None:
-                units_dataset = spectral_group.get("Wavelength_Units")
-                if units_dataset is not None:
-                    units_value = units_dataset[()]
-                    if isinstance(units_value, bytes):
-                        units_value = units_value.decode("utf-8")
-                    units = str(units_value)
-
-            self.wavelength_units = units or "Unknown"
-
-            fwhm_dataset = spectral_group.get("FWHM")
-            if fwhm_dataset is None:
-                raise RuntimeError("NEON file missing spectral 'FWHM' dataset.")
-
-            self.fwhm = np.asarray(fwhm_dataset[()], dtype=np.float32)
-
-            if self.wavelengths.shape != self.fwhm.shape:
-                raise RuntimeError(
-                    "Spectral wavelength and FWHM arrays do not share the same length."
-                )
-
-            # Gather geospatial metadata (map info, projection, etc.).
-            coordinate_group = metadata_group.get("Coordinate_System")
-            if coordinate_group is None:
-                raise RuntimeError(
-                    "NEON file missing 'Coordinate_System' metadata group."
-                )
-
-            map_info_value = coordinate_group.get("Map_Info")
-            if map_info_value is None:
-                raise RuntimeError("NEON file missing 'Map_Info' dataset.")
-
-            self.map_info_list = _prepare_map_info(map_info_value[()])
-
-            projection_dataset = coordinate_group.get("Coordinate_System_String")
-            if projection_dataset is None:
-                raise RuntimeError(
-                    "NEON file missing 'Coordinate_System_String' dataset."
-                )
-            projection_value = projection_dataset[()]
-            if isinstance(projection_value, bytes):
-                projection_value = projection_value.decode("utf-8")
-            self.projection_wkt = str(projection_value)
-
-            # Extract coordinate transforms from map info entries.
+        transform = meta.get("transform")
+        if transform is None and self.map_info_list:
             ref_x, ref_y, ref_easting, ref_northing, pixel_x, pixel_y = _map_info_core(
                 self.map_info_list
             )
             ulx = ref_easting - pixel_x * (ref_x - 0.5)
             uly = ref_northing + abs(pixel_y) * (ref_y - 0.5)
             yres = -abs(pixel_y)
+            transform = (ulx, pixel_x, 0.0, uly, 0.0, yres)
+            meta.setdefault("ulx", ulx)
+            meta.setdefault("uly", uly)
 
-            self.ulx = ulx
-            self.uly = uly
-            self.transform = (ulx, pixel_x, 0.0, uly, 0.0, yres)
+        if transform is None:
+            raise RuntimeError("Cannot determine geospatial transform for NEON cube.")
 
-            # Load the reflectance data cube into memory.
-            reflectance_data = reflectance_group["Reflectance_Data"]
-            raw_data = reflectance_data[()]
-            self.data = np.asarray(raw_data, dtype=np.float32)
+        self.transform = tuple(float(value) for value in transform)
+        self.ulx = float(meta.get("ulx", self.transform[0]))
+        self.uly = float(meta.get("uly", self.transform[3]))
 
-            if self.data.ndim != 3:
-                raise RuntimeError(
-                    "Reflectance data does not have (lines, columns, bands) dimensions."
-                )
+        no_data_value = meta.get("no_data")
+        if no_data_value is None:
+            raise RuntimeError("Reflectance dataset missing a recognised no-data attribute.")
+        self.no_data = float(no_data_value)
 
-            self.lines, self.columns, self.bands = self.data.shape
+        band0 = self.data[:, :, 0]
+        self.mask_no_data = band0 != self.no_data
 
-            # Determine the no-data value from dataset attributes.
-            no_data_value = None
-            for attr_name in ("Data_Ignore_Value", "_FillValue", "NoData", "no_data"):
-                if attr_name in reflectance_data.attrs:
-                    attr_value = reflectance_data.attrs[attr_name]
-                    if isinstance(attr_value, (np.ndarray, list)):
-                        attr_value = attr_value[0]
-                    no_data_value = float(attr_value)
-                    break
+        mem_gb = self.data.nbytes / (1024 ** 3)
+        print(
+            "NeonCube: loaded "
+            f"{self.lines}x{self.columns}x{self.bands} ~{mem_gb:.2f} GB into memory (float32)"
+        )
 
-            if no_data_value is None:
-                raise RuntimeError(
-                    "Reflectance dataset missing a recognised no-data attribute."
-                )
+        self.base_key = meta.get("base_key")
 
-            self.no_data = no_data_value
-
-            band0 = self.data[:, :, 0]
-            self.mask_no_data = band0 != self.no_data
-
-            mem_gb = self.data.nbytes / (1024 ** 3)
-            print(
-                "NeonCube: loaded "
-                f"{self.lines}x{self.columns}x{self.bands} ~{mem_gb:.2f} GB into memory (float32)"
-            )
-
-            # Create metadata index for ancillary lookup.
-            self._index_metadata(metadata_group)
-
-        if self.wavelengths.shape[-1] != self.bands:
-            raise RuntimeError(
-                "Spectral metadata length does not match data cube band dimension."
-            )
+        metadata_roots = [path for path in meta.get("metadata_group_paths", []) if path]
+        with h5py.File(self.h5_path, "r") as h5_file:
+            if metadata_roots:
+                for group_path in metadata_roots:
+                    group = h5_file.get(group_path)
+                    if isinstance(group, h5py.Group):
+                        self._index_metadata(group)
+            else:
+                self._index_metadata(h5_file)
 
     def _index_metadata(self, metadata_group: h5py.Group) -> None:
         """Recursively index metadata datasets for ancillary lookup."""
@@ -383,64 +326,6 @@ class NeonCube:
             "ulx": float(self.ulx),
             "uly": float(self.uly),
         }
-
-
-def _prepare_map_info(map_info: np.ndarray | bytes | str) -> list[str]:
-    """Parse the NEON map info dataset into an ENVI-style list of strings."""
-
-    def _normalise(component: str | bytes) -> str:
-        if isinstance(component, (bytes, np.bytes_)):
-            return component.decode("utf-8").strip()
-        return str(component).strip()
-
-    if isinstance(map_info, np.ndarray):
-        if map_info.ndim == 0:
-            return _prepare_map_info(map_info.item())
-        if map_info.dtype.kind in {"S", "U", "O"}:
-            return [_normalise(value) for value in map_info.tolist()]
-
-    if isinstance(map_info, (bytes, np.bytes_)):
-        map_info_str = map_info.decode("utf-8")
-    else:
-        map_info_str = str(map_info)
-
-    map_info_str = map_info_str.strip()
-    if map_info_str.startswith("{") and map_info_str.endswith("}"):
-        map_info_str = map_info_str[1:-1]
-
-    return [component.strip() for component in map_info_str.split(",")]
-
-
-def _map_info_core(map_info_list: list[str]) -> Tuple[float, float, float, float, float, float]:
-    """Extract numeric components from the map info list for transforms."""
-
-    if len(map_info_list) < 7:
-        raise RuntimeError("Map info dataset is shorter than expected for ENVI metadata.")
-
-    def _to_float(value: str) -> float:
-        try:
-            return float(value)
-        except ValueError as exc:
-            raise RuntimeError(f"Cannot interpret map info value '{value}' as float.") from exc
-
-    ref_x = _to_float(map_info_list[1])
-    ref_y = _to_float(map_info_list[2])
-    ref_easting = _to_float(map_info_list[3])
-    ref_northing = _to_float(map_info_list[4])
-    pixel_x = _to_float(map_info_list[5])
-    pixel_y = _to_float(map_info_list[6])
-
-    return ref_x, ref_y, ref_easting, ref_northing, pixel_x, pixel_y
-
-
-def _find_base_key(h5file: h5py.File) -> str:
-    """Locate the NEON flightline group containing reflectance data."""
-
-    for key in h5file.keys():
-        candidate = f"{key}/Reflectance/Reflectance_Data"
-        if candidate in h5file:
-            return key
-    raise RuntimeError("Could not locate NEON reflectance dataset within the HDF5 file.")
 
 
 def _read_envi_single_band(img_path: Path) -> np.ndarray:

@@ -276,7 +276,7 @@ def test_export_parquet_stage_creates_sidecars_for_all_envi(tmp_path: Path, monk
 
     calls: list[str] = []
 
-    def fake_ensure(img_path: Path, logger) -> None:
+    def fake_ensure(img_path: Path, logger, **_kwargs) -> None:
         parquet_path = img_path.with_suffix(".parquet")
         parquet_path.write_bytes(b"pq")
         calls.append(img_path.name)
@@ -290,6 +290,7 @@ def test_export_parquet_stage_creates_sidecars_for_all_envi(tmp_path: Path, monk
         base_folder=tmp_path,
         product_code="DP1.30006.001",
         flight_stem=flight_stem,
+        parquet_chunk_size=2048,
         logger=logger,
     )
 
@@ -370,6 +371,33 @@ def test_ensure_parquet_for_envi_regenerates_invalid(tmp_path: Path, monkeypatch
     assert result_path == parquet_path
     assert calls["count"] == 1
     assert any("invalid" in msg for msg in logger.warnings)
+
+
+def test_ensure_parquet_from_envi_handles_corrupt(tmp_path: Path, monkeypatch) -> None:
+    img = tmp_path / "corrupt_envi.img"
+    hdr = tmp_path / "corrupt_envi.hdr"
+    parquet_path = tmp_path / "corrupt_envi.parquet"
+
+    img.write_bytes(b"xx")
+    hdr.write_bytes(b"hdr")
+    parquet_path.write_bytes(b"corrupt")
+
+    import cross_sensor_cal.parquet_export as px
+
+    build_calls = {"count": 0}
+
+    def fake_build(envi_img: Path, envi_hdr: Path, out_path: Path, chunk_size: int = 2048) -> None:
+        build_calls["count"] += 1
+        _write_minimal_parquet(out_path)
+
+    monkeypatch.setattr(px, "build_parquet_from_envi", fake_build)
+
+    result_path = px.ensure_parquet_from_envi(img, hdr, parquet_path)
+    assert result_path == parquet_path
+    assert build_calls["count"] == 1
+    import pyarrow.parquet as pq
+
+    pq.read_schema(parquet_path)
 def _write_minimal_parquet(path: Path) -> None:
     table = pa.table(
         {

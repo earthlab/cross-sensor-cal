@@ -74,7 +74,7 @@ from cross_sensor_cal.brdf_topo import (
     build_correction_parameters_dict,
 )
 from cross_sensor_cal.brightness_config import load_brightness_coefficients
-from cross_sensor_cal.paths import normalize_brdf_model_path
+from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
 from cross_sensor_cal.qa_plots import render_flightline_panel
 from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.sensor_panel_plots import (
@@ -92,7 +92,7 @@ from ..neon_to_envi import neon_to_envi_no_hytools
 from ..polygon_extraction import control_function_for_extraction
 from ..progress_utils import TileProgressReporter
 from ..standard_resample import translate_to_other_sensors
-from ..utils.naming import get_flight_paths, get_flightline_products
+from ..utils.naming import get_flightline_products
 from ..file_types import (
     NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceENVIFile,
@@ -381,6 +381,7 @@ def _export_parquet_stage(
     base_folder: Path,
     product_code: str,
     flight_stem: str,
+    parquet_chunk_size: int,
     logger,
 ) -> list[Path]:
     """
@@ -422,7 +423,11 @@ def _export_parquet_stage(
             continue
 
         # ensure the raw ENVI (and any other reflectance cubes) receive Parquet outputs
-        parquet_path = ensure_parquet_for_envi(img_path, logger)
+        parquet_path = ensure_parquet_for_envi(
+            img_path,
+            logger,
+            chunk_size=parquet_chunk_size,
+        )
         if parquet_path is not None:
             parquet_outputs.append(Path(parquet_path))
 
@@ -1151,9 +1156,9 @@ def stage_download_h5(
 ) -> Path:
     """Ensure ``<base_folder>/<flight_stem>.h5`` exists and is non-empty."""
 
-    flight_paths = get_flight_paths(base_folder, flight_stem)
-    base_path = Path(flight_paths["base"])
-    h5_path = Path(flight_paths["h5_path"])
+    flight_paths = FlightlinePaths(base_folder=Path(base_folder), flight_id=flight_stem)
+    base_path = flight_paths.base_folder
+    h5_path = flight_paths.h5
 
     base_path.mkdir(parents=True, exist_ok=True)
 
@@ -1239,13 +1244,13 @@ def stage_export_envi_from_h5(
        correct get_flightline_products(), so on the next run we really will skip.
     """
 
-    flight_paths = get_flight_paths(base_folder, flight_stem)
-    base_folder = Path(flight_paths["base"])
+    flight_paths = FlightlinePaths(base_folder=Path(base_folder), flight_id=flight_stem)
+    base_folder = flight_paths.base_folder
 
-    work_dir = Path(flight_paths["work_dir"])
-    h5_path = Path(flight_paths["h5_path"])
-    raw_img_path = work_dir / f"{flight_stem}_envi.img"
-    raw_hdr_path = work_dir / f"{flight_stem}_envi.hdr"
+    work_dir = flight_paths.flight_dir
+    h5_path = flight_paths.h5
+    raw_img_path = flight_paths.envi_img
+    raw_hdr_path = flight_paths.envi_hdr
 
     assert raw_img_path.suffix == ".img"
     assert raw_hdr_path.suffix == ".hdr"
@@ -1260,7 +1265,7 @@ def stage_export_envi_from_h5(
         f"📍 Preparing ENVI export at: {raw_img_path.name} / {raw_hdr_path.name}"
     )
 
-    corrected_img = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
+    corrected_img = flight_paths.corrected_img
     if corrected_img.exists() and not raw_img_path.exists():
         if recover_missing_raw:
             logger.warning(
@@ -1642,10 +1647,13 @@ def stage_convolve_all_sensors(
             )
             failed.append(sensor_name)
 
+    _parquet_chunk_size = locals().get("parquet_chunk_size", 2048)
+
     parquet_outputs = _export_parquet_stage(
         base_folder=base_folder,
         product_code=product_code,
         flight_stem=flight_stem,
+        parquet_chunk_size=_parquet_chunk_size,
         logger=logger,
     )
     logger.info("✅ Parquet stage complete for %s", flight_stem)
@@ -1709,6 +1717,7 @@ def process_one_flightline(
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
     parallel_mode: bool = False,
+    parquet_chunk_size: int = 2048,
 ):
     """Run the structured, skip-aware workflow for a single flightline.
 
@@ -1732,8 +1741,8 @@ def process_one_flightline(
 
     logger.info(f"✅ Starting processing for {flight_stem}")
 
-    flight_paths = get_flight_paths(base_folder, flight_stem)
-    Path(flight_paths["work_dir"]).mkdir(parents=True, exist_ok=True)
+    flight_paths = FlightlinePaths(base_folder=Path(base_folder), flight_id=flight_stem)
+    flight_paths.flight_dir.mkdir(parents=True, exist_ok=True)
 
     raw_img_path, raw_hdr_path = stage_export_envi_from_h5(
         base_folder=base_folder,
@@ -1743,7 +1752,7 @@ def process_one_flightline(
         parallel_mode=parallel_mode,
     )
 
-    flightline_dir = Path(flight_paths["work_dir"]).resolve()
+    flightline_dir = flight_paths.flight_dir.resolve()
     normalized = normalize_brdf_model_path(flightline_dir)
     if normalized:
         logger.info("🔧 Normalized BRDF model name → %s", normalized.name)
@@ -1864,6 +1873,7 @@ def go_forth_and_multiply(
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
     max_workers: int = 2,
+    parquet_chunk_size: int = 2048,
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
 
@@ -1889,13 +1899,13 @@ def go_forth_and_multiply(
     if flight_lines:
         for stem in flight_lines:
             try:
-                paths = get_flight_paths(base_path, stem)
+                paths = FlightlinePaths(base_folder=base_path, flight_id=stem)
             except Exception:  # pragma: no cover - defensive fallback
                 first_run_detected = True
                 break
-            work_dir = Path(paths["work_dir"])
-            raw_img = work_dir / f"{stem}_envi.img"
-            raw_hdr = work_dir / f"{stem}_envi.hdr"
+            work_dir = paths.flight_dir
+            raw_img = paths.envi_img
+            raw_hdr = paths.envi_hdr
             if not (raw_img.exists() and raw_hdr.exists()):
                 first_run_detected = True
                 break
@@ -1928,6 +1938,7 @@ def go_forth_and_multiply(
                 resample_method=method_norm,
                 brightness_offset=brightness_offset,
                 parallel_mode=parallel_mode,
+                parquet_chunk_size=parquet_chunk_size,
             )
         return flight_stem
 

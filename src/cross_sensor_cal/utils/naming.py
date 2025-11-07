@@ -5,18 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from ..paths import FlightlinePaths
+
 
 def get_flight_paths(base_folder: Path, flight_stem: str) -> Dict[str, Path]:
     """Return canonical high-level paths for a flight line."""
 
-    base_folder = Path(base_folder)
-    work_dir = base_folder / flight_stem
-    h5_path = base_folder / f"{flight_stem}.h5"
+    flight_paths = FlightlinePaths(base_folder=Path(base_folder), flight_id=flight_stem)
 
     return {
-        "base": base_folder,
-        "work_dir": work_dir,
-        "h5_path": h5_path,
+        "base": flight_paths.base_folder,
+        "work_dir": flight_paths.flight_dir,
+        "h5_path": flight_paths.h5,
     }
 
 
@@ -63,15 +63,14 @@ def get_flightline_products(
 ) -> Dict[str, Any]:
     """Return canonical paths for artefacts tied to ``flight_stem``."""
 
-    flight_paths = get_flight_paths(base_folder, flight_stem)
-    base_folder = Path(flight_paths["base"])
-    work_dir = Path(flight_paths["work_dir"])
-    h5_path = Path(flight_paths["h5_path"])
+    flightline = FlightlinePaths(base_folder=Path(base_folder), flight_id=flight_stem)
+    work_dir = flightline.flight_dir
+    h5_path = flightline.h5
 
     _ = product_code  # retained for API compatibility
 
-    raw_img_guess = work_dir / f"{flight_stem}_envi.img"
-    raw_hdr_guess = work_dir / f"{flight_stem}_envi.hdr"
+    raw_img_guess = flightline.envi_img
+    raw_hdr_guess = flightline.envi_hdr
 
     def _good(path: Path) -> bool:
         return path.exists() and path.is_file() and path.stat().st_size > 0
@@ -83,21 +82,24 @@ def get_flightline_products(
         discovered_img, discovered_hdr = _pick_uncorrected_envi_pair(
             primary_dir=work_dir,
             flight_stem=flight_stem,
-            legacy_dir=base_folder,
+            legacy_dir=flightline.base_folder,
         )
         raw_envi_img = discovered_img if discovered_img is not None else raw_img_guess
         raw_envi_hdr = discovered_hdr if discovered_hdr is not None else raw_hdr_guess
 
-    corrected_img = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.img"
-    corrected_hdr = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.hdr"
-    correction_json = work_dir / f"{flight_stem}_brdfandtopo_corrected_envi.json"
+    corrected_img = flightline.corrected_img
+    corrected_hdr = flightline.corrected_hdr
+    correction_json = flightline.corrected_json
 
     def _sensor_pair(sensor_name: str) -> Dict[str, Path]:
-        stem = f"{flight_stem}_{sensor_name}_envi"
+        product_paths = flightline.sensor_product(sensor_name)
         return {
-            "img": work_dir / f"{stem}.img",
-            "hdr": work_dir / f"{stem}.hdr",
-            "parquet": work_dir / f"{stem}.parquet",
+            "img": product_paths.img,
+            "hdr": product_paths.hdr,
+            "parquet": product_paths.parquet,
+            "qa_png": product_paths.qa_png,
+            "qa_pdf": product_paths.qa_pdf,
+            "qa_json": product_paths.qa_json,
         }
 
     sensor_products: Dict[str, Dict[str, Path]] = {
@@ -111,17 +113,17 @@ def get_flightline_products(
     }
 
     return {
-        "base": base_folder,
+        "base": flightline.base_folder,
         "work_dir": work_dir,
         "h5_path": h5_path,
         "h5": h5_path,
         "raw_envi_img": raw_envi_img,
         "raw_envi_hdr": raw_envi_hdr,
-        "raw_envi_parquet": raw_envi_img.with_suffix(".parquet"),
+        "raw_envi_parquet": flightline.envi_parquet,
         "correction_json": correction_json,
         "corrected_img": corrected_img,
         "corrected_hdr": corrected_hdr,
-        "corrected_parquet": corrected_img.with_suffix(".parquet"),
+        "corrected_parquet": flightline.corrected_parquet,
         "sensor_products": sensor_products,
     }
 
