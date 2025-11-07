@@ -186,3 +186,15 @@ def test_read_neon_cube_old_layout(tmp_path):
     assert meta["wavelength_units"].lower() == "nanometers"
     assert meta["metadata_group_paths"]
 
+
+def test_read_neon_cube_pre_2021_new_layout(tmp_path):
+    fake_h5_path = tmp_path / "NEON_D13_SITE_DP1_L001-1_20200720_directional_reflectance.h5"
+    _create_fake_neon_file(fake_h5_path)
+
+    cube, wavelengths, meta = read_neon_cube(fake_h5_path)
+
+    assert cube.shape == (20, 20, 5)
+    assert wavelengths.shape == (5,)
+    assert meta["bands"] == 5
+    assert meta["metadata_group_paths"]
+

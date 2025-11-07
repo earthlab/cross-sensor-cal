@@ -302,19 +302,24 @@ def read_neon_cube(h5_path: Path) -> tuple[np.ndarray, np.ndarray, Dict[str, Any
         raise FileNotFoundError(path)
 
     layout_error: Exception | None = None
+    readers = (
+        (_read_old_neon_layout, _read_new_neon_layout)
+        if is_pre_2021(path)
+        else (_read_new_neon_layout, _read_old_neon_layout)
+    )
+
     with h5py.File(path, "r") as h5_file:
-        try:
-            if not is_pre_2021(path):
-                return _read_new_neon_layout(h5_file)
-        except Exception as exc:
-            layout_error = exc
-        try:
-            return _read_old_neon_layout(h5_file)
-        except Exception as exc:
-            if layout_error is None:
-                layout_error = exc
-            raise RuntimeError(
-                f"Unable to interpret NEON HDF5 layout for {path}: {layout_error}"  # type: ignore[str-format]
-            ) from exc
+        for reader in readers:
+            try:
+                return reader(h5_file)
+            except Exception as exc:  # pragma: no cover - defensive cascade
+                if layout_error is None:
+                    layout_error = exc
+                continue
+
+    if layout_error is not None:
+        raise RuntimeError(
+            f"Unable to interpret NEON HDF5 layout for {path}: {layout_error}"
+        ) from layout_error
 
     raise RuntimeError(f"Unable to interpret NEON HDF5 layout for {path}.")
