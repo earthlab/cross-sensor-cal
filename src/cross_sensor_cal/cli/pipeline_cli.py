@@ -58,6 +58,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional brightness offset applied during ENVI export.",
     )
+    parser.add_argument(
+        "--parquet-chunk-size",
+        type=int,
+        default=2048,
+        help="Row chunk size (in pixels) used during Parquet export to bound memory usage.",
+    )
     return parser
 
 
@@ -74,6 +80,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         resample_method=args.resample_method,
         brightness_offset=args.brightness_offset,
         max_workers=args.max_workers,
+        parquet_chunk_size=args.parquet_chunk_size,
     )
 
     target = args.base_folder.resolve()

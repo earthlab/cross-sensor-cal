@@ -15,7 +15,9 @@ import re
 __all__ = [
     "parquet_exists_and_valid",
     "build_parquet_from_envi",
+    "ensure_parquet_from_envi",
     "ensure_parquet_for_envi",
+    "read_envi_in_chunks",
     "pq_read_table",
     "pq_write_table",
     "repair_lonlat_in_place",
@@ -108,62 +110,19 @@ def _add_lonlat_columns(df, img_path: Path, *, transform=None, crs=None):
     return df
 
 
-def parquet_exists_and_valid(parquet_path: Path) -> bool:
-    """Return ``True`` when ``parquet_path`` exists and has a readable schema."""
-
-    path = Path(parquet_path)
-    try:
-        if not (path.is_file() and path.stat().st_size > 0):
-            return False
-        import pyarrow.parquet as pq
-
-        pq.read_schema(path)
-        return True
-    except Exception:
-        return False
-
-
-def _crs_from_header_text(header_text: str) -> int | str | None:
-    match = re.search(
-        r"coordinate system string\s*=\s*(.+)",
-        header_text,
-        re.IGNORECASE,
-    )
-    if match:
-        return match.group(1).strip()
-
-    match = re.search(r"map info\s*=\s*\{([^}]*)\}", header_text, re.IGNORECASE)
-    if not match:
-        return None
-
-    parts = [part.strip() for part in match.group(1).split(",")]
-    try:
-        utm_zone = int(parts[7])
-        hemisphere = parts[8].lower()
-    except (IndexError, ValueError):
-        return None
-
-    if "north" in hemisphere:
-        return 32600 + utm_zone
-    if "south" in hemisphere:
-        return 32700 + utm_zone
-    return None
-
-
-def build_parquet_from_envi(
+def read_envi_in_chunks(
     envi_img: Path,
     envi_hdr: Path,
-    parquet_path: Path,
+    parquet_name: str,
+    *,
     chunk_size: int = 2048,
-) -> None:
-    """Read an ENVI cube and emit a wide per-pixel Parquet table."""
+):
+    """Yield DataFrame chunks from an ENVI cube along with shared metadata."""
 
     import numpy as np
     import pandas as pd
     import rasterio
     from rasterio.windows import Window
-    import pyarrow as pa
-    import pyarrow.parquet as pq
 
     from cross_sensor_cal.exports.schema_utils import (
         SENSOR_WAVELENGTHS_NM,
@@ -175,32 +134,31 @@ def build_parquet_from_envi(
 
     envi_img = Path(envi_img)
     envi_hdr = Path(envi_hdr)
-    parquet_path = Path(parquet_path)
-    parquet_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = parquet_path.with_suffix(parquet_path.suffix + ".tmp")
-    with suppress(FileNotFoundError):
-        tmp_path.unlink()
 
-    stage_key = infer_stage_from_name(parquet_path.name)
-
-    header_text: str | None = None
-    wavelengths_nm: list[int] | None = None
     try:
         header_text = envi_hdr.read_text(encoding="utf-8", errors="ignore")
-        wavelengths_nm = parse_envi_wavelengths_nm(header_text)
     except OSError:
         header_text = None
 
-    if wavelengths_nm is None:
-        for sensor_key, centers in SENSOR_WAVELENGTHS_NM.items():
-            if sensor_key in parquet_path.name.lower():
-                wavelengths_nm = centers
-                break
+    wavelengths_nm = None
+    if header_text:
+        wavelengths_nm = parse_envi_wavelengths_nm(header_text)
 
-    band_wavelengths: list[int] = []
-    wrote_rows = False
-    writer: pq.ParquetWriter | None = None
-    try:
+    parquet_name_lower = parquet_name.lower()
+    stage_key = infer_stage_from_name(parquet_name)
+
+    context: dict[str, object] = {
+        "band_wavelengths": [],
+        "crs_candidate": None,
+        "transform": None,
+        "src_crs": None,
+        "width": None,
+        "header_text": header_text,
+        "wavelengths_nm": wavelengths_nm,
+        "stage_key": stage_key,
+    }
+
+    def _iterator():
         with rasterio.open(envi_img) as src:
             band_count = src.count
             height = src.height
@@ -208,7 +166,7 @@ def build_parquet_from_envi(
             transform = src.transform
             src_crs = src.crs
 
-            crs_candidate: int | str | None = None
+            crs_candidate = None
             if src.crs is not None:
                 try:
                     crs_candidate = src.crs.to_epsg()
@@ -238,7 +196,7 @@ def build_parquet_from_envi(
             block_x = max(1, min(chunk_size, block_x))
 
             if wavelengths_nm:
-                band_wavelengths = []
+                band_wavelengths: list[int] = []
                 for idx in range(band_count):
                     if idx < len(wavelengths_nm):
                         band_wavelengths.append(int(round(wavelengths_nm[idx])))
@@ -247,7 +205,21 @@ def build_parquet_from_envi(
                     else:
                         band_wavelengths.append(idx + 1)
             else:
-                band_wavelengths = [idx + 1 for idx in range(band_count)]
+                matched_centers = None
+                for sensor_key, centers in SENSOR_WAVELENGTHS_NM.items():
+                    if sensor_key in parquet_name_lower:
+                        matched_centers = centers
+                        break
+                if matched_centers is not None:
+                    band_wavelengths = [int(round(value)) for value in matched_centers]
+                else:
+                    band_wavelengths = [idx + 1 for idx in range(band_count)]
+
+            context["band_wavelengths"] = band_wavelengths
+            context["crs_candidate"] = crs_candidate
+            context["transform"] = transform
+            context["src_crs"] = src_crs
+            context["width"] = width
 
             nodata = src.nodata
 
@@ -305,7 +277,7 @@ def build_parquet_from_envi(
                     df_chunk = ensure_coord_columns(
                         df_chunk,
                         transform=transform,
-                        crs_epsg=crs_candidate,
+                        crs_epsg=crs_candidate if isinstance(crs_candidate, int) else None,
                     )
 
                     df_chunk = _add_lonlat_columns(
@@ -315,59 +287,165 @@ def build_parquet_from_envi(
                         crs=src_crs,
                     )
 
-                    if "lon" not in df_chunk or "lat" not in df_chunk:
-                        raise ValueError(f"Unable to compute lon/lat for {parquet_path}")
-
                     df_chunk = sort_and_rename_spectral_columns(
                         df_chunk,
                         stage_key=stage_key,
                         wavelengths_nm=band_wavelengths,
                     )
 
-                    wrote_rows = True
-                    table = pa.Table.from_pandas(df_chunk, preserve_index=False)
-                    if writer is None:
-                        writer = pq.ParquetWriter(tmp_path, table.schema)
-                    writer.write_table(table)
-    except Exception:
-        with suppress(Exception):
-            if writer is not None:
-                writer.close()
-        with suppress(FileNotFoundError):
-            tmp_path.unlink()
-        raise
-    else:
+                    yield df_chunk
+
+    iterator = _iterator()
+    setattr(iterator, "context", context)
+    return iterator
+
+
+def _build_empty_parquet_table(stage_key: str, band_wavelengths: list[int]):
+    import pyarrow as pa
+
+    meta_fields = [
+        ("pixel_id", pa.int64()),
+        ("row", pa.int32()),
+        ("col", pa.int32()),
+        ("x", pa.float64()),
+        ("y", pa.float64()),
+        ("lon", pa.float64()),
+        ("lat", pa.float64()),
+        ("source_image", pa.string()),
+        ("epsg", pa.int32()),
+        ("crs", pa.string()),
+    ]
+    spectral_fields = [
+        (
+            f"{stage_key}_b{idx + 1:03d}_wl{band_wavelengths[idx]:04d}nm",
+            pa.float32(),
+        )
+        for idx in range(len(band_wavelengths))
+    ]
+    schema = pa.schema(meta_fields + spectral_fields)
+    return pa.Table.from_arrays(
+        [pa.array([], type=field.type) for field in schema],
+        names=[field.name for field in schema],
+    )
+
+
+def _write_parquet_chunks(parquet_path: Path, chunk_iter, stage_key: str) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    parquet_path = Path(parquet_path)
+    parquet_path.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp_path = parquet_path.with_suffix(parquet_path.suffix + ".tmp")
+    with suppress(FileNotFoundError):
+        tmp_path.unlink()
+
+    writer = None
+    wrote_rows = False
+    try:
+        for df_chunk in chunk_iter:
+            table = pa.Table.from_pandas(df_chunk, preserve_index=False)
+            if writer is None:
+                writer = pq.ParquetWriter(tmp_path, table.schema)
+            writer.write_table(table)
+            wrote_rows = True
+    finally:
         if writer is not None:
             writer.close()
 
-    if not tmp_path.exists() or not wrote_rows:
-        meta_fields = [
-            ("pixel_id", pa.int64()),
-            ("row", pa.int32()),
-            ("col", pa.int32()),
-            ("x", pa.float64()),
-            ("y", pa.float64()),
-            ("lon", pa.float64()),
-            ("lat", pa.float64()),
-            ("source_image", pa.string()),
-            ("epsg", pa.int32()),
-            ("crs", pa.string()),
-        ]
-        spectral_fields = [
-            (
-                f"{stage_key}_b{idx + 1:03d}_wl{band_wavelengths[idx]:04d}nm",
-                pa.float32(),
-            )
-            for idx in range(len(band_wavelengths))
-        ]
-        schema = pa.schema(meta_fields + spectral_fields)
-        empty_table = pa.Table.from_arrays(
-            [pa.array([], type=field.type) for field in schema],
-            names=[field.name for field in schema],
-        )
+    if not wrote_rows:
+        context = getattr(chunk_iter, "context", {})
+        band_wavelengths = list(context.get("band_wavelengths") or [])
+        empty_table = _build_empty_parquet_table(stage_key, band_wavelengths)
         pq.write_table(empty_table, tmp_path)
 
     tmp_path.replace(parquet_path)
+
+
+def parquet_exists_and_valid(parquet_path: Path) -> bool:
+    """Return ``True`` when ``parquet_path`` exists and has a readable schema."""
+
+    path = Path(parquet_path)
+    try:
+        if not (path.is_file() and path.stat().st_size > 0):
+            return False
+        import pyarrow.parquet as pq
+
+        pq.read_schema(path)
+        return True
+    except Exception:
+        return False
+
+
+def _crs_from_header_text(header_text: str) -> int | str | None:
+    match = re.search(
+        r"coordinate system string\s*=\s*(.+)",
+        header_text,
+        re.IGNORECASE,
+    )
+    if match:
+        return match.group(1).strip()
+
+    match = re.search(r"map info\s*=\s*\{([^}]*)\}", header_text, re.IGNORECASE)
+    if not match:
+        return None
+
+    parts = [part.strip() for part in match.group(1).split(",")]
+    try:
+        utm_zone = int(parts[7])
+        hemisphere = parts[8].lower()
+    except (IndexError, ValueError):
+        return None
+
+    if "north" in hemisphere:
+        return 32600 + utm_zone
+    if "south" in hemisphere:
+        return 32700 + utm_zone
+    return None
+
+
+def build_parquet_from_envi(
+    envi_img: Path,
+    envi_hdr: Path,
+    parquet_path: Path,
+    chunk_size: int = 2048,
+) -> None:
+    """Read an ENVI cube and emit a wide per-pixel Parquet table."""
+
+    from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
+
+    parquet_path = Path(parquet_path)
+    parquet_name = parquet_path.name
+    stage_key = infer_stage_from_name(parquet_name)
+    chunk_iter = read_envi_in_chunks(
+        Path(envi_img),
+        Path(envi_hdr),
+        parquet_name,
+        chunk_size=chunk_size,
+    )
+    _write_parquet_chunks(parquet_path, chunk_iter, stage_key)
+
+
+def ensure_parquet_from_envi(
+    envi_img: Path,
+    envi_hdr: Path,
+    parquet_path: Path,
+    *,
+    chunk_size: int = 2048,
+) -> Path:
+    import pyarrow.parquet as pq
+
+    parquet_path = Path(parquet_path)
+    if parquet_path.exists():
+        try:
+            pq.read_schema(parquet_path)
+            return parquet_path
+        except Exception:
+            with suppress(FileNotFoundError):
+                parquet_path.unlink()
+
+    build_parquet_from_envi(envi_img, envi_hdr, parquet_path, chunk_size=chunk_size)
+    return parquet_path
 
 
 def repair_lonlat_in_place(folder: Path):
@@ -395,7 +473,12 @@ def repair_lonlat_in_place(folder: Path):
         pq_write_table(df, pq_path)
 
 
-def ensure_parquet_for_envi(envi_img: Path, logger) -> Path | None:
+def ensure_parquet_for_envi(
+    envi_img: Path,
+    logger,
+    *,
+    chunk_size: int = 2048,
+) -> Path | None:
     """Ensure a ``.parquet`` sidecar exists for ``envi_img``."""
 
     envi_img = Path(envi_img)
@@ -452,7 +535,12 @@ def ensure_parquet_for_envi(envi_img: Path, logger) -> Path | None:
         return None
 
     try:
-        build_parquet_from_envi(envi_img, envi_hdr, parquet_path)
+        ensure_parquet_from_envi(
+            envi_img,
+            envi_hdr,
+            parquet_path,
+            chunk_size=chunk_size,
+        )
         logger.info(
             "✅ Wrote Parquet for %s -> %s",
             envi_img.name,

@@ -44,6 +44,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import duckdb
 
+from .paths import scene_prefix_from_dir
 
 def _consolidate_parquet_dir_to_file(
     con: duckdb.DuckDBPyConnection, dir_path: Path, out_file: Path
@@ -139,16 +140,7 @@ META_CANDIDATES: Sequence[str] = (
 
 
 def _derive_prefix(flightline_dir: Path) -> str:
-    flightline_dir = Path(flightline_dir)
-    # Prefer *_envi.img to deduce prefix; else stem of first *.h5; else folder name
-    imgs = sorted(flightline_dir.glob("*_envi.img"))
-    if imgs:
-        stem = imgs[0].stem
-        return stem[:-5] if stem.endswith("_envi") else stem
-    h5s = sorted(flightline_dir.glob("*_directional_reflectance.h5"))
-    if h5s:
-        return h5s[0].stem
-    return flightline_dir.name
+    return scene_prefix_from_dir(flightline_dir)
 
 
 def _table_columns(con: duckdb.DuckDBPyConnection, table: str) -> List[str]:
