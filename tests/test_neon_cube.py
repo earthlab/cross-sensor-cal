@@ -101,6 +101,46 @@ def _create_fake_legacy_neon_file(path: Path) -> None:
         )
 
 
+def _create_fake_site_group_legacy_file(path: Path) -> None:
+    wavelengths = np.linspace(400, 420, 5, dtype=np.float32)
+    fwhm = np.full(5, 10, dtype=np.float32)
+    data = np.arange(20 * 10 * 5, dtype=np.float32).reshape(20, 10, 5)
+
+    map_info = [
+        "UTM",
+        "1.0",
+        "1.0",
+        "500000.0",
+        "4420000.0",
+        "1.0",
+        "-1.0",
+        "13",
+        "North",
+        "WGS-84",
+    ]
+
+    with h5py.File(path, "w") as h5_file:
+        site_group = h5_file.create_group("NIWO")
+        reflectance_group = site_group.create_group("Reflectance")
+        reflectance_ds = reflectance_group.create_dataset(
+            "Reflectance_Data", data=data, dtype=np.float32
+        )
+        reflectance_ds.attrs["Data_Ignore_Value"] = np.float32(-9999.0)
+
+        metadata_group = reflectance_group.create_group("Metadata")
+        spectral_group = metadata_group.create_group("Spectral_Data")
+        wavelength_ds = spectral_group.create_dataset("Wavelength", data=wavelengths)
+        wavelength_ds.attrs["Units"] = "Nanometers"
+        spectral_group.create_dataset("FWHM", data=fwhm)
+
+        coordinate_group = metadata_group.create_group("Coordinate_System")
+        coordinate_group.create_dataset("Map_Info", data=np.array(map_info, dtype="S"))
+        coordinate_group.create_dataset(
+            "Coordinate_System_String",
+            data=np.array("LEGACY SITE PROJECTION", dtype="S"),
+        )
+
+
 def test_neon_cube_iter_chunks(tmp_path):
     fake_h5_path = tmp_path / "fake_neon.h5"
     _create_fake_neon_file(fake_h5_path)
@@ -171,6 +211,7 @@ def test_read_neon_cube_new_layout(tmp_path):
     assert meta["lines"] == 20
     assert meta["wavelength_units"].lower() == "nanometers"
     assert meta["metadata_group_paths"]
+    assert meta["layout"] == "reflectance_group"
 
 
 def test_read_neon_cube_old_layout(tmp_path):
@@ -185,6 +226,7 @@ def test_read_neon_cube_old_layout(tmp_path):
     assert meta["map_info"]
     assert meta["wavelength_units"].lower() == "nanometers"
     assert meta["metadata_group_paths"]
+    assert meta["layout"] == "legacy_hdf5"
 
 
 def test_read_neon_cube_pre_2021_new_layout(tmp_path):
@@ -197,4 +239,19 @@ def test_read_neon_cube_pre_2021_new_layout(tmp_path):
     assert wavelengths.shape == (5,)
     assert meta["bands"] == 5
     assert meta["metadata_group_paths"]
+
+
+def test_read_neon_cube_site_group_legacy_layout(tmp_path):
+    fake_h5_path = tmp_path / "NEON_D13_NIWO_DP1_20200720_reflectance.h5"
+    _create_fake_site_group_legacy_file(fake_h5_path)
+
+    cube, wavelengths, meta = read_neon_cube(fake_h5_path)
+
+    assert cube.shape == (20, 10, 5)
+    assert wavelengths.shape == (5,)
+    assert meta["bands"] == 5
+    assert meta["layout"] == "legacy_site_group"
+    assert meta["site"] == "NIWO"
+    assert meta["metadata_group_paths"]
+    assert meta["wavelength_units"].lower() == "nanometers"
 

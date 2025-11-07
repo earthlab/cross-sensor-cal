@@ -12,6 +12,7 @@ Authors: Adam Chlus, Zhiwei Ye, Philip Townsend.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 
 import h5py
 import math
@@ -21,6 +22,9 @@ from pathlib import Path
 from typing import Dict, Iterator, Optional, Tuple
 
 from .io.neon import _map_info_core, read_neon_cube
+
+
+logger = logging.getLogger(__name__)
 
 
 _RADIANS_COMPATIBLE_KEYS = {
@@ -121,9 +125,13 @@ class NeonCube:
         self.mask_no_data = band0 != self.no_data
 
         mem_gb = self.data.nbytes / (1024 ** 3)
-        print(
-            "NeonCube: loaded "
-            f"{self.lines}x{self.columns}x{self.bands} ~{mem_gb:.2f} GB into memory (float32)"
+        logger.info(
+            "NeonCube: loaded %sx%sx%s ~%.2f GB into memory (float32) from %s",
+            self.lines,
+            self.columns,
+            self.bands,
+            mem_gb,
+            self.h5_path.name,
         )
 
         self.base_key = meta.get("base_key")
@@ -411,4 +419,14 @@ def _read_envi_single_band(img_path: Path) -> np.ndarray:
 
     data = data.reshape(bands, lines, samples)
     return data[0].astype(np.float32)
+
+
+def debug_load_neon_cube(h5_path: Path) -> "NeonCube":
+    """Convenience helper for manual debugging of NEON cubes."""
+
+    cube = NeonCube(h5_path=h5_path)
+    print(
+        "shape:", cube.data.shape, "dtype:", cube.data.dtype, "wavelengths:", cube.wavelengths.shape
+    )
+    return cube
 

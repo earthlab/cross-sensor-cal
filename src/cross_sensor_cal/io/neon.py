@@ -223,6 +223,7 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         "bands": int(cube.shape[2]),
         "metadata_group_paths": [metadata_group.name],
         "base_key": base_key,
+        "layout": "reflectance_group",
     }
     return cube, wavelengths, meta
 
@@ -290,7 +291,108 @@ def _read_old_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         "bands": int(cube.shape[2]),
         "metadata_group_paths": [metadata_root] if metadata_root else [],
         "base_key": base_key,
+        "layout": "legacy_hdf5",
     }
+    return cube, wavelengths, meta
+
+
+def _read_site_group_legacy_layout(
+    h5_file: h5py.File,
+) -> tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
+    root_keys = list(h5_file.keys())
+    if len(root_keys) != 1:
+        raise KeyError("Site-group legacy layout expects a single root group.")
+
+    site_group_key = root_keys[0]
+    site_group_obj = h5_file.get(site_group_key)
+    if not isinstance(site_group_obj, h5py.Group):
+        raise KeyError("Root entry for legacy site-group layout is not a group.")
+
+    reflectance_group = site_group_obj.get("Reflectance")
+    if not isinstance(reflectance_group, h5py.Group):
+        raise KeyError("Legacy site-group layout missing 'Reflectance' group.")
+
+    data_ds = reflectance_group.get("Reflectance_Data")
+    if not isinstance(data_ds, h5py.Dataset):
+        raise KeyError("Legacy site-group layout missing 'Reflectance_Data' dataset.")
+
+    data = np.asarray(data_ds[()], dtype=np.float32)
+
+    metadata_group = reflectance_group.get("Metadata")
+    if metadata_group is None:
+        raise KeyError("Legacy site-group layout missing 'Metadata' group.")
+
+    spectral_group = metadata_group.get("Spectral_Data")
+    if spectral_group is None:
+        raise KeyError("Legacy site-group layout missing 'Spectral_Data'.")
+
+    wavelength_ds: Optional[h5py.Dataset] = None
+    for key, value in spectral_group.items():
+        if isinstance(value, h5py.Dataset) and value.ndim >= 1:
+            if key.lower() in {"wavelength", "wavelengths"}:
+                wavelength_ds = value
+                break
+    if wavelength_ds is None:
+        raise KeyError("Legacy site-group layout missing spectral wavelength dataset.")
+
+    wavelengths = np.asarray(wavelength_ds[()], dtype=np.float32).reshape(-1)
+
+    fwhm_ds: Optional[h5py.Dataset] = None
+    for key, value in spectral_group.items():
+        if isinstance(value, h5py.Dataset) and value.ndim >= 1:
+            if key.lower() == "fwhm":
+                fwhm_ds = value
+                break
+
+    fwhm = np.asarray(fwhm_ds[()], dtype=np.float32).reshape(-1) if fwhm_ds else None
+    wavelength_units = _extract_units(wavelength_ds, spectral_group) or "Unknown"
+
+    coordinate_group = metadata_group.get("Coordinate_System")
+    map_info_dataset = coordinate_group.get("Map_Info") if coordinate_group else None
+    projection_dataset = (
+        coordinate_group.get("Coordinate_System_String") if coordinate_group else None
+    )
+
+    map_info_list: list[str] = []
+    if map_info_dataset is not None:
+        map_info_list = _prepare_map_info(map_info_dataset[()])
+
+    projection_wkt = ""
+    if projection_dataset is not None:
+        projection_wkt = _as_str(projection_dataset[()])
+
+    transform = None
+    ulx = uly = None
+    if map_info_list:
+        ref_x, ref_y, ref_easting, ref_northing, pixel_x, pixel_y = _map_info_core(
+            map_info_list
+        )
+        ulx = ref_easting - pixel_x * (ref_x - 0.5)
+        uly = ref_northing + abs(pixel_y) * (ref_y - 0.5)
+        yres = -abs(pixel_y)
+        transform = (ulx, pixel_x, 0.0, uly, 0.0, yres)
+
+    no_data = _extract_no_data(data_ds)
+    cube = _orient_cube(data, len(wavelengths))
+
+    meta: Dict[str, Any] = {
+        "map_info": map_info_list,
+        "projection": projection_wkt,
+        "transform": transform,
+        "ulx": ulx,
+        "uly": uly,
+        "wavelength_units": wavelength_units,
+        "fwhm": fwhm,
+        "no_data": no_data,
+        "samples": int(cube.shape[1]),
+        "lines": int(cube.shape[0]),
+        "bands": int(cube.shape[2]),
+        "metadata_group_paths": [metadata_group.name],
+        "base_key": f"{site_group_key}/Reflectance",
+        "layout": "legacy_site_group",
+        "site": site_group_key,
+    }
+
     return cube, wavelengths, meta
 
 
@@ -302,13 +404,22 @@ def read_neon_cube(h5_path: Path) -> tuple[np.ndarray, np.ndarray, Dict[str, Any
         raise FileNotFoundError(path)
 
     layout_error: Exception | None = None
-    readers = (
-        (_read_old_neon_layout, _read_new_neon_layout)
-        if is_pre_2021(path)
-        else (_read_new_neon_layout, _read_old_neon_layout)
-    )
 
     with h5py.File(path, "r") as h5_file:
+        root_keys = list(h5_file.keys())
+        if is_pre_2021(path):
+            readers = (
+                _read_site_group_legacy_layout,
+                _read_old_neon_layout,
+                _read_new_neon_layout,
+            )
+        else:
+            readers = (
+                _read_new_neon_layout,
+                _read_old_neon_layout,
+                _read_site_group_legacy_layout,
+            )
+
         for reader in readers:
             try:
                 return reader(h5_file)
@@ -317,9 +428,12 @@ def read_neon_cube(h5_path: Path) -> tuple[np.ndarray, np.ndarray, Dict[str, Any
                     layout_error = exc
                 continue
 
+    root_summary = ", ".join(root_keys) if root_keys else "<no root groups>"
     if layout_error is not None:
         raise RuntimeError(
-            f"Unable to interpret NEON HDF5 layout for {path}: {layout_error}"
+            f"Unable to interpret NEON HDF5 layout for {path} (root groups: {root_summary}): {layout_error}"
         ) from layout_error
 
-    raise RuntimeError(f"Unable to interpret NEON HDF5 layout for {path}.")
+    raise RuntimeError(
+        f"Unable to interpret NEON HDF5 layout for {path} (root groups: {root_summary})."
+    )
