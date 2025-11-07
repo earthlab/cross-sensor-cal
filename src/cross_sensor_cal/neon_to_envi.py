@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from pathlib import Path
 from typing import Iterable
 
@@ -11,11 +10,10 @@ import numpy as np
 
 from .envi_writer import EnviWriter
 from .file_types import NEONReflectanceENVIFile, NEONReflectanceFile
-from .neon_cube import NeonCube, resolve_tile_size
+from .neon_cube import NeonCube
 from .progress_utils import TileProgressReporter
 
 
-logger = logging.getLogger(__name__)
 def _resolve_output(envi_file: NEONReflectanceENVIFile) -> Path:
     """Return the ENVI stem that should be written for ``envi_file``."""
 
@@ -86,20 +84,9 @@ def neon_to_envi_no_hytools(
     if brightness_offset is not None:
         offset_value = np.float32(brightness_offset)
 
-    tile_size = resolve_tile_size()
-    approx_tile_bytes = tile_size * tile_size * cube.bands * np.dtype("float32").itemsize
-    logger.info(
-        "Streaming ENVI export from %s with shape %sx%sx%s → %dx%d tiles (~%.2f MB/tile)",
-        h5_path.name,
-        cube.lines,
-        cube.columns,
-        cube.bands,
-        tile_size,
-        tile_size,
-        approx_tile_bytes / (1024 ** 2),
-    )
-
-    total_chunks = cube.chunk_count(chunk_y=tile_size, chunk_x=tile_size)
+    chunk_y = 100
+    chunk_x = 100
+    total_chunks = cube.chunk_count(chunk_y=chunk_y, chunk_x=chunk_x)
     reporter = TileProgressReporter(
         stage_name="ENVI export",
         total_tiles=total_chunks,
@@ -109,7 +96,7 @@ def neon_to_envi_no_hytools(
 
     try:
         for ys, ye, xs, xe, raw_chunk in cube.iter_chunks(
-            chunk_y=tile_size, chunk_x=tile_size
+            chunk_y=chunk_y, chunk_x=chunk_x
         ):
             chunk = raw_chunk.astype("float32", copy=False)
             if offset_value is not None:

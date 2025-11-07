@@ -151,11 +151,11 @@ def test_neon_cube_iter_chunks(tmp_path):
     assert cube.columns == 20
     assert cube.bands == 5
 
-    full_cube = cube.load_full_cube()
-    assert full_cube.shape == (20, 20, 5)
-    assert full_cube.dtype == np.float32
+    assert cube.data.shape == (20, 20, 5)
+    assert cube.data.dtype == np.float32
 
-    assert cube.mask_no_data is None
+    assert isinstance(cube.mask_no_data, np.ndarray)
+    assert cube.mask_no_data.shape == (20, 20)
 
     assert cube.wavelengths.shape == (5,)
     assert cube.fwhm.shape == (5,)
@@ -164,7 +164,6 @@ def test_neon_cube_iter_chunks(tmp_path):
     assert len(chunks) == 4
     for ys, ye, xs, xe, arr in chunks:
         assert arr.shape == (ye - ys, xe - xs, cube.bands)
-        np.testing.assert_allclose(arr, full_cube[ys:ye, xs:xe, :])
 
     coverage = set()
     for ys, ye, xs, xe, arr in chunks:

@@ -129,41 +129,17 @@ def _find_dataset_path(h5_file: h5py.File, candidates: Iterable[str], ndim: int 
     return None
 
 
-def _resolve_dataset_orientation(shape: tuple[int, int, int], wavelength_count: int) -> tuple[int, int, int]:
-    """Return a tuple mapping dataset axes to (lines, columns, bands)."""
-
-    if len(shape) != 3:
-        raise RuntimeError("Reflectance data does not have (lines, columns, bands) dimensions.")
-
-    band_axis: int | None = None
-    for axis, dim in enumerate(shape):
-        if dim == wavelength_count:
-            band_axis = axis
-            break
-
-    if band_axis is None:
-        band_axis = 2  # fall back to last axis when counts do not match exactly
-
-    dataset_to_canonical: list[int | None] = [None, None, None]
-    dataset_to_canonical[band_axis] = 2
-
-    remaining_axes = [axis for axis in range(3) if axis != band_axis]
-    if len(remaining_axes) != 2:
-        raise RuntimeError("Unable to determine spatial axes for NEON reflectance dataset.")
-
-    dataset_to_canonical[remaining_axes[0]] = 0
-    dataset_to_canonical[remaining_axes[1]] = 1
-
-    return tuple(int(value) for value in dataset_to_canonical)  # type: ignore[arg-type]
-
-
-def _orient_cube(data: np.ndarray, dataset_to_canonical: tuple[int, int, int]) -> np.ndarray:
+def _orient_cube(data: np.ndarray, wavelength_count: int) -> np.ndarray:
     array = np.asarray(data, dtype=np.float32)
     if array.ndim != 3:
         raise RuntimeError("Reflectance data does not have (lines, columns, bands) dimensions.")
-
-    axes = np.argsort(np.asarray(dataset_to_canonical))
-    return np.transpose(array, axes=axes)
+    if array.shape[2] == wavelength_count:
+        return array
+    if array.shape[0] == wavelength_count:
+        return np.moveaxis(array, 0, 2)
+    if array.shape[1] == wavelength_count:
+        return np.moveaxis(array, 1, 2)
+    return array
 
 
 def _metadata_root_from_path(dataset_path: str) -> Optional[str]:
@@ -176,11 +152,7 @@ def _metadata_root_from_path(dataset_path: str) -> Optional[str]:
     return None
 
 
-def _read_new_neon_layout(
-    h5_file: h5py.File,
-    *,
-    load_data: bool = True,
-) -> tuple[np.ndarray | None, np.ndarray, Dict[str, Any]]:
+def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     base_key: Optional[str] = None
     for key in h5_file.keys():
         candidate = f"{key}/Reflectance/Reflectance_Data"
@@ -192,7 +164,7 @@ def _read_new_neon_layout(
 
     reflectance_group = h5_file[f"{base_key}/Reflectance"]
     data_ds = reflectance_group["Reflectance_Data"]
-    data_shape = tuple(int(dim) for dim in data_ds.shape)
+    data = np.asarray(data_ds[()], dtype=np.float32)
 
     metadata_group = reflectance_group.get("Metadata")
     if metadata_group is None:
@@ -235,16 +207,7 @@ def _read_new_neon_layout(
         transform = (ulx, pixel_x, 0.0, uly, 0.0, yres)
 
     no_data = _extract_no_data(data_ds)
-    dataset_to_canonical = _resolve_dataset_orientation(data_shape, len(wavelengths))
-
-    band_axis = dataset_to_canonical.index(2)
-    line_axis = dataset_to_canonical.index(0)
-    column_axis = dataset_to_canonical.index(1)
-
-    cube: np.ndarray | None = None
-    if load_data:
-        data = data_ds[()]
-        cube = _orient_cube(data, dataset_to_canonical)
+    cube = _orient_cube(data, len(wavelengths))
 
     meta: Dict[str, Any] = {
         "map_info": map_info_list,
@@ -255,29 +218,22 @@ def _read_new_neon_layout(
         "wavelength_units": wavelength_units,
         "fwhm": fwhm,
         "no_data": no_data,
-        "samples": int(data_shape[column_axis]),
-        "lines": int(data_shape[line_axis]),
-        "bands": int(data_shape[band_axis]),
+        "samples": int(cube.shape[1]),
+        "lines": int(cube.shape[0]),
+        "bands": int(cube.shape[2]),
         "metadata_group_paths": [metadata_group.name],
         "base_key": base_key,
         "layout": "reflectance_group",
-        "dataset_path": data_ds.name,
-        "dataset_to_canonical": dataset_to_canonical,
-        "data_dtype": str(np.dtype(data_ds.dtype)),
     }
     return cube, wavelengths, meta
 
 
-def _read_old_neon_layout(
-    h5_file: h5py.File,
-    *,
-    load_data: bool = True,
-) -> tuple[np.ndarray | None, np.ndarray, Dict[str, Any]]:
+def _read_old_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     data_path = _find_dataset_path(h5_file, ("reflectance_data", "reflectance"), ndim=3)
     if data_path is None:
         raise KeyError("Legacy NEON file missing a reflectance dataset.")
     data_ds = h5_file[data_path]
-    data_shape = tuple(int(dim) for dim in data_ds.shape)
+    data = np.asarray(data_ds[()], dtype=np.float32)
 
     wavelength_path = _find_dataset_path(
         h5_file,
@@ -316,16 +272,7 @@ def _read_old_neon_layout(
         transform = (ulx, pixel_x, 0.0, uly, 0.0, yres)
 
     no_data = _extract_no_data(data_ds)
-    dataset_to_canonical = _resolve_dataset_orientation(data_shape, len(wavelengths))
-
-    band_axis = dataset_to_canonical.index(2)
-    line_axis = dataset_to_canonical.index(0)
-    column_axis = dataset_to_canonical.index(1)
-
-    cube: np.ndarray | None = None
-    if load_data:
-        data = data_ds[()]
-        cube = _orient_cube(data, dataset_to_canonical)
+    cube = _orient_cube(data, len(wavelengths))
 
     metadata_root = _metadata_root_from_path(wavelength_path)
     base_key = data_path.split("/")[0] if "/" in data_path else data_path
@@ -339,24 +286,19 @@ def _read_old_neon_layout(
         "wavelength_units": wavelength_units,
         "fwhm": fwhm,
         "no_data": no_data,
-        "samples": int(data_shape[column_axis]),
-        "lines": int(data_shape[line_axis]),
-        "bands": int(data_shape[band_axis]),
+        "samples": int(cube.shape[1]),
+        "lines": int(cube.shape[0]),
+        "bands": int(cube.shape[2]),
         "metadata_group_paths": [metadata_root] if metadata_root else [],
         "base_key": base_key,
         "layout": "legacy_hdf5",
-        "dataset_path": data_ds.name,
-        "dataset_to_canonical": dataset_to_canonical,
-        "data_dtype": str(np.dtype(data_ds.dtype)),
     }
     return cube, wavelengths, meta
 
 
 def _read_site_group_legacy_layout(
     h5_file: h5py.File,
-    *,
-    load_data: bool = True,
-) -> tuple[np.ndarray | None, np.ndarray, Dict[str, Any]]:
+) -> tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     root_keys = list(h5_file.keys())
     if len(root_keys) != 1:
         raise KeyError("Site-group legacy layout expects a single root group.")
@@ -374,7 +316,7 @@ def _read_site_group_legacy_layout(
     if not isinstance(data_ds, h5py.Dataset):
         raise KeyError("Legacy site-group layout missing 'Reflectance_Data' dataset.")
 
-    data_shape = tuple(int(dim) for dim in data_ds.shape)
+    data = np.asarray(data_ds[()], dtype=np.float32)
 
     metadata_group = reflectance_group.get("Metadata")
     if metadata_group is None:
@@ -431,16 +373,7 @@ def _read_site_group_legacy_layout(
         transform = (ulx, pixel_x, 0.0, uly, 0.0, yres)
 
     no_data = _extract_no_data(data_ds)
-    dataset_to_canonical = _resolve_dataset_orientation(data_shape, len(wavelengths))
-
-    band_axis = dataset_to_canonical.index(2)
-    line_axis = dataset_to_canonical.index(0)
-    column_axis = dataset_to_canonical.index(1)
-
-    cube: np.ndarray | None = None
-    if load_data:
-        data = data_ds[()]
-        cube = _orient_cube(data, dataset_to_canonical)
+    cube = _orient_cube(data, len(wavelengths))
 
     meta: Dict[str, Any] = {
         "map_info": map_info_list,
@@ -451,26 +384,19 @@ def _read_site_group_legacy_layout(
         "wavelength_units": wavelength_units,
         "fwhm": fwhm,
         "no_data": no_data,
-        "samples": int(data_shape[column_axis]),
-        "lines": int(data_shape[line_axis]),
-        "bands": int(data_shape[band_axis]),
+        "samples": int(cube.shape[1]),
+        "lines": int(cube.shape[0]),
+        "bands": int(cube.shape[2]),
         "metadata_group_paths": [metadata_group.name],
         "base_key": f"{site_group_key}/Reflectance",
         "layout": "legacy_site_group",
         "site": site_group_key,
-        "dataset_path": data_ds.name,
-        "dataset_to_canonical": dataset_to_canonical,
-        "data_dtype": str(np.dtype(data_ds.dtype)),
     }
 
     return cube, wavelengths, meta
 
 
-def read_neon_cube(
-    h5_path: Path,
-    *,
-    load_data: bool = True,
-) -> tuple[np.ndarray | None, np.ndarray, Dict[str, Any]]:
+def read_neon_cube(h5_path: Path) -> tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     """Return ``(cube, wavelengths, metadata)`` for ``h5_path`` regardless of layout."""
 
     path = Path(h5_path)
@@ -496,7 +422,7 @@ def read_neon_cube(
 
         for reader in readers:
             try:
-                return reader(h5_file, load_data=load_data)
+                return reader(h5_file)
             except Exception as exc:  # pragma: no cover - defensive cascade
                 if layout_error is None:
                     layout_error = exc

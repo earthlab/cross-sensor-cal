@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import os
 
 import h5py
 import math
@@ -47,12 +46,13 @@ class _MetadataEntry:
 
 
 class NeonCube:
-    """Lazy/streaming NEON hyperspectral cube wrapper.
+    """In-memory NEON hyperspectral cube loader.
 
-    This class mirrors the HyTools functionality relied upon by the
-    cross-sensor-cal pipeline but avoids loading the entire reflectance cube into
-    memory during initialisation.  Metadata is parsed eagerly while spatial tiles
-    are pulled directly from the HDF5 dataset on demand.
+    The implementation intentionally targets NEON AOP reflectance products only;
+    it mirrors the pieces of HyTools that cross-sensor-cal relies upon while
+    avoiding a runtime dependency on HyTools itself.  The spectral cube is loaded
+    fully into memory (as ``float32``) upon initialisation along with essential
+    metadata required for BRDF/topographic corrections and ENVI exports.
     """
 
     def __init__(
@@ -70,19 +70,17 @@ class NeonCube:
 
         self._metadata_index: Dict[str, list[_MetadataEntry]] = {}
 
-        cube_data, wavelengths, meta = read_neon_cube(self.h5_path, load_data=False)
+        cube_data, wavelengths, meta = read_neon_cube(self.h5_path)
+
+        self.data = np.asarray(cube_data, dtype=np.float32)
+        if self.data.ndim != 3:
+            raise RuntimeError(
+                "Reflectance data does not have (lines, columns, bands) dimensions."
+            )
+
+        self.lines, self.columns, self.bands = self.data.shape
 
         self.wavelengths = np.asarray(wavelengths, dtype=np.float32).reshape(-1)
-
-        try:
-            self.lines = int(meta["lines"])
-            self.columns = int(meta["samples"])
-            self.bands = int(meta["bands"])
-        except KeyError as exc:
-            raise RuntimeError(
-                "NEON metadata missing required dimension entries ('lines', 'samples', 'bands')."
-            ) from exc
-
         if self.wavelengths.size != self.bands:
             raise RuntimeError(
                 "Spectral wavelength metadata length does not match hyperspectral band count."
@@ -123,43 +121,20 @@ class NeonCube:
             raise RuntimeError("Reflectance dataset missing a recognised no-data attribute.")
         self.no_data = float(no_data_value)
 
-        dataset_path = meta.get("dataset_path")
-        if not dataset_path:
-            raise RuntimeError("NEON metadata missing dataset_path entry for streaming reads.")
-        self._dataset_path = str(dataset_path)
+        band0 = self.data[:, :, 0]
+        self.mask_no_data = band0 != self.no_data
 
-        dataset_to_canonical = tuple(meta.get("dataset_to_canonical", (0, 1, 2)))
-        if len(dataset_to_canonical) != 3:
-            raise RuntimeError("dataset_to_canonical metadata must include three axes.")
-        self._dataset_to_canonical = tuple(int(axis) for axis in dataset_to_canonical)
-        self._line_axis = self._dataset_to_canonical.index(0)
-        self._column_axis = self._dataset_to_canonical.index(1)
-        self._band_axis = self._dataset_to_canonical.index(2)
-
-        dtype_str = meta.get("data_dtype", "float32")
-        self._dataset_dtype = np.dtype(dtype_str)
-
-        self._full_cube: Optional[np.ndarray] = None
-
+        mem_gb = self.data.nbytes / (1024 ** 3)
         logger.info(
-            "NeonCube: streaming %sx%sx%s cube from %s (dataset=%s, dtype=%s)",
+            "NeonCube: loaded %sx%sx%s ~%.2f GB into memory (float32) from %s",
             self.lines,
             self.columns,
             self.bands,
+            mem_gb,
             self.h5_path.name,
-            self._dataset_path,
-            self._dataset_dtype,
         )
 
         self.base_key = meta.get("base_key")
-
-        # ``cube_data`` is only populated when ``read_neon_cube`` is invoked with
-        # ``load_data=True`` (e.g. in tests).  We keep it available for
-        # ``load_full_cube`` warm starts without forcing eager allocation.
-        self._prefetched_cube: Optional[np.ndarray] = (
-            np.asarray(cube_data, dtype=np.float32) if cube_data is not None else None
-        )
-        self.mask_no_data: Optional[np.ndarray] = None
 
         metadata_roots = [path for path in meta.get("metadata_group_paths", []) if path]
         with h5py.File(self.h5_path, "r") as h5_file:
@@ -292,45 +267,6 @@ class NeonCube:
 
         return array
 
-    def _orient_chunk(self, raw_chunk: np.ndarray) -> np.ndarray:
-        chunk = np.asarray(raw_chunk, dtype=np.float32, copy=False)
-        axes = np.argsort(np.asarray(self._dataset_to_canonical))
-        return np.transpose(chunk, axes=axes)
-
-    def _read_chunk(
-        self,
-        dataset: h5py.Dataset,
-        ys: int,
-        ye: int,
-        xs: int,
-        xe: int,
-    ) -> np.ndarray:
-        slices = [slice(None)] * 3
-        slices[self._line_axis] = slice(ys, ye)
-        slices[self._column_axis] = slice(xs, xe)
-        slices[self._band_axis] = slice(None)
-        raw = dataset[tuple(slices)]
-        return self._orient_chunk(raw)
-
-    def read_tile(
-        self,
-        row_start: int,
-        row_stop: int,
-        col_start: int,
-        col_stop: int,
-    ) -> np.ndarray:
-        """Return a ``float32`` tile covering the requested spatial window."""
-
-        if not (0 <= row_start < row_stop <= self.lines):
-            raise ValueError("row indices out of bounds for NeonCube")
-        if not (0 <= col_start < col_stop <= self.columns):
-            raise ValueError("column indices out of bounds for NeonCube")
-
-        with h5py.File(self.h5_path, "r") as h5_file:
-            dataset = h5_file[self._dataset_path]
-            chunk = self._read_chunk(dataset, row_start, row_stop, col_start, col_stop)
-        return np.asarray(chunk, dtype=np.float32, copy=False)
-
     def iter_chunks(
         self,
         chunk_y: int = 100,
@@ -338,17 +274,12 @@ class NeonCube:
     ) -> Iterator[Tuple[int, int, int, int, np.ndarray]]:
         """Yield sequential spatial chunks of the reflectance cube."""
 
-        if chunk_y <= 0 or chunk_x <= 0:
-            raise ValueError("chunk dimensions must be positive")
-
-        with h5py.File(self.h5_path, "r") as h5_file:
-            dataset = h5_file[self._dataset_path]
-            for ys in range(0, self.lines, chunk_y):
-                ye = min(self.lines, ys + chunk_y)
-                for xs in range(0, self.columns, chunk_x):
-                    xe = min(self.columns, xs + chunk_x)
-                    chunk = self._read_chunk(dataset, ys, ye, xs, xe)
-                    yield ys, ye, xs, xe, np.asarray(chunk, dtype=np.float32, copy=False)
+        for ys in range(0, self.lines, chunk_y):
+            ye = min(self.lines, ys + chunk_y)
+            for xs in range(0, self.columns, chunk_x):
+                xe = min(self.columns, xs + chunk_x)
+                chunk = self.data[ys:ye, xs:xe, :]
+                yield ys, ye, xs, xe, chunk
 
     def chunk_count(self, chunk_y: int = 100, chunk_x: int = 100) -> int:
         """Return the number of spatial chunks produced by :meth:`iter_chunks`."""
@@ -403,37 +334,6 @@ class NeonCube:
             "ulx": float(self.ulx),
             "uly": float(self.uly),
         }
-
-    def load_full_cube(self) -> np.ndarray:
-        """Explicitly load and cache the full reflectance cube as ``float32``."""
-
-        if self._full_cube is not None:
-            return self._full_cube
-
-        if self._prefetched_cube is not None:
-            cube = np.asarray(self._prefetched_cube, dtype=np.float32, copy=False)
-        else:
-            with h5py.File(self.h5_path, "r") as h5_file:
-                dataset = h5_file[self._dataset_path]
-                raw = dataset[()]
-            cube = self._orient_chunk(raw)
-        self._full_cube = np.asarray(cube, dtype=np.float32, copy=False)
-        mem_gb = self._full_cube.nbytes / (1024 ** 3)
-        logger.info(
-            "NeonCube: load_full_cube() materialised %sx%sx%s (~%.2f GB) from %s",
-            self.lines,
-            self.columns,
-            self.bands,
-            mem_gb,
-            self.h5_path.name,
-        )
-        return self._full_cube
-
-    @property
-    def data(self) -> np.ndarray:
-        """Backwards-compatible accessor that materialises the full cube on demand."""
-
-        return self.load_full_cube()
 
 
 def _read_envi_single_band(img_path: Path) -> np.ndarray:
@@ -529,28 +429,4 @@ def debug_load_neon_cube(h5_path: Path) -> "NeonCube":
         "shape:", cube.data.shape, "dtype:", cube.data.dtype, "wavelengths:", cube.wavelengths.shape
     )
     return cube
-
-
-def resolve_tile_size(default: int = 100) -> int:
-    """Resolve the spatial tile size using the ``CSCAL_TILE_SIZE`` environment variable."""
-
-    env_value = os.getenv("CSCAL_TILE_SIZE")
-    if not env_value:
-        return default
-    try:
-        parsed = int(env_value)
-    except ValueError:
-        logger.warning(
-            "⚠️  Invalid CSCAL_TILE_SIZE=%s; falling back to default tile size %d.",
-            env_value,
-            default,
-        )
-        return default
-    if parsed <= 0:
-        logger.warning(
-            "⚠️  CSCAL_TILE_SIZE must be positive; falling back to default tile size %d.",
-            default,
-        )
-        return default
-    return parsed
 

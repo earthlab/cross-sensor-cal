@@ -1330,8 +1330,8 @@ def stage_export_envi_from_h5(
     # Snapshot directory state BEFORE export so we can diff.
     before_listing = {p.name: p for p in work_dir.glob("*")}
 
-    # This call streams tiles directly from the NEON HDF5 via NeonCube while
-    # reporting progress through TileProgressReporter for visibility.
+    # This is the heavy step that logs the NeonCube memory footprint and now
+    # streams tile progress via tqdm (instead of the old "GRGRGR..." spam).
     neon_to_envi_no_hytools(
         images=[str(h5_path)],
         output_dir=str(work_dir),
@@ -1884,14 +1884,6 @@ def go_forth_and_multiply(
     parquet_chunk_size: int = 2048,
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
-
-    Parallelism is intentionally confined to the flightline level. A
-    :class:`concurrent.futures.ThreadPoolExecutor` schedules
-    :func:`process_one_flightline` for each ``flight_stem`` while the heavy
-    stages (ENVI export, BRDF/topo correction, sensor resampling, Parquet
-    extraction) run sequentially inside the worker. Each stage consumes tiles
-    streamed from HDF5 via :class:`~cross_sensor_cal.neon_cube.NeonCube`, which
-    keeps memory usage predictable on large nodes.
 
     Steps:
 
