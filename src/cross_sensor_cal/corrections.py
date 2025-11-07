@@ -15,6 +15,7 @@ from typing import Tuple, TYPE_CHECKING
 import numpy as np
 
 from cross_sensor_cal.paths import normalize_brdf_model_path, scene_prefix_from_dir
+from .neon_cube import resolve_tile_size
 
 __all__ = [
     "calc_cosine_i",
@@ -239,6 +240,7 @@ def apply_topo_correct(
     ye: int,
     xs: int,
     xe: int,
+    mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Adapted from hytools.topo.apply_topo_correct (GPLv3; HyTools Authors:
     Adam Chlus, Zhiwei Ye, Philip Townsend). Simplified for NEON use.
@@ -263,10 +265,16 @@ def apply_topo_correct(
 
     corrected = chunk_array * normalization[..., np.newaxis]
 
-    if hasattr(cube, "mask_no_data"):
-        mask = cube.mask_no_data[ys:ye, xs:xe]
+    effective_mask = mask
+    if effective_mask is None and hasattr(cube, "mask_no_data"):
+        mask_attr = getattr(cube, "mask_no_data")
+        if mask_attr is not None:
+            effective_mask = mask_attr[ys:ye, xs:xe]
+
+    if effective_mask is not None:
+        mask_bool = np.asarray(effective_mask, dtype=bool, copy=False)
         no_data_value = np.float32(getattr(cube, "no_data", np.nan))
-        corrected = np.where(mask[..., np.newaxis], corrected, no_data_value)
+        corrected = np.where(mask_bool[..., np.newaxis], corrected, no_data_value)
 
     return corrected.astype(np.float32, copy=False)
 
@@ -279,6 +287,7 @@ def apply_brdf_correct(
     xs: int,
     xe: int,
     coeff_path: Path | None = None,
+    mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Perform BRDF normalization on a hyperspectral chunk.
 
@@ -427,10 +436,16 @@ def apply_brdf_correct(
     corrected = chunk_array / denominator
     corrected = np.where(np.isfinite(corrected), corrected, chunk_array)
 
-    if hasattr(cube, "mask_no_data"):
-        mask = cube.mask_no_data[ys:ye, xs:xe]
+    effective_mask = mask
+    if effective_mask is None and hasattr(cube, "mask_no_data"):
+        mask_attr = getattr(cube, "mask_no_data")
+        if mask_attr is not None:
+            effective_mask = mask_attr[ys:ye, xs:xe]
+
+    if effective_mask is not None:
+        mask_bool = np.asarray(effective_mask, dtype=bool, copy=False)
         no_data_value = np.float32(getattr(cube, "no_data", np.nan))
-        corrected = np.where(mask[..., np.newaxis], corrected, no_data_value)
+        corrected = np.where(mask_bool[..., np.newaxis], corrected, no_data_value)
 
     return corrected.astype(np.float32, copy=False)
 
@@ -487,53 +502,97 @@ def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
         kernel_type="LiSparseReciprocal",
     )
 
-    mask = getattr(cube, "mask_no_data", None)
-    if mask is None:
-        mask = np.ones_like(volume_kernel, dtype=bool)
-    valid = mask.astype(bool)
-    valid &= np.isfinite(volume_kernel) & np.isfinite(geom_kernel)
+    geom_valid = np.isfinite(volume_kernel) & np.isfinite(geom_kernel)
+    mask_attr = getattr(cube, "mask_no_data", None)
+    if mask_attr is not None:
+        geom_valid &= mask_attr.astype(bool)
 
-    flat_valid = valid.reshape(-1)
-    if np.count_nonzero(flat_valid) < 3:
-        logging.warning(
-            "⚠️  Not enough valid pixels to fit BRDF model for %s; using neutral coefficients.",
-            getattr(cube, "base_key", "unknown"),
-        )
-        iso = np.ones(cube.bands, dtype=np.float32)
-        vol = np.zeros(cube.bands, dtype=np.float32)
-        geo = np.zeros(cube.bands, dtype=np.float32)
-    else:
-        design_stack = np.stack(
+    band_count = cube.bands
+    counts = np.zeros(band_count, dtype=np.float64)
+    sum_x1 = np.zeros(band_count, dtype=np.float64)
+    sum_x2 = np.zeros(band_count, dtype=np.float64)
+    sum_x1_sq = np.zeros(band_count, dtype=np.float64)
+    sum_x2_sq = np.zeros(band_count, dtype=np.float64)
+    sum_x1x2 = np.zeros(band_count, dtype=np.float64)
+    sum_y = np.zeros(band_count, dtype=np.float64)
+    sum_x1y = np.zeros(band_count, dtype=np.float64)
+    sum_x2y = np.zeros(band_count, dtype=np.float64)
+
+    tile_size = resolve_tile_size()
+
+    for ys, ye, xs, xe, chunk in cube.iter_chunks(
+        chunk_y=tile_size, chunk_x=tile_size
+    ):
+        chunk = np.asarray(chunk, dtype=np.float32, copy=False)
+        volume_tile = volume_kernel[ys:ye, xs:xe]
+        geom_tile = geom_kernel[ys:ye, xs:xe]
+        valid_tile = geom_valid[ys:ye, xs:xe]
+
+        if not np.any(valid_tile):
+            continue
+
+        vol_flat = volume_tile.reshape(-1)
+        geom_flat = geom_tile.reshape(-1)
+        valid_flat = valid_tile.reshape(-1)
+        cube_flat = chunk.reshape(-1, band_count)
+
+        no_data_val = np.float32(getattr(cube, "no_data", np.nan))
+
+        for band_idx in range(band_count):
+            band_values = cube_flat[:, band_idx]
+            band_mask = valid_flat & np.isfinite(band_values) & (band_values != no_data_val)
+            if not np.any(band_mask):
+                continue
+            x1 = vol_flat[band_mask].astype(np.float64, copy=False)
+            x2 = geom_flat[band_mask].astype(np.float64, copy=False)
+            y_vals = band_values[band_mask].astype(np.float64, copy=False)
+
+            counts[band_idx] += band_mask.sum()
+            sum_x1[band_idx] += x1.sum()
+            sum_x2[band_idx] += x2.sum()
+            sum_x1_sq[band_idx] += np.sum(x1 * x1)
+            sum_x2_sq[band_idx] += np.sum(x2 * x2)
+            sum_x1x2[band_idx] += np.sum(x1 * x2)
+            sum_y[band_idx] += y_vals.sum()
+            sum_x1y[band_idx] += np.sum(x1 * y_vals)
+            sum_x2y[band_idx] += np.sum(x2 * y_vals)
+
+    iso = np.ones(band_count, dtype=np.float32)
+    vol = np.zeros(band_count, dtype=np.float32)
+    geo = np.zeros(band_count, dtype=np.float32)
+
+    for band_idx in range(band_count):
+        if counts[band_idx] < 3:
+            continue
+        A = np.array(
             [
-                np.ones_like(volume_kernel, dtype=np.float32),
-                volume_kernel,
-                geom_kernel,
+                [counts[band_idx], sum_x1[band_idx], sum_x2[band_idx]],
+                [sum_x1[band_idx], sum_x1_sq[band_idx], sum_x1x2[band_idx]],
+                [sum_x2[band_idx], sum_x1x2[band_idx], sum_x2_sq[band_idx]],
             ],
-            axis=-1,
+            dtype=np.float64,
         )
-        design_flat = design_stack.reshape(-1, 3)
-        design_valid = design_flat[flat_valid]
+        b = np.array(
+            [sum_y[band_idx], sum_x1y[band_idx], sum_x2y[band_idx]], dtype=np.float64
+        )
+        try:
+            solution, *_ = np.linalg.lstsq(A, b, rcond=None)
+        except np.linalg.LinAlgError:
+            continue
+        iso[band_idx] = np.float32(solution[0])
+        vol[band_idx] = np.float32(solution[1])
+        geo[band_idx] = np.float32(solution[2])
 
-        reflectance = np.asarray(cube.data, dtype=np.float32).reshape(-1, cube.bands)
-
-        iso = np.ones(cube.bands, dtype=np.float32)
-        vol = np.zeros(cube.bands, dtype=np.float32)
-        geo = np.zeros(cube.bands, dtype=np.float32)
-
-        for band_idx in range(cube.bands):
-            y = reflectance[flat_valid, band_idx].astype(np.float64, copy=False)
-            finite_mask = np.isfinite(y)
-            if np.count_nonzero(finite_mask) < 3:
-                continue
-            X = design_valid[finite_mask].astype(np.float64, copy=False)
-            y_valid = y[finite_mask]
-            try:
-                solution, *_ = np.linalg.lstsq(X, y_valid, rcond=None)
-            except np.linalg.LinAlgError:
-                continue
-            iso[band_idx] = np.float32(solution[0])
-            vol[band_idx] = np.float32(solution[1])
-            geo[band_idx] = np.float32(solution[2])
+    insufficient = counts < 3
+    if np.any(insufficient):
+        logging.warning(
+            "⚠️  Not enough valid pixels to fit BRDF model for %s; using neutral coefficients for %d bands.",
+            getattr(cube, "base_key", "unknown"),
+            int(np.count_nonzero(insufficient)),
+        )
+        iso[insufficient] = 1.0
+        vol[insufficient] = 0.0
+        geo[insufficient] = 0.0
 
     coeff_payload = {
         "iso": iso.astype(float).tolist(),
