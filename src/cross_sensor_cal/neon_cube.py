@@ -20,7 +20,7 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, Iterator, Optional, Tuple
 
-from .io.neon import _map_info_core, _prepare_map_info, read_neon_cube
+from .io.neon import _map_info_core, read_neon_cube
 
 
 _RADIANS_COMPATIBLE_KEYS = {

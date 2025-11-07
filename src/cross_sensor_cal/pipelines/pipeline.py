@@ -1903,7 +1903,6 @@ def go_forth_and_multiply(
             except Exception:  # pragma: no cover - defensive fallback
                 first_run_detected = True
                 break
-            work_dir = paths.flight_dir
             raw_img = paths.envi_img
             raw_hdr = paths.envi_hdr
             if not (raw_img.exists() and raw_hdr.exists()):
