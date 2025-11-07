@@ -1252,6 +1252,14 @@ def stage_export_envi_from_h5(
     raw_img_path = flight_paths.envi_img
     raw_hdr_path = flight_paths.envi_hdr
 
+    logger.debug(
+        "stage_export_envi_from_h5: scoped to flightline %s (HDF5=%s, ENVI=%s/%s)",
+        flight_stem,
+        h5_path.name,
+        raw_img_path.name,
+        raw_hdr_path.name,
+    )
+
     assert raw_img_path.suffix == ".img"
     assert raw_hdr_path.suffix == ".hdr"
     raw_name_lower = raw_img_path.name.lower()
