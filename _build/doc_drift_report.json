@@ -109,6 +109,7 @@
     "\u2705 BRDF+topo correction already complete for %s, skipping",
     "\u2705 BRDF+topo correction completed for %s -> %s / %s",
     "\u2705 Download complete for %s \u2192 %s",
+    "\u2705 ENVI export already complete for %s -> %s / %s (skipping heavy export)",
     "\u2705 ENVI export created successfully \u2192 {raw_img_path.name} / {raw_hdr_path.name}",
     "\u2705 Existing ENVI export found \u2014 skipping heavy export ({raw_img_path.name} / {raw_hdr_path.name})",
     "\u2705 Parquet stage complete for %s",

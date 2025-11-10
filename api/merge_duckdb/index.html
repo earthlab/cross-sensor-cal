@@ -1034,7 +1034,10 @@ resampled_glob : str, optional
 write_feather : bool, optional
     If True, writes a Feather copy of the merged table alongside the parquet.
 emit_qa_panel : bool, default True
-    If True, renders the standard QA panel (<prefix>_qa.png) after merging.</p>
+    If True, renders the standard QA panel (<prefix>_qa.png) after merging.
+ray_cpus : int, optional
+    CPU budget forwarded to Ray validation of Parquet shards. Defaults to
+    <code>None</code> which allows the Ray helper to choose the configured default.</p>
 <h3 id="cross_sensor_cal.merge_duckdb.merge_flightline--returns">Returns<a class="headerlink" href="#cross_sensor_cal.merge_duckdb.merge_flightline--returns" title="Permanent link">&para;</a></h3>
 <p>Path
     Path to the merged parquet file.</p>
