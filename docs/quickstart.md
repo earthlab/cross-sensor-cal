@@ -31,6 +31,8 @@ Choose your path:
 
 === "HPC / many tiles"
     - Use `--max-workers` conservatively to avoid RAM pressure.
+    - `--engine ray` is available once `cross-sensor-cal[full]` is installed; the
+      default thread engine avoids any Ray dependency.
     - Re-run the same command to resume; completed stages are skipped.
     - If `/dev/shm` is small, limit concurrency.
 <!-- FILLME:END -->

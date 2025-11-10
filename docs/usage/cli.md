@@ -12,7 +12,8 @@
 cscal-pipeline --base-folder out --site-code NIWO --year-month 2023-08 \
   --product-code DP1.30006.001 \
   --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
-  --max-workers 2
+  --max-workers 2 \
+  --engine thread  # optional: choose "ray" when the extra dependency is installed
 ```
 **Pitfalls** High worker counts can exhaust `/dev/shm`; rerun with the same arguments to resume safely.
 

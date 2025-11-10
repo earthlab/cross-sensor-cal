@@ -75,6 +75,8 @@ That command re-renders `<flight_stem>_qa.png` inside each per-flightline folder
 ### Parallel execution from the CLI
 
 - `--max-workers N` (defaults to `2`) bounds parallelism.
+- `--engine {thread,process,ray}` selects the parallel backend. Ray is only
+  loaded when explicitly requested and requires the optional dependency.
 - Each worker processes one flight line in isolation inside its own subdirectory.
 - Logs from each worker are prefixed with the flight line ID for readability.
 - Memory warning: each hyperspectral cube can consume tens of GB in memory, so avoid
@@ -85,15 +87,15 @@ That command re-renders `<flight_stem>_qa.png` inside each per-flightline folder
 > As of v2.2 the pipeline automatically downloads NEON HDF5 cubes, streams live progress
 > bars, and writes every derived product into a dedicated per-flightline folder.
 
-Install the base package (includes Rasterio, GeoPandas, Spectral, Ray, and other
-runtime dependencies):
+Install the base package (threads/process execution; Ray remains optional):
 
 ```bash
 pip install cross-sensor-cal
 ```
 
-> The legacy `full` extra remains available for compatibility and currently
-> resolves to the same dependency set as the base install.
+> Need Ray-backed execution? Install the optional extra instead:
+> `pip install "cross-sensor-cal[full]"`. The default engine uses threads so
+> Ray is not required for typical workflows.
 
 ### Quickstart Example
 
@@ -178,7 +180,7 @@ Feature availability by install type:
 | Vector I/O/ops (GeoPandas) | ✅ | ✅ |
 | ENVI/HDR (Spectral) | ✅ | ✅ |
 | HDF5 (h5py) | ✅ | ✅ |
-| Ray parallelism | ✅ | ✅ |
+| Ray engine option | ➖ | ✅ |
 
 Replace `SITE` with a NEON site code and `FLIGHT_LINE` with an actual line identifier.
 
