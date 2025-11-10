@@ -44,6 +44,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import duckdb
 
+from ._ray_utils import ray_map
 from .paths import scene_prefix_from_dir
 
 def _consolidate_parquet_dir_to_file(
@@ -86,9 +87,9 @@ def _exclude_parquets(paths):
     return keep
 
 
-def _filter_valid_parquets(paths: Iterable[Path]) -> Tuple[List[Path], List[Tuple[Path, str]]]:
-    valid: List[Path] = []
-    skipped: List[Tuple[Path, str]] = []
+def _filter_valid_parquets(
+    paths: Iterable[Path], *, num_cpus: int | None = None
+) -> Tuple[List[Path], List[Tuple[Path, str]]]:
     try:
         import pyarrow.parquet as pq
     except ModuleNotFoundError as exc:  # pragma: no cover - environment expectation
@@ -96,13 +97,33 @@ def _filter_valid_parquets(paths: Iterable[Path]) -> Tuple[List[Path], List[Tupl
             "pyarrow is required to validate parquet inputs before merge"
         ) from exc
 
-    for path in paths:
+    path_list = [Path(p) for p in paths]
+    if not path_list:
+        return [], []
+
+    if num_cpus is not None and num_cpus <= 0:
+        valid: List[Path] = []
+        skipped: List[Tuple[Path, str]] = []
+        for path in path_list:
+            try:
+                pq.read_schema(path)
+            except Exception as exc:  # pragma: no cover - corruption varies
+                skipped.append((path, str(exc)))
+            else:
+                valid.append(path)
+        return valid, skipped
+
+    def _validate_one(path: Path) -> Tuple[Path, str | None]:
         try:
             pq.read_schema(path)
-        except Exception as exc:  # pragma: no cover - corruption varies by test data
-            skipped.append((path, str(exc)))
-        else:
-            valid.append(path)
+        except Exception as exc:  # pragma: no cover - corruption varies
+            return path, str(exc)
+        return path, None
+
+    results = ray_map(_validate_one, path_list, num_cpus=num_cpus)
+
+    valid = [path for path, error in results if error is None]
+    skipped = [(path, error) for path, error in results if error is not None]
     return valid, skipped
 
 
@@ -197,12 +218,14 @@ def _register_union(
     name: str,
     paths: Iterable[Path],
     meta_candidates: Sequence[str],
+    *,
+    ray_cpus: int | None = None,
 ) -> None:
     escaped_name = _quote_identifier(f"{name}_raw")
     path_list = sorted(Path(p) for p in paths)
 
     if path_list:
-        valid_paths, skipped = _filter_valid_parquets(path_list)
+        valid_paths, skipped = _filter_valid_parquets(path_list, num_cpus=ray_cpus)
         for bad_path, message in skipped:
             print(
                 f"[merge] ⚠️ Skipping invalid parquet {bad_path.name}: {message}\n"
@@ -374,6 +397,7 @@ def merge_flightline(
     resampled_glob: str = "**/*resampl*.parquet",
     write_feather: bool = False,
     emit_qa_panel: bool = True,
+    ray_cpus: int | None = None,
 ) -> Path:
     """
     Merge all pixel-level parquet tables for one flightline.
@@ -395,6 +419,9 @@ def merge_flightline(
         If True, writes a Feather copy of the merged table alongside the parquet.
     emit_qa_panel : bool, default True
         If True, renders the standard QA panel (<prefix>_qa.png) after merging.
+    ray_cpus : int, optional
+        CPU budget forwarded to Ray validation of Parquet shards. Defaults to
+        ``None`` which allows the Ray helper to choose the configured default.
 
     Returns
     -------
@@ -484,9 +511,27 @@ def merge_flightline(
         )
 
         with _progress("DuckDB: register + normalize"):
-            _register_union(con, "orig", inputs["orig"], META_CANDIDATES)
-            _register_union(con, "corr", inputs["corr"], META_CANDIDATES)
-            _register_union(con, "resamp", inputs["resamp"], META_CANDIDATES)
+            _register_union(
+                con,
+                "orig",
+                inputs["orig"],
+                META_CANDIDATES,
+                ray_cpus=ray_cpus,
+            )
+            _register_union(
+                con,
+                "corr",
+                inputs["corr"],
+                META_CANDIDATES,
+                ray_cpus=ray_cpus,
+            )
+            _register_union(
+                con,
+                "resamp",
+                inputs["resamp"],
+                META_CANDIDATES,
+                ray_cpus=ray_cpus,
+            )
 
             orig_cols = set(_table_columns(con, "orig"))
             corr_cols = set(_table_columns(con, "corr"))

@@ -51,6 +51,17 @@ Logs will include messages like:
 
 These logs confirm both correct ordering and skip behavior.
 """
+
+# Pipeline stage overview (heavy Ray targets):
+#   • ENVI-heavy stages: ``stage_export_envi_from_h5`` delegates to
+#     :func:`neon_to_envi_no_hytools` and ``stage_convolve_all_sensors`` streams
+#     ENVI tiles during sensor resampling.
+#   • Parquet-heavy stages: ``_export_parquet_stage`` calls
+#     :func:`ensure_parquet_for_envi`` → :func:`build_parquet_from_envi`, and
+#     ``merge_flightline`` (DuckDB) validates Parquet inputs via
+#     :func:`_filter_valid_parquets`.
+#   • The Ray helper chooses CPU parallelism from ``--max-workers`` / ``CSC_RAY_NUM_CPUS``
+#     with a default of eight cores.
 from __future__ import annotations
 
 import argparse
@@ -99,6 +110,7 @@ from ..file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceResampledENVIFile,
 )
+from .._ray_utils import ray_map
 
 # ---------------------------------------------------------------------
 # Logging setup (safe even if module imported multiple times)
@@ -384,6 +396,7 @@ def _export_parquet_stage(
     flight_stem: str,
     parquet_chunk_size: int,
     logger,
+    ray_cpus: int | None,
 ) -> list[Path]:
     """
     Stage: Parquet export for ENVI reflectance products.
@@ -428,6 +441,7 @@ def _export_parquet_stage(
             img_path,
             logger,
             chunk_size=parquet_chunk_size,
+            ray_cpus=ray_cpus,
         )
         if parquet_path is not None:
             parquet_outputs.append(Path(parquet_path))
@@ -1664,11 +1678,17 @@ def stage_convolve_all_sensors(
         flight_stem=flight_stem,
         parquet_chunk_size=_parquet_chunk_size,
         logger=logger,
+        ray_cpus=ray_cpus,
     )
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
     if parquet_outputs:
-        merge_out = merge_flightline(flightline_dir, out_name=None, emit_qa_panel=True)
+        merge_out = merge_flightline(
+            flightline_dir,
+            out_name=None,
+            emit_qa_panel=True,
+            ray_cpus=ray_cpus,
+        )
         logger.info("✅ DuckDB master → %s", merge_out)
         qa_plots_dir = flightline_dir / "qa_plots"
         qa_plots_dir.mkdir(parents=True, exist_ok=True)
@@ -1727,6 +1747,7 @@ def process_one_flightline(
     brightness_offset: float | None = None,
     parallel_mode: bool = False,
     parquet_chunk_size: int = 2048,
+    ray_cpus: int | None = None,
 ):
     """Run the structured, skip-aware workflow for a single flightline.
 
@@ -1824,6 +1845,7 @@ class _FlightlineTask:
     brightness_offset: float | None
     parallel_mode: bool
     parquet_chunk_size: int
+    ray_cpus: int | None
 
 
 def _execute_flightline(task: "_FlightlineTask") -> str:
@@ -1838,6 +1860,7 @@ def _execute_flightline(task: "_FlightlineTask") -> str:
             brightness_offset=task.brightness_offset,
             parallel_mode=task.parallel_mode,
             parquet_chunk_size=task.parquet_chunk_size,
+            ray_cpus=task.ray_cpus,
         )
     return task.flight_stem
 
@@ -1857,44 +1880,25 @@ def _iter_executor_results(
             yield fut.result()
 
 
-def _iter_ray_results(tasks: Sequence[_FlightlineTask], *, max_workers: int):
-    """Yield completed flightline identifiers using Ray."""
+def _run_flightlines_with_ray(
+    tasks: Sequence[_FlightlineTask], *, num_cpus: int | None
+) -> list[str]:
+    """Execute flightline tasks with Ray parallelism."""
 
     if not tasks:
-        return
-
-    from .._optional import require_ray
-    from ..ray_utils import init_ray
+        return []
 
     try:
-        ray = require_ray()
-    except Exception as exc:  # pragma: no cover - exercised when Ray missing
-        raise RuntimeError(
-            "Ray engine requested but Ray is not installed. Install cross-sensor-cal[full] "
-            "or choose engine='thread'."
-        ) from exc
-
-    cpu_target = max_workers if max_workers and max_workers > 0 else None
-    try:
-        resolved_cpus = init_ray(cpu_target)
+        results = ray_map(_execute_flightline, list(tasks), num_cpus=num_cpus)
+    except RuntimeError:
+        raise
     except Exception as exc:  # pragma: no cover - depends on local Ray availability
         raise RuntimeError(
-            "Ray engine requested but Ray failed to initialise. Install cross-sensor-cal[full] "
-            "or choose engine='thread'."
+            "Ray engine requested but Ray execution failed. Ensure Ray is installed and "
+            "initialises correctly or choose engine='thread'."
         ) from exc
 
-    logger.info("🚀 Ray initialised with %s CPUs", resolved_cpus)
-
-    RemoteWorker = ray.remote(num_cpus=1)(_execute_flightline)
-    pending = [RemoteWorker.remote(task) for task in tasks]
-    try:
-        while pending:
-            ready, pending = ray.wait(pending, num_returns=1)
-            result = ray.get(ready[0])
-            yield result
-    finally:
-        if ray.is_initialized():
-            ray.shutdown()
+    return results
 
 
 def _iter_engine_results(
@@ -1910,7 +1914,8 @@ def _iter_engine_results(
         yield from _iter_executor_results(tasks, engine=engine, max_workers=max_workers)
         return
     if engine == "ray":
-        yield from _iter_ray_results(tasks, max_workers=max_workers)
+        for flight_id in _run_flightlines_with_ray(tasks, num_cpus=max_workers):
+            yield flight_id
         return
     raise ValueError(f"Unknown engine '{engine}'")
 
@@ -1987,9 +1992,9 @@ def go_forth_and_multiply(
     product_code: str = "DP1.30006.001",
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
-    max_workers: int = 2,
+    max_workers: int = 8,
     parquet_chunk_size: int = 2048,
-    engine: Literal["thread", "process", "ray"] = "thread",
+    engine: Literal["thread", "process", "ray"] = "ray",
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
 
@@ -2001,9 +2006,10 @@ def go_forth_and_multiply(
          Parquet) by delegating to :func:`process_one_flightline` in parallel.
 
     The function maintains canonical naming, idempotent stage behavior, and
-    optional legacy resample translation. ``max_workers`` bounds parallelism so
-    callers can balance throughput against memory/CPU pressure. ``engine``
-    selects the parallel backend: threads (default), multiprocessing, or Ray.
+    optional legacy resample translation. ``max_workers`` controls Ray CPU
+    parallelism (default eight cores) and is interpreted as the worker budget
+    for thread/process fallbacks. ``engine`` selects the parallel backend:
+    Ray (default), threads, or multiprocessing.
     """
 
     if max_workers < 1:
@@ -2019,7 +2025,9 @@ def go_forth_and_multiply(
             "engine must be one of 'thread', 'process', or 'ray'"
         )
 
-    parallel_mode = (engine_norm != "thread") or (max_workers > 1)
+    parallel_mode = engine_norm == "ray" or (engine_norm != "thread" and max_workers > 1)
+
+    ray_cpu_target = max_workers if engine_norm == "ray" else 0
 
     first_run_detected = False
     if flight_lines:
@@ -2063,6 +2071,7 @@ def go_forth_and_multiply(
             brightness_offset=brightness_offset,
             parallel_mode=parallel_mode,
             parquet_chunk_size=parquet_chunk_size,
+            ray_cpus=ray_cpu_target,
         )
         for flight_stem in flight_lines
     ]
