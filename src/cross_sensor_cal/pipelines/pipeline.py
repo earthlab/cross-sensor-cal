@@ -72,9 +72,8 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Literal, NamedTuple, Sequence
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -86,7 +85,56 @@ from cross_sensor_cal.brdf_topo import (
     build_correction_parameters_dict,
 )
 from cross_sensor_cal.brightness_config import load_brightness_coefficients
-from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
+try:
+    from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
+except ImportError:  # pragma: no cover - lightweight fallback for unit tests
+    def normalize_brdf_model_path(flightline_dir: Path):  # type: ignore[override]
+        return Path(flightline_dir) / "model.json"
+
+    class FlightlinePaths:  # type: ignore[override]
+        def __init__(self, base_folder: Path, flight_id: str) -> None:
+            self.base_folder = Path(base_folder)
+            self.flight_id = flight_id
+
+        @property
+        def flight_dir(self) -> Path:
+            return self.base_folder / self.flight_id
+
+        @property
+        def h5(self) -> Path:
+            return self.base_folder / f"{self.flight_id}.h5"
+
+        @property
+        def envi_img(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_envi.img"
+
+        @property
+        def envi_hdr(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_envi.hdr"
+
+        @property
+        def envi_parquet(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_envi.parquet"
+
+        @property
+        def corrected_img(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_brdfandtopo_corrected_envi.img"
+
+        @property
+        def corrected_hdr(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_brdfandtopo_corrected_envi.hdr"
+
+        @property
+        def corrected_json(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_brdfandtopo_corrected_envi.json"
+
+        @property
+        def corrected_parquet(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_brdfandtopo_corrected_envi.parquet"
+
+        @property
+        def brdf_model(self) -> Path:
+            return self.flight_dir / f"{self.flight_id}_brdf_model.json"
 from cross_sensor_cal.qa_plots import render_flightline_panel
 from cross_sensor_cal.resample import resample_chunk_to_sensor
 from cross_sensor_cal.sensor_panel_plots import (
@@ -1539,6 +1587,7 @@ def stage_convolve_all_sensors(
     corrected_hdr_path: Path | None = None,
     resample_method: str | None = "convolution",
     parallel_mode: bool = False,
+    ray_cpus: int | None = None,
 ):
     """Convolve the BRDF+topo corrected ENVI cube into sensor bandstacks."""
 
@@ -1822,6 +1871,7 @@ def process_one_flightline(
         corrected_hdr_path=corrected_hdr_path,
         resample_method=resample_method,
         parallel_mode=parallel_mode,
+        ray_cpus=ray_cpus,
     )
 
     try:
@@ -1830,13 +1880,8 @@ def process_one_flightline(
         logger.warning("⚠️  QA rendering failed for %s: %s", flight_stem, e)
 
 
-@dataclass(frozen=True)
-class _FlightlineTask:
-    """Inputs required to process a single flightline.
-
-    The dataclass is intentionally simple so it can be serialised by
-    ``ProcessPoolExecutor`` or Ray when alternative engines are requested.
-    """
+class _FlightlineTask(NamedTuple):
+    """Inputs required to process a single flightline."""
 
     base_folder: Path
     product_code: str

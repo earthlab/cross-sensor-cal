@@ -366,15 +366,6 @@ def read_envi_in_chunks(
     from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
 
     stage_key = infer_stage_from_name(parquet_name)
-    if num_cpus is not None and num_cpus <= 0:
-        chunk_iter = read_envi_in_chunks(
-            Path(envi_img),
-            Path(envi_hdr),
-            parquet_name,
-            chunk_size=chunk_size,
-        )
-        _write_parquet_chunks(parquet_path, chunk_iter, stage_key)
-        return
 
     context, jobs, shared = _plan_chunk_jobs(
         Path(envi_img),
