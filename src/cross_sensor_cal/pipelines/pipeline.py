@@ -2075,6 +2075,7 @@ def go_forth_and_multiply(
     ray_cpu_target = max_workers if engine_norm == "ray" else 0
 
     first_run_detected = False
+    existing_exports: list[tuple[str, Path, Path]] = []
     if flight_lines:
         for stem in flight_lines:
             try:
@@ -2084,9 +2085,11 @@ def go_forth_and_multiply(
                 break
             raw_img = paths.envi_img
             raw_hdr = paths.envi_hdr
-            if not (raw_img.exists() and raw_hdr.exists()):
-                first_run_detected = True
-                break
+            if raw_img.exists() and raw_hdr.exists():
+                existing_exports.append((stem, raw_img, raw_hdr))
+                continue
+            first_run_detected = True
+            break
 
     if first_run_detected:
         logger.info(
@@ -2096,6 +2099,13 @@ def go_forth_and_multiply(
         logger.info(
             "✨ Existing ENVI exports detected — pipeline will reuse validated files automatically."
         )
+        for stem, raw_img, raw_hdr in existing_exports:
+            logger.info(
+                "✅ ENVI export already complete for %s -> %s / %s (skipping heavy export)",
+                stem,
+                raw_img.name,
+                raw_hdr.name,
+            )
 
     # Phase A: ensure downloads exist before spinning up heavy processing
     for flight_stem in flight_lines:
