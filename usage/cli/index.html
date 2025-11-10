@@ -1133,7 +1133,8 @@
 <div class="highlight"><pre><span></span><code>cscal-pipeline<span class="w"> </span>--base-folder<span class="w"> </span>out<span class="w"> </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--flight-lines<span class="w"> </span>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span>
+<span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--engine<span class="w"> </span>thread<span class="w">  </span><span class="c1"># optional: choose &quot;ray&quot; when the extra dependency is installed</span>
 </code></pre></div>
 <strong>Pitfalls</strong> High worker counts can exhaust <code>/dev/shm</code>; rerun with the same arguments to resume safely.</p>
 <p>The CLI logs are designed to be affirmative. Messages like:</p>

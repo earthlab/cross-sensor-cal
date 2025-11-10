@@ -1228,7 +1228,8 @@
 <h3 id="cli-overrides">CLI overrides<a class="headerlink" href="#cli-overrides" title="Permanent link">&para;</a></h3>
 <p>The <code>cscal-pipeline</code> entry point automatically runs the download stage before
 spinning up per-flightline workers. Use <code>--max-workers</code> to opt into parallel
-processing once the <code>.h5</code> files are present. Command-line options override the
+processing once the <code>.h5</code> files are present, and <code>--engine</code> to pick the backend.
+Command-line options override the
 corresponding entries in <code>config.yaml</code>:</p>
 <ul>
 <li><code>bin/jefe.py BASE_FOLDER SITE YEAR_MONTH FL1,FL2</code> sets <code>base_folder</code>, <code>download.site_code</code>, <code>download.year_month</code> and <code>download.flight_lines</code>.</li>
@@ -1236,7 +1237,9 @@ corresponding entries in <code>config.yaml</code>:</p>
 <li><code>--reflectance-offset</code> → <code>postprocess.reflectance_offset</code></li>
 <li><code>--remote-prefix</code> → <code>sort.remote_prefix</code></li>
 <li><code>--no-sync</code> sets <code>sort.sync_files</code> to <code>false</code></li>
-<li><code>--max-workers</code> sets the ThreadPool concurrency for <code>go_forth_and_multiply()</code></li>
+<li><code>--max-workers</code> sets the parallel worker count for <code>go_forth_and_multiply()</code></li>
+<li><code>--engine</code> selects the backend (<code>thread</code>, <code>process</code>, or <code>ray</code>). Ray requires
+  the optional dependency and is only loaded when requested.</li>
 </ul>
 <!-- FILLME:END -->
 

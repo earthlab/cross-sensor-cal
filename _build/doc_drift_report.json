@@ -174,6 +174,7 @@
     "pipeline_cli.py": [
       "--base-folder",
       "--brightness-offset",
+      "--engine",
       "--flight-lines",
       "--max-workers",
       "--parquet-chunk-size",

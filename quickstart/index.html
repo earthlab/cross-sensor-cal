@@ -1058,6 +1058,8 @@
 <div class="tabbed-block">
 <ul>
 <li>Use <code>--max-workers</code> conservatively to avoid RAM pressure.</li>
+<li><code>--engine ray</code> is available once <code>cross-sensor-cal[full]</code> is installed; the
+  default thread engine avoids any Ray dependency.</li>
 <li>Re-run the same command to resume; completed stages are skipped.</li>
 <li>If <code>/dev/shm</code> is small, limit concurrency.</li>
 </ul>
