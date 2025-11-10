@@ -2076,6 +2076,9 @@ def go_forth_and_multiply(
 
     first_run_detected = False
     existing_exports: list[tuple[str, Path, Path]] = []
+    existing_corrections: list[tuple[str, Path]] = []
+    existing_corrected: list[tuple[str, Path, Path]] = []
+    existing_sensor_products: list[tuple[str, str, Path, Path]] = []
     if flight_lines:
         for stem in flight_lines:
             try:
@@ -2085,11 +2088,39 @@ def go_forth_and_multiply(
                 break
             raw_img = paths.envi_img
             raw_hdr = paths.envi_hdr
-            if raw_img.exists() and raw_hdr.exists():
-                existing_exports.append((stem, raw_img, raw_hdr))
-                continue
-            first_run_detected = True
-            break
+            if not is_valid_envi_pair(raw_img, raw_hdr):
+                first_run_detected = True
+                break
+            existing_exports.append((stem, raw_img, raw_hdr))
+
+            correction_json = paths.corrected_json
+            if not is_valid_json(correction_json):
+                first_run_detected = True
+                break
+            existing_corrections.append((stem, correction_json))
+
+            corrected_img = paths.corrected_img
+            corrected_hdr = paths.corrected_hdr
+            if not is_valid_envi_pair(corrected_img, corrected_hdr):
+                first_run_detected = True
+                break
+            existing_corrected.append((stem, corrected_img, corrected_hdr))
+
+            try:
+                sensor_products = paths.sensor_products
+            except Exception:  # pragma: no cover - defensive fallback
+                first_run_detected = True
+                break
+
+            for sensor_name, product_paths in sensor_products.items():
+                out_img = product_paths.img
+                out_hdr = product_paths.hdr
+                if not is_valid_envi_pair(out_img, out_hdr):
+                    first_run_detected = True
+                    break
+                existing_sensor_products.append((stem, sensor_name, out_img, out_hdr))
+            if first_run_detected:
+                break
 
     if first_run_detected:
         logger.info(
@@ -2105,6 +2136,27 @@ def go_forth_and_multiply(
                 stem,
                 raw_img.name,
                 raw_hdr.name,
+            )
+        for stem, correction_json in existing_corrections:
+            logger.info(
+                "✅ Correction JSON already complete for %s -> %s (skipping)",
+                stem,
+                correction_json.name,
+            )
+        for stem, corrected_img, corrected_hdr in existing_corrected:
+            logger.info(
+                "✅ BRDF+topo correction already complete for %s -> %s / %s (skipping)",
+                stem,
+                corrected_img.name,
+                corrected_hdr.name,
+            )
+        for stem, sensor_name, out_img, out_hdr in existing_sensor_products:
+            logger.info(
+                "✅ %s product already complete for %s -> %s / %s (skipping)",
+                sensor_name,
+                stem,
+                out_img.name,
+                out_hdr.name,
             )
 
     # Phase A: ensure downloads exist before spinning up heavy processing
