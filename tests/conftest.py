@@ -123,9 +123,26 @@ if "pyarrow" not in sys.modules:  # pragma: no cover - testing fallback
             return self._schema
 
     fake_pa.__version__ = "0.0.0"
+    fake_pa.__path__ = []  # type: ignore[attr-defined]
     fake_pa.table = table
     fake_pa.Table = _FakeTable
     fake_pa.parquet = fake_parquet
+
+    fake_json = types.ModuleType("pyarrow.json")
+
+    def _make_json_option(name: str):
+        class _Option:
+            def __init__(self, *args, **kwargs):
+                self.args = args
+                self.kwargs = kwargs
+
+        _Option.__name__ = name
+        return _Option
+
+    fake_json.ReadOptions = _make_json_option("ReadOptions")  # type: ignore[attr-defined]
+    fake_json.ParseOptions = _make_json_option("ParseOptions")  # type: ignore[attr-defined]
+    fake_json.WriteOptions = _make_json_option("WriteOptions")  # type: ignore[attr-defined]
+    fake_pa.json = fake_json
     fake_parquet.write_table = write_table
     fake_parquet.read_table = read_table
     fake_parquet.read_schema = read_schema
@@ -133,6 +150,7 @@ if "pyarrow" not in sys.modules:  # pragma: no cover - testing fallback
 
     sys.modules["pyarrow"] = fake_pa
     sys.modules["pyarrow.parquet"] = fake_parquet
+    sys.modules["pyarrow.json"] = fake_json
 
 
 if "hytools_compat" not in sys.modules:  # pragma: no cover - simple re-export helper

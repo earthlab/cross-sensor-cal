@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Callable, Iterable, TypeVar
 
 from ._optional import require_ray
@@ -33,10 +34,29 @@ def init_ray(*, num_cpus: int | None = None, **ray_kwargs: Any):
         return ray
 
     resolved = _resolve_cpu_target(num_cpus)
+    source_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
+    existing_path = os.environ.get("PYTHONPATH")
+    path_parts = [str(source_root), str(project_root)]
+    if existing_path:
+        path_parts.append(existing_path)
+    path_value = os.pathsep.join(path_parts)
+
+    default_runtime_env = {
+        "py_modules": [str(source_root)],
+        "env_vars": {"PYTHONPATH": path_value},
+    }
+    user_runtime_env = ray_kwargs.pop("runtime_env", None)
+    if user_runtime_env:
+        merged_env = {**default_runtime_env, **user_runtime_env}
+    else:
+        merged_env = default_runtime_env
+
     init_kwargs = {
         "num_cpus": resolved,
         "ignore_reinit_error": True,
         "include_dashboard": False,
+        "runtime_env": merged_env,
     }
     init_kwargs.update(ray_kwargs)
     ray.init(**init_kwargs)
