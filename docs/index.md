@@ -16,7 +16,8 @@ cscal-pipeline \
   --year-month 2023-08 \
   --product-code DP1.30006.001 \
   --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
-  --max-workers 2
+  --max-workers 2 \
+  --engine thread  # swap for "ray" once the optional dependency is installed
 
 # 3) Open the QA image (and PDF report)
 open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png"

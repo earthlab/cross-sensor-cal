@@ -64,6 +64,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=2048,
         help="Row chunk size (in pixels) used during Parquet export to bound memory usage.",
     )
+    parser.add_argument(
+        "--engine",
+        choices=["thread", "process", "ray"],
+        default="thread",
+        help="Parallel engine for flightline dispatch. Ray requires the optional dependency.",
+    )
     return parser
 
 
@@ -81,6 +87,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         brightness_offset=args.brightness_offset,
         max_workers=args.max_workers,
         parquet_chunk_size=args.parquet_chunk_size,
+        engine=args.engine,
     )
 
     target = args.base_folder.resolve()

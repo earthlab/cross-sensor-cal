@@ -85,7 +85,8 @@ postprocess:
 
 The `cscal-pipeline` entry point automatically runs the download stage before
 spinning up per-flightline workers. Use `--max-workers` to opt into parallel
-processing once the `.h5` files are present. Command-line options override the
+processing once the `.h5` files are present, and `--engine` to pick the backend.
+Command-line options override the
 corresponding entries in `config.yaml`:
 
 - `bin/jefe.py BASE_FOLDER SITE YEAR_MONTH FL1,FL2` sets `base_folder`, `download.site_code`, `download.year_month` and `download.flight_lines`.
@@ -93,6 +94,8 @@ corresponding entries in `config.yaml`:
 - `--reflectance-offset` → `postprocess.reflectance_offset`
 - `--remote-prefix` → `sort.remote_prefix`
 - `--no-sync` sets `sort.sync_files` to `false`
-- `--max-workers` sets the ThreadPool concurrency for `go_forth_and_multiply()`
+- `--max-workers` sets the parallel worker count for `go_forth_and_multiply()`
+- `--engine` selects the backend (`thread`, `process`, or `ray`). Ray requires
+  the optional dependency and is only loaded when requested.
 
 <!-- FILLME:END -->

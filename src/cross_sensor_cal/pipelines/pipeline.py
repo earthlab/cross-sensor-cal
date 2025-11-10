@@ -61,10 +61,11 @@ import os
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 
 import numpy as np
@@ -1808,6 +1809,112 @@ def process_one_flightline(
         logger.warning("⚠️  QA rendering failed for %s: %s", flight_stem, e)
 
 
+@dataclass(frozen=True)
+class _FlightlineTask:
+    """Inputs required to process a single flightline.
+
+    The dataclass is intentionally simple so it can be serialised by
+    ``ProcessPoolExecutor`` or Ray when alternative engines are requested.
+    """
+
+    base_folder: Path
+    product_code: str
+    flight_stem: str
+    resample_method: str
+    brightness_offset: float | None
+    parallel_mode: bool
+    parquet_chunk_size: int
+
+
+def _execute_flightline(task: "_FlightlineTask") -> str:
+    """Worker wrapper that executes :func:`process_one_flightline`."""
+
+    with _scoped_log_prefix(task.flight_stem):
+        process_one_flightline(
+            base_folder=Path(task.base_folder),
+            product_code=task.product_code,
+            flight_stem=task.flight_stem,
+            resample_method=task.resample_method,
+            brightness_offset=task.brightness_offset,
+            parallel_mode=task.parallel_mode,
+            parquet_chunk_size=task.parquet_chunk_size,
+        )
+    return task.flight_stem
+
+
+def _iter_executor_results(
+    tasks: Sequence[_FlightlineTask],
+    *,
+    engine: Literal["thread", "process"],
+    max_workers: int,
+):
+    """Yield completed flightline identifiers using ``concurrent.futures``."""
+
+    executor_cls = ThreadPoolExecutor if engine == "thread" else ProcessPoolExecutor
+    with executor_cls(max_workers=max_workers) as pool:
+        futures = [pool.submit(_execute_flightline, task) for task in tasks]
+        for fut in as_completed(futures):
+            yield fut.result()
+
+
+def _iter_ray_results(tasks: Sequence[_FlightlineTask], *, max_workers: int):
+    """Yield completed flightline identifiers using Ray."""
+
+    if not tasks:
+        return
+
+    from .._optional import require_ray
+    from ..ray_utils import init_ray
+
+    try:
+        ray = require_ray()
+    except Exception as exc:  # pragma: no cover - exercised when Ray missing
+        raise RuntimeError(
+            "Ray engine requested but Ray is not installed. Install cross-sensor-cal[full] "
+            "or choose engine='thread'."
+        ) from exc
+
+    cpu_target = max_workers if max_workers and max_workers > 0 else None
+    try:
+        resolved_cpus = init_ray(cpu_target)
+    except Exception as exc:  # pragma: no cover - depends on local Ray availability
+        raise RuntimeError(
+            "Ray engine requested but Ray failed to initialise. Install cross-sensor-cal[full] "
+            "or choose engine='thread'."
+        ) from exc
+
+    logger.info("🚀 Ray initialised with %s CPUs", resolved_cpus)
+
+    RemoteWorker = ray.remote(num_cpus=1)(_execute_flightline)
+    pending = [RemoteWorker.remote(task) for task in tasks]
+    try:
+        while pending:
+            ready, pending = ray.wait(pending, num_returns=1)
+            result = ray.get(ready[0])
+            yield result
+    finally:
+        if ray.is_initialized():
+            ray.shutdown()
+
+
+def _iter_engine_results(
+    tasks: Sequence[_FlightlineTask],
+    *,
+    engine: Literal["thread", "process", "ray"],
+    max_workers: int,
+):
+    if not tasks:
+        return
+
+    if engine in {"thread", "process"}:
+        yield from _iter_executor_results(tasks, engine=engine, max_workers=max_workers)
+        return
+    if engine == "ray":
+        yield from _iter_ray_results(tasks, max_workers=max_workers)
+        return
+    raise ValueError(f"Unknown engine '{engine}'")
+
+
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
     """
     Generate file sorting list and optionally sync files to iRODS using gocmd.
@@ -1882,6 +1989,7 @@ def go_forth_and_multiply(
     brightness_offset: float | None = None,
     max_workers: int = 2,
     parquet_chunk_size: int = 2048,
+    engine: Literal["thread", "process", "ray"] = "thread",
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
 
@@ -1894,14 +2002,24 @@ def go_forth_and_multiply(
 
     The function maintains canonical naming, idempotent stage behavior, and
     optional legacy resample translation. ``max_workers`` bounds parallelism so
-    callers can balance throughput against memory/CPU pressure.
+    callers can balance throughput against memory/CPU pressure. ``engine``
+    selects the parallel backend: threads (default), multiprocessing, or Ray.
     """
+
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
 
     base_path = Path(base_folder)
     base_path.mkdir(parents=True, exist_ok=True)
 
     method_norm = (resample_method or "convolution").lower()
-    parallel_mode = max_workers is not None and max_workers > 1
+    engine_norm = (engine or "thread").lower()
+    if engine_norm not in {"thread", "process", "ray"}:
+        raise ValueError(
+            "engine must be one of 'thread', 'process', or 'ray'"
+        )
+
+    parallel_mode = (engine_norm != "thread") or (max_workers > 1)
 
     first_run_detected = False
     if flight_lines:
@@ -1936,26 +2054,27 @@ def go_forth_and_multiply(
             flight_stem=flight_stem,
         )
 
-    def _worker(flight_stem: str) -> str:
-        with _scoped_log_prefix(flight_stem):
-            process_one_flightline(
-                base_folder=base_path,
-                product_code=product_code,
-                flight_stem=flight_stem,
-                resample_method=method_norm,
-                brightness_offset=brightness_offset,
-                parallel_mode=parallel_mode,
-                parquet_chunk_size=parquet_chunk_size,
-            )
-        return flight_stem
+    tasks = [
+        _FlightlineTask(
+            base_folder=base_path,
+            product_code=product_code,
+            flight_stem=flight_stem,
+            resample_method=method_norm,
+            brightness_offset=brightness_offset,
+            parallel_mode=parallel_mode,
+            parquet_chunk_size=parquet_chunk_size,
+        )
+        for flight_stem in flight_lines
+    ]
 
-    futures = []
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        for flight_stem in flight_lines:
-            futures.append(pool.submit(_worker, flight_stem))
-
-        for fut in as_completed(futures):
-            done_flight = fut.result()
+    if not tasks:
+        logger.info("No flight lines provided; nothing to process.")
+    else:
+        for done_flight in _iter_engine_results(
+            tasks,
+            engine=engine_norm,
+            max_workers=max_workers,
+        ):
             logger.info("🎉 Finished pipeline for %s (parallel worker join)", done_flight)
 
     if method_norm in {"legacy", "resample"}:
@@ -2037,6 +2156,7 @@ def jefe(
     force_config: bool = False,
     brightness_offset: float = 0.0,
     verbose: bool = False,
+    engine: Literal["thread", "process", "ray"] = "thread",
 ):
     """
     A control function that orchestrates the processing of spectral data.
@@ -2064,6 +2184,8 @@ def jefe(
         flight_lines=flight_lines,
         resample_method=resample_method,
         brightness_offset=brightness_offset,
+        max_workers=max_workers,
+        engine=engine,
     )
 
     process_base_folder(
