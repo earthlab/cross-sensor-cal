@@ -45,7 +45,7 @@ def test_thread_engine_operates_without_ray(
     _block_ray_import: None,
     _stub_pipeline: None,
 ) -> None:
-    """Default engine should not attempt to import Ray."""
+    """Thread engine fallback should not require Ray."""
 
     go_forth_and_multiply(
         base_folder=tmp_path,
@@ -61,13 +61,49 @@ def test_ray_engine_requires_dependency(
     _block_ray_import: None,
     _stub_pipeline: None,
 ) -> None:
-    """Requesting the Ray engine should surface a helpful error when Ray is missing."""
+    """Ray default should surface a helpful error when Ray is missing."""
 
-    with pytest.raises(RuntimeError, match="Ray engine requested"):
+    with pytest.raises(RuntimeError, match="Optional dependency 'ray'"):
         go_forth_and_multiply(
             base_folder=tmp_path,
             site_code="TEST",
             year_month="2024-01",
             flight_lines=["FLIGHT"],
-            engine="ray",
         )
+
+
+def test_ray_engine_uses_ray_map(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Ray engine should delegate to the shared ``ray_map`` helper."""
+
+    calls: dict[str, object] = {}
+
+    def _fake_ray_map(func, iterable, *, num_cpus=None):
+        calls["num_cpus"] = num_cpus
+        calls["count"] = len(list(iterable))
+        return []
+
+    monkeypatch.setattr(
+        "cross_sensor_cal.pipelines.pipeline.ray_map",
+        _fake_ray_map,
+    )
+
+    monkeypatch.setattr(
+        "cross_sensor_cal.pipelines.pipeline.process_one_flightline",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        "cross_sensor_cal.pipelines.pipeline.stage_download_h5",
+        lambda **_: None,
+    )
+
+    go_forth_and_multiply(
+        base_folder=tmp_path,
+        site_code="TEST",
+        year_month="2024-01",
+        flight_lines=["A", "B"],
+        engine="ray",
+        max_workers=3,
+    )
+
+    assert calls["num_cpus"] == 3
+    assert calls["count"] == 2

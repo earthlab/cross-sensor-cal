@@ -43,8 +43,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=2,
-        help="Parallel workers to allocate. Each worker processes one flight line.",
+        default=8,
+        help="Ray CPU budget (defaults to 8). Used as worker count for non-Ray engines.",
     )
     parser.add_argument(
         "--resample-method",
@@ -67,8 +67,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--engine",
         choices=["thread", "process", "ray"],
-        default="thread",
-        help="Parallel engine for flightline dispatch. Ray requires the optional dependency.",
+        default="ray",
+        help="Parallel engine for flightline dispatch. Ray is the default and initialises automatically.",
     )
     return parser
 

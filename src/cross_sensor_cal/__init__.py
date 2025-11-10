@@ -48,6 +48,17 @@ def __getattr__(name: str):  # pragma: no cover - thin lazy import helper
         globals()[name] = module
         __all__.append(name)
         return module
+    if name == "pipelines":
+        module = import_module("cross_sensor_cal.pipelines")
+        if not hasattr(module, "pipeline"):
+            setattr(
+                module,
+                "pipeline",
+                import_module("cross_sensor_cal.pipelines.pipeline"),
+            )
+        globals()[name] = module
+        __all__.append(name)
+        return module
     if name == "brdf_topo":
         module = import_module("cross_sensor_cal.brdf_topo")
         globals()[name] = module
