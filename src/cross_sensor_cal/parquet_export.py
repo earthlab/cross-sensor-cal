@@ -218,6 +218,26 @@ def _plan_chunk_jobs(
             else:
                 band_wavelengths = [idx + 1 for idx in range(band_count)]
 
+        # --- Ensure band_wavelengths and band_count are consistent ---
+        if len(band_wavelengths) < band_count:
+            # Pad by extending the last wavelength by 1 nm steps
+            if band_wavelengths:
+                last = band_wavelengths[-1]
+            else:
+                last = 0
+            pad = [last + i + 1 for i in range(band_count - len(band_wavelengths))]
+            band_wavelengths = band_wavelengths + pad
+        elif len(band_wavelengths) > band_count:
+            # Trim extra centers
+            band_wavelengths = band_wavelengths[:band_count]
+
+        if len(band_wavelengths) != band_count:
+            raise RuntimeError(
+                "Inconsistent band metadata: band_count="
+                f"{band_count}, len(band_wavelengths)={len(band_wavelengths)} "
+                f"for {envi_img}"
+            )
+
         jobs: list[_ParquetChunkJob] = []
         for row_start in range(0, height, block_y):
             row_end = min(row_start + block_y, height)
