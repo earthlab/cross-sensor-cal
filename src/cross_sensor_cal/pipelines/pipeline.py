@@ -1998,8 +1998,11 @@ def _run_flightlines_with_ray(
         raise
     except Exception as exc:  # pragma: no cover - depends on local Ray availability
         raise RuntimeError(
-            "Ray engine requested but Ray execution failed. Ensure Ray is installed and "
-            "initialises correctly or choose engine='thread'."
+            "Ray engine requested but Ray execution failed. This may indicate Ray is "
+            "missing, failed to initialise, or encountered resource limits such as "
+            "running out of disk space while spilling. Review the preceding Ray logs, "
+            "free space under the Ray temporary directory, or rerun with a smaller "
+            "'max_workers' or 'parquet_chunk_size'."
         ) from exc
 
     return results
