@@ -186,6 +186,14 @@ os.environ.setdefault("RAY_disable_usage_stats", "1")
 os.environ.setdefault("RAY_DISABLE_DASHBOARD", "1")
 os.environ.setdefault("RAY_LOG_TO_FILE", "1")
 
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+
+
+RAY_DEBUG = _env_flag("CSC_RAY_DEBUG")
+_NOISE_FILTER_DISABLED = _env_flag("CSC_DISABLE_NOISE_FILTER")
+
 # Optional progress bars (fallback to no-bars if tqdm not present)
 try:
     from tqdm import tqdm
@@ -403,6 +411,9 @@ class _FilterStream:
 def _silence_noise(enabled: bool):
     """Context manager to silence noisy third-party output when enabled=True."""
 
+    if _NOISE_FILTER_DISABLED:
+        enabled = False
+
     if not enabled:
         yield
         return
@@ -453,10 +464,15 @@ def _export_parquet_stage(
     previously present and validated).
     """
 
+    # When ``ray_cpus`` is provided we parallelise Parquet creation per ENVI cube
+    # using :func:`ray_map`, falling back to serial execution otherwise.
     from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
     work_dir = Path(paths.get("work_dir", Path(base_folder) / flight_stem))
+
+    if ray_cpus is not None and ray_cpus <= 0:
+        ray_cpus = None
 
     if not work_dir.exists():
         try:
@@ -477,22 +493,56 @@ def _export_parquet_stage(
 
     logger.info("📦 Parquet export for %s ...", flight_stem)
 
-    parquet_outputs: list[Path] = []
-
+    img_paths: list[Path] = []
     for img_path in sorted(work_dir.glob("*.img")):
         stem_lower = img_path.stem.lower()
         if any(keyword in stem_lower for keyword in ["mask", "angle", "qa", "quality"]):
             continue
+        img_paths.append(img_path)
 
-        # ensure the raw ENVI (and any other reflectance cubes) receive Parquet outputs
-        parquet_path = ensure_parquet_for_envi(
-            img_path,
-            logger,
+    parquet_outputs: list[Path] = []
+
+    def _parquet_worker(img_path_str: str) -> str | None:
+        from pathlib import Path as _Path
+        import logging as _logging
+
+        from cross_sensor_cal.parquet_export import ensure_parquet_for_envi as _ensure_parquet
+
+        local_logger = _logging.getLogger(__name__)
+        path = _Path(img_path_str)
+        pq_path = _ensure_parquet(
+            path,
+            local_logger,
             chunk_size=parquet_chunk_size,
-            ray_cpus=ray_cpus,
         )
-        if parquet_path is not None:
-            parquet_outputs.append(Path(parquet_path))
+        return str(pq_path) if pq_path is not None else None
+
+    if img_paths:
+        if ray_cpus is not None and len(img_paths) > 1:
+            if RAY_DEBUG:
+                logger.info(
+                    "Ray Parquet export for %s: %d ENVI cubes (num_cpus=%s)",
+                    flight_stem,
+                    len(img_paths),
+                    ray_cpus,
+                )
+            results = ray_map(
+                _parquet_worker,
+                [str(p) for p in img_paths],
+                num_cpus=ray_cpus,
+            )
+            for result in results:
+                if result:
+                    parquet_outputs.append(Path(result))
+        else:
+            for img_path in img_paths:
+                pq_path = ensure_parquet_for_envi(
+                    img_path,
+                    logger,
+                    chunk_size=parquet_chunk_size,
+                )
+                if pq_path is not None:
+                    parquet_outputs.append(Path(pq_path))
 
     if parquet_outputs:
         validator = Path(__file__).resolve().parents[3] / "bin" / "validate_parquets"
@@ -1933,8 +1983,17 @@ def _run_flightlines_with_ray(
     if not tasks:
         return []
 
+    cpu_budget = num_cpus if num_cpus and num_cpus > 0 else None
+
+    if RAY_DEBUG:
+        logger.info(
+            "Ray flightline execution starting for %d tasks (num_cpus=%s)",
+            len(tasks),
+            cpu_budget if cpu_budget is not None else "auto",
+        )
+
     try:
-        results = ray_map(_execute_flightline, list(tasks), num_cpus=num_cpus)
+        results = ray_map(_execute_flightline, list(tasks), num_cpus=cpu_budget)
     except RuntimeError:
         raise
     except Exception as exc:  # pragma: no cover - depends on local Ray availability
@@ -2072,7 +2131,14 @@ def go_forth_and_multiply(
 
     parallel_mode = engine_norm == "ray" or (engine_norm != "thread" and max_workers > 1)
 
-    ray_cpu_target = max_workers if engine_norm == "ray" else 0
+    ray_cpu_target: int | None = max_workers if engine_norm == "ray" else None
+
+    if engine_norm == "ray" and RAY_DEBUG:
+        logger.info("CSC_RAY_DEBUG enabled. engine=ray, max_workers=%s", max_workers)
+        if "ray" in sys.modules:
+            logger.info("Ray already imported: %r", sys.modules.get("ray"))
+        else:
+            logger.info("Ray not yet imported at pipeline start.")
 
     first_run_detected = False
     existing_exports: list[tuple[str, Path, Path]] = []
