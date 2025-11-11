@@ -27,13 +27,27 @@ def _resolve_cpu_target(num_cpus: int | None) -> int:
 
 
 def init_ray(*, num_cpus: int | None = None, **ray_kwargs: Any):
-    """Initialise Ray with a default of eight CPUs unless overridden."""
+    """Initialize Ray with project defaults and disable memory monitoring."""
+
+    # --- Disable Ray's memory monitor and safety thresholds ---
+    # These settings intentionally disable Ray's internal memory protection so that
+    # tasks may continue running until the operating system or container enforces
+    # its own limits. Use with caution on limited-memory environments.
+    os.environ.setdefault("RAY_memory_monitor_refresh_ms", "0")
+    os.environ.setdefault("RAY_memory_usage_threshold", "1.0")
+    os.environ.setdefault("RAY_enable_object_store_memory_monitor", "0")
+
+    RAY_DEBUG = os.environ.get("CSC_RAY_DEBUG", "").lower() in {"1", "true", "yes"}
 
     ray = require_ray()
     if ray.is_initialized():
+        if RAY_DEBUG:
+            print("[init_ray] Memory monitor disabled. Ray already initialised.")
         return ray
 
     resolved = _resolve_cpu_target(num_cpus)
+    if RAY_DEBUG:
+        print(f"[init_ray] Memory monitor disabled. num_cpus={resolved}")
     source_root = Path(__file__).resolve().parents[1]
     project_root = Path(__file__).resolve().parents[2]
     existing_path = os.environ.get("PYTHONPATH")
