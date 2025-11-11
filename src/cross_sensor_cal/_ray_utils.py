@@ -39,6 +39,11 @@ def init_ray(*, num_cpus: int | None = None, **ray_kwargs: Any):
 
     RAY_DEBUG = os.environ.get("CSC_RAY_DEBUG", "").lower() in {"1", "true", "yes"}
 
+    if not os.environ.get("RAY_DISABLE_DASHBOARD"):
+        # Some environments have a broken Ray dashboard agent (grpc / port issues)
+        # which can kill the raylet. Disable the dashboard so Ray can still run tasks.
+        os.environ["RAY_DISABLE_DASHBOARD"] = "1"
+
     ray = require_ray()
     if ray.is_initialized():
         if RAY_DEBUG:
