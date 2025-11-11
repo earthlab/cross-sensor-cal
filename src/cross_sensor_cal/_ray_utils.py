@@ -89,13 +89,57 @@ def ray_map(
 
     ray = init_ray(num_cpus=num_cpus)
 
-    @ray.remote
+    # Import Ray exception types lazily so this module can be imported without Ray
+    # installed. ``require_ray`` in :func:`init_ray` ensures ``ray`` is available
+    # before these imports execute.
+    from ray.exceptions import LocalRayletDiedError, OutOfDiskError, RayError
+
+    @ray.remote(max_retries=0)
     def _task(arg: _T) -> _U:
         return func(arg)
 
-    items = list(iterable)
-    if not items:
-        return []
+    max_in_flight = max(1, _resolve_cpu_target(num_cpus))
+    items_iter = iter(iterable)
+    in_flight: list["ray.ObjectRef[_U]"] = []
+    results: list[_U] = []
 
-    futures = [_task.remote(item) for item in items]
-    return list(ray.get(futures))
+    try:
+        for _ in range(max_in_flight):
+            try:
+                next_item = next(items_iter)
+            except StopIteration:
+                break
+            in_flight.append(_task.remote(next_item))
+
+        while in_flight:
+            done, in_flight = ray.wait(in_flight, num_returns=1, timeout=None)
+            if not done:
+                continue
+
+            completed_ref = done[0]
+            results.append(ray.get(completed_ref))
+
+            try:
+                next_item = next(items_iter)
+            except StopIteration:
+                continue
+            in_flight.append(_task.remote(next_item))
+
+        return results
+    except OutOfDiskError as exc:  # pragma: no cover - depends on runtime environment
+        raise RuntimeError(
+            "Ray failed during execution because the local disk used for the object "
+            "store is full. Free space under the Ray temporary or spilling "
+            "directory, or rerun with a smaller 'max_workers' / 'parquet_chunk_size'."
+        ) from exc
+    except LocalRayletDiedError as exc:  # pragma: no cover - runtime/environmental
+        raise RuntimeError(
+            "Ray's local raylet process died during execution, often due to memory or "
+            "disk pressure. Check Ray logs and consider reducing parallelism via "
+            "'max_workers' or decreasing 'parquet_chunk_size'."
+        ) from exc
+    except RayError as exc:  # pragma: no cover - depends on Ray behaviour
+        raise RuntimeError(
+            "Ray reported an internal error during task execution. Review the Ray "
+            "logs for details and adjust resource usage if necessary."
+        ) from exc
