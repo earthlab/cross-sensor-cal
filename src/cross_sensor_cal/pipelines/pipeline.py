@@ -142,6 +142,7 @@ from cross_sensor_cal.sensor_panel_plots import (
     make_sensor_vs_neon_panels,
 )
 from cross_sensor_cal.utils import get_package_data_path
+from cross_sensor_cal.utils.memory import clean_memory
 from cross_sensor_cal.utils_checks import is_valid_json
 
 from ..envi_download import download_neon_file
@@ -1784,6 +1785,9 @@ def stage_convolve_all_sensors(
         logger=logger,
         ray_cpus=ray_cpus,
     )
+
+    clean_memory("parquet export")
+
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
     if parquet_outputs:
@@ -1886,6 +1890,8 @@ def process_one_flightline(
         parallel_mode=parallel_mode,
     )
 
+    clean_memory("ENVI export")
+
     flightline_dir = flight_paths.flight_dir.resolve()
     normalized = normalize_brdf_model_path(flightline_dir)
     if normalized:
@@ -1913,6 +1919,9 @@ def process_one_flightline(
         correction_json_path=correction_json_path,
         parallel_mode=parallel_mode,
     )
+
+    clean_memory("corrections")
+
     if not is_valid_envi_pair(corrected_img_path, corrected_hdr_path):
         raise RuntimeError(
             f"Corrected ENVI invalid for {flight_stem}: {corrected_img_path}"
@@ -1928,6 +1937,8 @@ def process_one_flightline(
         parallel_mode=parallel_mode,
         ray_cpus=ray_cpus,
     )
+
+    clean_memory("convolution")
 
     try:
         render_flightline_panel(Path(base_folder) / flight_stem, quick=True, save_json=True)
