@@ -461,6 +461,13 @@ def _write_parquet_chunks(
             if getattr(df_chunk, "empty", False):
                 continue
             table = pa.Table.from_pandas(df_chunk, preserve_index=False)
+            try:
+                from cross_sensor_cal.pipelines.pipeline import _to_canonical_table
+            except ImportError:  # pragma: no cover - defensive fallback
+                canonical = table
+            else:
+                canonical = _to_canonical_table(table)
+            table = canonical
             if writer is None:
                 writer = pq.ParquetWriter(tmp_path, table.schema)
             writer.write_table(table, row_group_size=row_group_size)

@@ -93,6 +93,19 @@ class NeonCube:
                 "Spectral wavelength and FWHM arrays do not share the same length."
             )
 
+        sun_zen = meta.get("to_sun_zenith")
+        self.to_sun_zenith = (
+            np.asarray(sun_zen, dtype=np.float32).reshape(-1)
+            if sun_zen is not None
+            else None
+        )
+        sensor_zen = meta.get("to_sensor_zenith")
+        self.to_sensor_zenith = (
+            np.asarray(sensor_zen, dtype=np.float32).reshape(-1)
+            if sensor_zen is not None
+            else None
+        )
+
         self.wavelength_units = str(meta.get("wavelength_units", "Unknown"))
         self.map_info_list = list(meta.get("map_info", []))
         self.projection_wkt = str(meta.get("projection", ""))
@@ -306,9 +319,9 @@ class NeonCube:
                 "Spectral wavelength metadata length does not match hyperspectral band count."
             )
 
-        fwhm: list[float]
+        fwhm: list[float] | None
         if self.fwhm is None:
-            fwhm = []
+            fwhm = None
         else:
             fwhm = [float(value) for value in np.asarray(self.fwhm).ravel().tolist()]
             if len(fwhm) != len(wavelengths):

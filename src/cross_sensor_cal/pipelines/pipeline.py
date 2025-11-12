@@ -80,13 +80,14 @@ from contextlib import contextmanager
 
 import numpy as np
 import h5py
+import pyarrow as pa
 
 from cross_sensor_cal.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
 from cross_sensor_cal.brightness_config import load_brightness_coefficients
-from cross_sensor_cal.io.neon_legacy import detect_legacy_neon_schema
+from cross_sensor_cal.io.neon_schema import resolve
 try:
     from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
 except ImportError:  # pragma: no cover - lightweight fallback for unit tests
@@ -178,6 +179,115 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
     logger.propagate = False
 # ---------------------------------------------------------------------
+
+
+CANONICAL_COLUMNS = [
+    "flightline_id",
+    "row",
+    "col",
+    "x",
+    "y",
+    "band",
+    "wavelength_nm",
+    "fwhm_nm",
+    "reflectance",
+]
+
+try:
+    CANONICAL_SCHEMA = pa.schema(
+        [
+            ("flightline_id", pa.string()),
+            ("row", pa.int32()),
+            ("col", pa.int32()),
+            ("x", pa.float64()),
+            ("y", pa.float64()),
+            ("band", pa.int32()),
+            ("wavelength_nm", pa.float32()),
+            ("fwhm_nm", pa.float32()),
+            ("reflectance", pa.float32()),
+        ]
+    )
+except AttributeError:  # pragma: no cover - pyarrow stub without schema support
+    CANONICAL_SCHEMA = None
+
+
+def _to_canonical_table(tbl: pa.Table) -> pa.Table:
+    """Rename and cast Parquet tables to the canonical schema."""
+
+    rename_map = {
+        "wavelength": "wavelength_nm",
+        "Wavelength": "wavelength_nm",
+        "FWHM": "fwhm_nm",
+        "fwhm": "fwhm_nm",
+        "to-sun_Zenith_Angle": "to_sun_zenith",
+        "to-sensor_Zenith_Angle": "to_sensor_zenith",
+        "to-sun_zenith_angle": "to_sun_zenith",
+        "to-sensor_zenith_angle": "to_sensor_zenith",
+    }
+
+    if hasattr(tbl, "rename_columns"):
+        for old, new in rename_map.items():
+            if old in tbl.column_names and new not in tbl.column_names:
+                new_names = [new if name == old else name for name in tbl.column_names]
+                tbl = tbl.rename_columns(new_names)
+
+        def _cast_float32(name: str) -> None:
+            nonlocal tbl
+            if name not in tbl.column_names:
+                return
+            idx = tbl.schema.get_field_index(name)
+            column = tbl.column(idx)
+            if not pa.types.is_float32(column.type):
+                column = column.cast(pa.float32())
+            tbl = tbl.set_column(idx, name, column)
+
+        for required in ("wavelength_nm", "reflectance"):
+            _cast_float32(required)
+
+        if "fwhm_nm" in tbl.column_names:
+            _cast_float32("fwhm_nm")
+        else:
+            length = len(tbl)
+            if CANONICAL_SCHEMA is not None and hasattr(pa, "nulls"):
+                filler = pa.nulls(length, type=pa.float32())
+            else:  # pragma: no cover - pyarrow stub fallback
+                filler = pa.array([None] * length)
+            tbl = tbl.append_column("fwhm_nm", filler)
+
+        canonical_names = (
+            list(CANONICAL_SCHEMA.names) if CANONICAL_SCHEMA is not None else list(CANONICAL_COLUMNS)
+        )
+        canonical = [name for name in canonical_names if name in tbl.column_names]
+        extras = [name for name in tbl.column_names if name not in canonical]
+        if canonical:
+            tbl = tbl.select(canonical + extras)
+
+        return tbl
+
+    # Fallback for pyarrow stubs used in unit tests
+    mapping = dict(tbl)
+    for old, new in rename_map.items():
+        if old in mapping and new not in mapping:
+            mapping[new] = mapping.pop(old)
+
+    if "fwhm_nm" not in mapping:
+        try:
+            sample_length = len(next(iter(mapping.values())))
+        except StopIteration:
+            sample_length = 0
+        mapping["fwhm_nm"] = [None] * sample_length
+
+    canonical = [name for name in CANONICAL_COLUMNS if name in mapping]
+    extras = [name for name in mapping if name not in canonical]
+    ordered = {name: mapping[name] for name in canonical + extras}
+
+    if hasattr(tbl, "clear") and hasattr(tbl, "update"):
+        tbl.clear()
+        tbl.update(ordered)
+        return tbl
+
+    return ordered
+
 
 # --- Silence Ray’s stderr warnings BEFORE any potential imports of ray ---
 # Send Ray logs to files (not stderr), reduce backend log level, disable usage pings.
@@ -1789,7 +1899,12 @@ def stage_convolve_all_sensors(
     if h5_path and h5_path.exists():
         try:
             with h5py.File(h5_path, "r") as h5_file:
-                _is_legacy = detect_legacy_neon_schema(h5_file)
+                nr = resolve(h5_file)
+                _is_legacy = nr.is_legacy
+                logger.info(
+                    "📜 NEON schema: %s",
+                    "legacy(pre-2021)" if _is_legacy else "modern(2021+)",
+                )
         except Exception:  # pragma: no cover - legacy detection best effort
             _is_legacy = False
 
