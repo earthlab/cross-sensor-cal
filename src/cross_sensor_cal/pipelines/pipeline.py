@@ -86,7 +86,13 @@ from cross_sensor_cal.brdf_topo import (
     build_correction_parameters_dict,
 )
 from cross_sensor_cal.brightness_config import load_brightness_coefficients
-from cross_sensor_cal.io.neon_legacy import detect_legacy_neon_schema
+from cross_sensor_cal.io.neon_schema import (
+    canonical_vectors,
+    compact_ancillary,
+    iter_reflectance_rows,
+    NeonResolved,
+    resolve,
+)
 try:
     from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
 except ImportError:  # pragma: no cover - lightweight fallback for unit tests
@@ -451,6 +457,211 @@ def is_valid_envi_pair(img_path: Path, hdr_path: Path) -> bool:
         return False
 
 
+def _broadcast_angle(
+    values: Optional[np.ndarray],
+    *,
+    total_rows: int,
+    row_start: int,
+    row_stop: int,
+    cols: int,
+    valid_mask: np.ndarray,
+) -> Optional[np.ndarray]:
+    if values is None:
+        return None
+    arr = np.asarray(values, dtype=np.float32).reshape(-1)
+    if arr.size == 0:
+        return None
+    if arr.size == 1:
+        return np.full(valid_mask.sum(), arr[0], dtype=np.float32)
+    if arr.size == total_rows:
+        per_row = arr[row_start:row_stop].astype(np.float32, copy=False)
+        expanded = np.repeat(per_row, cols)
+        return expanded[valid_mask]
+    return np.full(valid_mask.sum(), arr[0], dtype=np.float32)
+
+
+def _build_arrow_table_from_slab(
+    slab: np.ndarray,
+    *,
+    row_start: int,
+    row_stop: int,
+    wavelengths_nm: np.ndarray,
+    to_sun_zenith: Optional[np.ndarray],
+    to_sensor_zenith: Optional[np.ndarray],
+    metadata: dict[str, Any],
+    source_image: str,
+) -> "pa.Table":
+    import pandas as pd
+    import pyarrow as pa
+
+    rows = slab.shape[0]
+    cols = slab.shape[1]
+    band_count = slab.shape[2]
+    pixels = rows * cols
+
+    reshaped = slab.reshape(pixels, band_count)
+    mask = ~np.isfinite(reshaped).all(axis=1)
+    no_data = metadata.get("no_data")
+    if no_data is not None:
+        mask |= np.any(reshaped == no_data, axis=1)
+    valid_mask = ~mask
+    if not np.any(valid_mask):
+        return pa.Table.from_arrays([], [])
+
+    data = reshaped[valid_mask].astype(np.float32, copy=False)
+
+    row_indices = np.repeat(np.arange(row_start, row_stop, dtype=np.int32), cols)[valid_mask]
+    col_indices = np.tile(np.arange(cols, dtype=np.int32), rows)[valid_mask]
+    pixel_id = row_indices.astype(np.int64) * metadata.get("samples", cols) + col_indices.astype(
+        np.int64
+    )
+
+    wl_ints = [int(round(float(w))) for w in wavelengths_nm]
+    spectral_columns = {
+        f"wl{wl:04d}": data[:, idx].astype(np.float32, copy=False)
+        for idx, wl in enumerate(wl_ints)
+    }
+
+    df_chunk = pd.DataFrame(spectral_columns, dtype=np.float32)
+    df_chunk["row"] = row_indices.astype(np.int32, copy=False)
+    df_chunk["col"] = col_indices.astype(np.int32, copy=False)
+    df_chunk["pixel_id"] = pixel_id
+    df_chunk["source_image"] = np.full(df_chunk.shape[0], source_image, dtype=object)
+
+    transform = metadata.get("transform")
+    if transform is not None:
+        ulx, pixel_x, _, uly, _, pixel_y = transform
+        xs = col_indices.astype(np.float64) * float(pixel_x) + float(ulx) + float(pixel_x) / 2.0
+        ys = row_indices.astype(np.float64) * float(pixel_y) + float(uly) + float(pixel_y) / 2.0
+        df_chunk["x"] = xs
+        df_chunk["y"] = ys
+        projection = metadata.get("projection") or ""
+        if projection:
+            try:
+                from pyproj import CRS, Transformer
+
+                crs = CRS.from_wkt(projection)
+                try:
+                    epsg = crs.to_epsg()
+                except Exception:
+                    epsg = None
+                if epsg is not None:
+                    df_chunk["epsg"] = np.full(df_chunk.shape[0], int(epsg), dtype=np.int32)
+                    df_chunk["crs"] = np.full(df_chunk.shape[0], "", dtype=object)
+                else:
+                    df_chunk["epsg"] = np.full(df_chunk.shape[0], np.nan, dtype=float)
+                    df_chunk["crs"] = np.full(df_chunk.shape[0], crs.to_wkt(), dtype=object)
+                transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+                lon, lat = transformer.transform(xs, ys)
+                df_chunk["lon"] = lon
+                df_chunk["lat"] = lat
+            except Exception:
+                df_chunk["epsg"] = np.full(df_chunk.shape[0], np.nan, dtype=float)
+                df_chunk["crs"] = np.full(
+                    df_chunk.shape[0], metadata.get("projection", ""), dtype=object
+                )
+    else:
+        df_chunk["epsg"] = np.full(df_chunk.shape[0], np.nan, dtype=float)
+        df_chunk["crs"] = np.full(df_chunk.shape[0], metadata.get("projection", ""), dtype=object)
+
+    total_rows = metadata.get("lines", slab.shape[0])
+    sun_vals = _broadcast_angle(
+        to_sun_zenith,
+        total_rows=total_rows,
+        row_start=row_start,
+        row_stop=row_stop,
+        cols=metadata.get("samples", cols),
+        valid_mask=valid_mask,
+    )
+    if sun_vals is not None:
+        df_chunk["to_sun_zenith"] = sun_vals
+
+    sensor_vals = _broadcast_angle(
+        to_sensor_zenith,
+        total_rows=total_rows,
+        row_start=row_start,
+        row_stop=row_stop,
+        cols=metadata.get("samples", cols),
+        valid_mask=valid_mask,
+    )
+    if sensor_vals is not None:
+        df_chunk["to_sensor_zenith"] = sensor_vals
+
+    table_cls = getattr(pa, "Table", None)
+    if table_cls is None or not hasattr(table_cls, "from_pandas"):
+        class _MinimalTable:
+            def __init__(self, frame):
+                self._frame = frame
+                self.num_rows = len(frame)
+
+        return _MinimalTable(df_chunk)
+
+    table = table_cls.from_pandas(df_chunk, preserve_index=False)
+    return table
+
+
+def _write_parquet_stream(out_path: Path, table_iter, *, row_group_size: int) -> Path:
+    import pyarrow.parquet as pq
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    writer = None
+    try:
+        for tbl in table_iter:
+            if tbl is None:
+                continue
+            if tbl.num_rows == 0:
+                continue
+            tbl = to_canonical_table(tbl)
+            if writer is None:
+                writer = pq.ParquetWriter(out_path, tbl.schema, compression="zstd")
+            writer.write_table(tbl, row_group_size=row_group_size)
+    finally:
+        if writer is not None:
+            writer.close()
+
+    return out_path
+
+
+def _sensor_to_parquet_legacy_safe(
+    nr: NeonResolved,
+    out_path: Path,
+    *,
+    effective_parquet_chunk_size: int,
+    row_chunk: int,
+    source_image: str,
+    wavelengths_nm: np.ndarray,
+    to_sun_zenith: Optional[np.ndarray],
+    to_sensor_zenith: Optional[np.ndarray],
+) -> Path:
+    metadata = dict(nr.metadata)
+
+    def _iter_tables():
+        for r0, r1, slab in iter_reflectance_rows(nr.ds_reflectance, row_chunk=row_chunk):
+            table = _build_arrow_table_from_slab(
+                slab,
+                row_start=r0,
+                row_stop=r1,
+                wavelengths_nm=wavelengths_nm,
+                to_sun_zenith=to_sun_zenith,
+                to_sensor_zenith=to_sensor_zenith,
+                metadata=metadata,
+                source_image=source_image,
+            )
+            if table.num_rows == 0:
+                continue
+            yield table
+
+    return _write_parquet_stream(
+        out_path,
+        _iter_tables(),
+        row_group_size=effective_parquet_chunk_size,
+    )
+
+
+
+
 def _export_parquet_stage(
     *,
     base_folder: Path,
@@ -459,16 +670,12 @@ def _export_parquet_stage(
     parquet_chunk_size: int,
     logger,
     ray_cpus: int | None,
+    use_ray_for_parquet: bool,
+    legacy_context: NeonResolved | None = None,
+    legacy_row_chunk: int = 128,
 ) -> list[Path]:
-    """
-    Stage: Parquet export for ENVI reflectance products.
+    """Stage: Parquet export for ENVI reflectance products."""
 
-    Returns the list of Parquet sidecars that exist (either newly written or
-    previously present and validated).
-    """
-
-    # When ``ray_cpus`` is provided we parallelise Parquet creation per ENVI cube
-    # using :func:`ray_map`, falling back to serial execution otherwise.
     from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
@@ -505,27 +712,51 @@ def _export_parquet_stage(
 
     parquet_outputs: list[Path] = []
 
-    def _parquet_worker(img_path_str: str) -> str | None:
-        from pathlib import Path as _Path
-        import logging as _logging
-
-        from cross_sensor_cal.parquet_export import ensure_parquet_for_envi as _ensure_parquet
-
-        local_logger = _logging.getLogger(__name__)
-        path = _Path(img_path_str)
-        pq_path = _ensure_parquet(
-            path,
-            local_logger,
-            chunk_size=parquet_chunk_size,
+    if legacy_context is not None and img_paths:
+        wavelengths_nm, _, sun_raw, sen_raw = canonical_vectors(legacy_context)
+        to_sun_zenith, to_sensor_zenith = compact_ancillary(sun_raw, sen_raw)
+        logger.info(
+            "🪵 Legacy chunking row_chunk=%s rows | row_group_size=%s",
+            legacy_row_chunk,
+            parquet_chunk_size,
         )
-        return str(pq_path) if pq_path is not None else None
-
-    if img_paths:
+        for img_path in img_paths:
+            out_path = img_path.with_suffix(".parquet")
+            pq_path = _sensor_to_parquet_legacy_safe(
+                legacy_context,
+                out_path,
+                effective_parquet_chunk_size=parquet_chunk_size,
+                row_chunk=legacy_row_chunk,
+                source_image=img_path.name,
+                wavelengths_nm=wavelengths_nm,
+                to_sun_zenith=to_sun_zenith,
+                to_sensor_zenith=to_sensor_zenith,
+            )
+            parquet_outputs.append(Path(pq_path))
+    elif img_paths:
+        if not use_ray_for_parquet:
+            ray_cpus = None
         debug_log = getattr(logger, "debug", None)
         if callable(debug_log):
             debug_log("Writing Parquet with row_group_size=%s", parquet_chunk_size)
         else:
             logger.info("Writing Parquet with row_group_size=%s", parquet_chunk_size)
+
+        def _parquet_worker(img_path_str: str) -> str | None:
+            from pathlib import Path as _Path
+            import logging as _logging
+
+            from cross_sensor_cal.parquet_export import ensure_parquet_for_envi as _ensure_parquet
+
+            local_logger = _logging.getLogger(__name__)
+            path = _Path(img_path_str)
+            pq_path = _ensure_parquet(
+                path,
+                local_logger,
+                chunk_size=parquet_chunk_size,
+            )
+            return str(pq_path) if pq_path is not None else None
+
         if ray_cpus is not None and len(img_paths) > 1:
             if RAY_DEBUG:
                 logger.info(
@@ -1777,6 +2008,7 @@ def stage_convolve_all_sensors(
             )
             failed.append(sensor_name)
 
+
     _parquet_chunk_size = locals().get("parquet_chunk_size", 50_000)
 
     raw_h5 = paths.get("h5")
@@ -1785,34 +2017,76 @@ def stage_convolve_all_sensors(
         h5_path = raw_h5
     elif isinstance(raw_h5, str) and raw_h5.strip():
         h5_path = Path(raw_h5)
+
+    effective_parquet_chunk_size = _parquet_chunk_size
+    if effective_parquet_chunk_size is None:
+        effective_parquet_chunk_size = 50_000
+
+    use_ray_for_parquet = ray_cpus is not None
+    legacy_row_chunk = 128
+    parquet_outputs: list[Path] = []
+    ran_parquet_stage = False
     _is_legacy = False
+
     if h5_path and h5_path.exists():
         try:
             with h5py.File(h5_path, "r") as h5_file:
-                _is_legacy = detect_legacy_neon_schema(h5_file)
-        except Exception:  # pragma: no cover - legacy detection best effort
+                nr_context = resolve(h5_file)
+                _is_legacy = nr_context.is_legacy
+                logger.info(
+                    "📜 NEON schema: %s",
+                    "legacy(pre-2021)" if _is_legacy else "modern(2021+)",
+                )
+                if _is_legacy and (
+                    effective_parquet_chunk_size is None
+                    or effective_parquet_chunk_size > 25_000
+                ):
+                    effective_parquet_chunk_size = 15_000
+                use_ray_for_parquet = (ray_cpus is not None) and (not _is_legacy)
+                logger.info(
+                    "🧱 Parquet row group size = %s (legacy=%s)",
+                    effective_parquet_chunk_size,
+                    _is_legacy,
+                )
+                parquet_outputs = _export_parquet_stage(
+                    base_folder=base_folder,
+                    product_code=product_code,
+                    flight_stem=flight_stem,
+                    parquet_chunk_size=effective_parquet_chunk_size,
+                    logger=logger,
+                    ray_cpus=ray_cpus if use_ray_for_parquet else None,
+                    use_ray_for_parquet=use_ray_for_parquet,
+                    legacy_context=nr_context if _is_legacy else None,
+                    legacy_row_chunk=legacy_row_chunk,
+                )
+                ran_parquet_stage = True
+        except Exception:  # pragma: no cover - best effort legacy resolve
+            logger.warning(
+                "⚠️ Unable to resolve NEON schema from %s; falling back to modern export",
+                h5_path,
+            )
+            parquet_outputs = []
             _is_legacy = False
 
-    effective_parquet_chunk_size = _parquet_chunk_size
-    if _is_legacy and (
-        effective_parquet_chunk_size is None or effective_parquet_chunk_size > 50_000
-    ):
-        effective_parquet_chunk_size = 25_000
-
-    logger.info(
-        "🧱 Parquet row group size = %s (legacy=%s)",
-        effective_parquet_chunk_size,
-        _is_legacy,
-    )
-
-    parquet_outputs = _export_parquet_stage(
-        base_folder=base_folder,
-        product_code=product_code,
-        flight_stem=flight_stem,
-        parquet_chunk_size=effective_parquet_chunk_size,
-        logger=logger,
-        ray_cpus=ray_cpus,
-    )
+    if not ran_parquet_stage:
+        if effective_parquet_chunk_size is None:
+            effective_parquet_chunk_size = 50_000
+        logger.info(
+            "🧱 Parquet row group size = %s (legacy=%s)",
+            effective_parquet_chunk_size,
+            _is_legacy,
+        )
+        parquet_outputs = _export_parquet_stage(
+            base_folder=base_folder,
+            product_code=product_code,
+            flight_stem=flight_stem,
+            parquet_chunk_size=effective_parquet_chunk_size,
+            logger=logger,
+            ray_cpus=ray_cpus if use_ray_for_parquet else None,
+            use_ray_for_parquet=use_ray_for_parquet,
+            legacy_context=None,
+            legacy_row_chunk=legacy_row_chunk,
+        )
 
     clean_memory("parquet export")
 
