@@ -79,12 +79,14 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from contextlib import contextmanager
 
 import numpy as np
+import h5py
 
 from cross_sensor_cal.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
 from cross_sensor_cal.brightness_config import load_brightness_coefficients
+from cross_sensor_cal.io.neon_legacy import detect_legacy_neon_schema
 try:
     from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
 except ImportError:  # pragma: no cover - lightweight fallback for unit tests
@@ -1777,11 +1779,37 @@ def stage_convolve_all_sensors(
 
     _parquet_chunk_size = locals().get("parquet_chunk_size", 50_000)
 
+    raw_h5 = paths.get("h5")
+    h5_path: Path | None = None
+    if isinstance(raw_h5, Path):
+        h5_path = raw_h5
+    elif isinstance(raw_h5, str) and raw_h5.strip():
+        h5_path = Path(raw_h5)
+    _is_legacy = False
+    if h5_path and h5_path.exists():
+        try:
+            with h5py.File(h5_path, "r") as h5_file:
+                _is_legacy = detect_legacy_neon_schema(h5_file)
+        except Exception:  # pragma: no cover - legacy detection best effort
+            _is_legacy = False
+
+    effective_parquet_chunk_size = _parquet_chunk_size
+    if _is_legacy and (
+        effective_parquet_chunk_size is None or effective_parquet_chunk_size > 50_000
+    ):
+        effective_parquet_chunk_size = 25_000
+
+    logger.info(
+        "🧱 Parquet row group size = %s (legacy=%s)",
+        effective_parquet_chunk_size,
+        _is_legacy,
+    )
+
     parquet_outputs = _export_parquet_stage(
         base_folder=base_folder,
         product_code=product_code,
         flight_stem=flight_stem,
-        parquet_chunk_size=_parquet_chunk_size,
+        parquet_chunk_size=effective_parquet_chunk_size,
         logger=logger,
         ray_cpus=ray_cpus,
     )

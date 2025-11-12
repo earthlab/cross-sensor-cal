@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import re
 from typing import Any, Dict, Iterable, Optional
@@ -9,12 +10,16 @@ from typing import Any, Dict, Iterable, Optional
 import h5py
 import numpy as np
 
+from .neon_legacy import NeonPaths, detect_legacy_neon_schema, resolve_neon_paths
+
 __all__ = [
     "is_pre_2021",
     "read_neon_cube",
     "_prepare_map_info",
     "_map_info_core",
 ]
+
+logger = logging.getLogger(__name__)
 
 _DATE_RE = re.compile(r"_([0-9]{8})_")
 
@@ -152,6 +157,26 @@ def _metadata_root_from_path(dataset_path: str) -> Optional[str]:
     return None
 
 
+def _with_prefix(base_key: Optional[str], paths: NeonPaths) -> NeonPaths:
+    if not base_key:
+        return paths
+
+    prefix = f"{base_key}/"
+
+    def _prefix(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return prefix + value
+
+    return NeonPaths(
+        reflectance=_prefix(paths.reflectance) or paths.reflectance,
+        wavelength=_prefix(paths.wavelength) or paths.wavelength,
+        fwhm=_prefix(paths.fwhm) if paths.fwhm else None,
+        solar_zenith=_prefix(paths.solar_zenith) if paths.solar_zenith else None,
+        sensor_zenith=_prefix(paths.sensor_zenith) if paths.sensor_zenith else None,
+    )
+
+
 def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     base_key: Optional[str] = None
     for key in h5_file.keys():
@@ -159,27 +184,46 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         if candidate in h5_file:
             base_key = key
             break
-    if base_key is None:
+
+    if base_key is None and "Reflectance/Reflectance_Data" not in h5_file:
         raise KeyError("Could not locate NEON reflectance dataset within the HDF5 file.")
 
-    reflectance_group = h5_file[f"{base_key}/Reflectance"]
-    data_ds = reflectance_group["Reflectance_Data"]
-    data = np.asarray(data_ds[()], dtype=np.float32)
+    base_group: h5py.Group | h5py.File
+    if base_key is None:
+        base_group = h5_file
+    else:
+        base_group = h5_file[base_key]
+
+    is_legacy = detect_legacy_neon_schema(base_group)
+    resolved_paths = resolve_neon_paths(base_group)
+    paths = _with_prefix(base_key, resolved_paths)
+
+    logger.info(
+        "📜 NEON schema: %s",
+        "legacy(pre-2021)" if is_legacy else "modern(2021+)",
+    )
+
+    reflectance_ds = h5_file[paths.reflectance]
+    data = np.asarray(reflectance_ds[()], dtype=np.float32)
+
+    reflectance_group = reflectance_ds.parent
+    if not isinstance(reflectance_group, h5py.Group):
+        raise KeyError("Reflectance dataset is not within a group as expected.")
 
     metadata_group = reflectance_group.get("Metadata")
     if metadata_group is None:
         raise KeyError("Missing 'Metadata' group within NEON reflectance file.")
 
-    spectral_group = metadata_group.get("Spectral_Data")
-    if spectral_group is None:
+    wavelength_ds = h5_file[paths.wavelength]
+    spectral_group = wavelength_ds.parent
+    if not isinstance(spectral_group, h5py.Group):
         raise KeyError("Missing 'Spectral_Data' group within NEON reflectance metadata.")
 
-    wavelength_ds = spectral_group.get("Wavelength")
-    if wavelength_ds is None:
-        raise KeyError("NEON file missing spectral 'Wavelength' dataset.")
-
     wavelengths = np.asarray(wavelength_ds[()], dtype=np.float32).reshape(-1)
-    fwhm_ds = spectral_group.get("FWHM")
+
+    fwhm_ds = None
+    if paths.fwhm and paths.fwhm in h5_file:
+        fwhm_ds = h5_file[paths.fwhm]
     fwhm = np.asarray(fwhm_ds[()], dtype=np.float32).reshape(-1) if fwhm_ds is not None else None
     wavelength_units = _extract_units(wavelength_ds, spectral_group) or "Unknown"
 
@@ -206,7 +250,7 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         yres = -abs(pixel_y)
         transform = (ulx, pixel_x, 0.0, uly, 0.0, yres)
 
-    no_data = _extract_no_data(data_ds)
+    no_data = _extract_no_data(reflectance_ds)
     cube = _orient_cube(data, len(wavelengths))
 
     meta: Dict[str, Any] = {
