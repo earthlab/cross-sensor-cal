@@ -8,6 +8,7 @@ heavy geospatial dependencies. Expensive libraries (``rasterio``, ``pandas``,
 
 from __future__ import annotations
 
+import inspect
 from contextlib import suppress
 from pathlib import Path
 from typing import NamedTuple
@@ -379,7 +380,7 @@ def read_envi_in_chunks(
     envi_hdr: Path,
     parquet_name: str,
     *,
-    chunk_size: int = 2048,
+    chunk_size: int = 50_000,
 ):
     """Yield DataFrame chunks from an ENVI cube along with shared metadata."""
 
@@ -441,6 +442,7 @@ def _write_parquet_chunks(
     stage_key: str,
     *,
     context: dict[str, object] | None = None,
+    row_group_size: int | None = None,
 ) -> None:
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -461,7 +463,7 @@ def _write_parquet_chunks(
             table = pa.Table.from_pandas(df_chunk, preserve_index=False)
             if writer is None:
                 writer = pq.ParquetWriter(tmp_path, table.schema)
-            writer.write_table(table)
+            writer.write_table(table, row_group_size=row_group_size)
             wrote_rows = True
     finally:
         if writer is not None:
@@ -471,7 +473,7 @@ def _write_parquet_chunks(
         ctx = context or getattr(chunk_iter, "context", {})
         band_wavelengths = list(ctx.get("band_wavelengths") or [])
         empty_table = _build_empty_parquet_table(stage_key, band_wavelengths)
-        pq.write_table(empty_table, tmp_path)
+        pq.write_table(empty_table, tmp_path, row_group_size=row_group_size)
 
     tmp_path.replace(parquet_path)
 
@@ -522,7 +524,7 @@ def build_parquet_from_envi(
     envi_img: Path,
     envi_hdr: Path,
     parquet_path: Path,
-    chunk_size: int = 2048,
+    chunk_size: int = 50_000,
     *,
     num_cpus: int | None = None,
 ) -> None:
@@ -540,7 +542,15 @@ def build_parquet_from_envi(
             parquet_name,
             chunk_size=chunk_size,
         )
-        _write_parquet_chunks(parquet_path, chunk_iter, stage_key)
+        write_kwargs: dict[str, object] = {}
+        if hasattr(chunk_iter, "context"):
+            write_kwargs["context"] = getattr(chunk_iter, "context")
+
+        parameters = inspect.signature(_write_parquet_chunks).parameters
+        if "row_group_size" in parameters:
+            write_kwargs["row_group_size"] = chunk_size
+
+        _write_parquet_chunks(parquet_path, chunk_iter, stage_key, **write_kwargs)
         return
 
     context, jobs, shared = _plan_chunk_jobs(
@@ -563,11 +573,16 @@ def build_parquet_from_envi(
         df for df in chunk_tables if getattr(df, "empty", False) is False
     )
 
+    write_kwargs: dict[str, object] = {"context": shared}
+    parameters = inspect.signature(_write_parquet_chunks).parameters
+    if "row_group_size" in parameters:
+        write_kwargs["row_group_size"] = chunk_size
+
     _write_parquet_chunks(
         parquet_path,
         filtered_tables,
         stage_key,
-        context=shared,
+        **write_kwargs,
     )
 
 
@@ -576,7 +591,7 @@ def ensure_parquet_from_envi(
     envi_hdr: Path,
     parquet_path: Path,
     *,
-    chunk_size: int = 2048,
+    chunk_size: int = 50_000,
     num_cpus: int | None = None,
 ) -> Path:
     import pyarrow.parquet as pq

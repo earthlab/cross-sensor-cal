@@ -61,8 +61,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--parquet-chunk-size",
         type=int,
-        default=2048,
-        help="Row chunk size (in pixels) used during Parquet export to bound memory usage.",
+        default=50_000,
+        help="Row group size (rows per chunk) used during Parquet export to bound memory usage.",
     )
     parser.add_argument(
         "--engine",
