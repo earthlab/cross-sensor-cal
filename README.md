@@ -122,6 +122,7 @@ This automatically:
 - Converts each cube to ENVI with per-tile progress updates.
 - Builds BRDF + topo correction JSON.
 - Applies corrections, performs cross-sensor convolution, and exports Parquet tables.
+- Automatically clears memory between major steps to prevent Ray OOM crashes.
 - Writes every derived product into a per-flightline subfolder while leaving the raw
   `.h5` next to it for easy cleanup.
 
