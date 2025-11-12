@@ -91,6 +91,7 @@
   "naming_rule": "<prefix>_merged_pixel_extraction.parquet",
   "stages_found": [
     "Ray Parquet export for %s: %d ENVI cubes (num_cpus=%s)",
+    "Writing Parquet with row_group_size=%s",
     "[merge] \u26a0\ufe0f QA panel after merge failed for {prefix}: {e}",
     "[merge] \ud83d\uddbc\ufe0f  QA panel \u2192 {out_png_path} ",
     "[{flight_stem}] \u2b07\ufe0f Download already complete \u2014 reusing existing files ({h5_path.name})",
@@ -121,7 +122,8 @@
     "\ud83c\udfaf Convolving corrected reflectance for %s",
     "\ud83d\udccd Preparing ENVI export at: {raw_img_path.name} / {raw_hdr_path.name}",
     "\ud83d\udce6 No existing ENVI export detected \u2014 creating a new one from source data {h5_path.name}",
-    "\ud83d\udce6 Parquet export for %s ..."
+    "\ud83d\udce6 Parquet export for %s ...",
+    "\ud83e\uddf1 Using Parquet row group size of %s rows"
   ],
   "entry_points": {
     "cscal-download": "cross_sensor_cal.cli:download_main",
