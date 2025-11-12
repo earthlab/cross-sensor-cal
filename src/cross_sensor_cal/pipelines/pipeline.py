@@ -518,6 +518,11 @@ def _export_parquet_stage(
         return str(pq_path) if pq_path is not None else None
 
     if img_paths:
+        debug_log = getattr(logger, "debug", None)
+        if callable(debug_log):
+            debug_log("Writing Parquet with row_group_size=%s", parquet_chunk_size)
+        else:
+            logger.info("Writing Parquet with row_group_size=%s", parquet_chunk_size)
         if ray_cpus is not None and len(img_paths) > 1:
             if RAY_DEBUG:
                 logger.info(
@@ -1769,7 +1774,7 @@ def stage_convolve_all_sensors(
             )
             failed.append(sensor_name)
 
-    _parquet_chunk_size = locals().get("parquet_chunk_size", 2048)
+    _parquet_chunk_size = locals().get("parquet_chunk_size", 50_000)
 
     parquet_outputs = _export_parquet_stage(
         base_folder=base_folder,
@@ -1845,7 +1850,7 @@ def process_one_flightline(
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
     parallel_mode: bool = False,
-    parquet_chunk_size: int = 2048,
+    parquet_chunk_size: int = 50_000,
     ray_cpus: int | None = None,
 ):
     """Run the structured, skip-aware workflow for a single flightline.
@@ -2100,7 +2105,7 @@ def go_forth_and_multiply(
     resample_method: str | None = "convolution",
     brightness_offset: float | None = None,
     max_workers: int = 8,
-    parquet_chunk_size: int = 2048,
+    parquet_chunk_size: int = 50_000,
     engine: Literal["thread", "process", "ray"] = "ray",
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
@@ -2190,6 +2195,8 @@ def go_forth_and_multiply(
                 existing_sensor_products.append((stem, sensor_name, out_img, out_hdr))
             if first_run_detected:
                 break
+
+    logger.info("🧱 Using Parquet row group size of %s rows", parquet_chunk_size)
 
     if first_run_detected:
         logger.info(
