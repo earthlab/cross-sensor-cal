@@ -159,9 +159,8 @@ def build_envi_header_text(header_dict: Dict) -> str:
     lines.append(f"wavelength = {_format_envi_list(wavelength)}")
 
     fwhm = header_dict.get("fwhm")
-    if fwhm is None:
-        raise KeyError("header_dict must include 'fwhm'")
-    lines.append(f"fwhm = {_format_envi_list(fwhm)}")
+    if fwhm is not None:
+        lines.append(f"fwhm = {_format_envi_list(fwhm)}")
 
     wavelength_units = header_dict.get("wavelength units")
     if wavelength_units is None:

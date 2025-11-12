@@ -92,6 +92,25 @@ def build_correction_parameters_dict(
             "max": max_val,
         }
 
+    wavelength_nm = np.asarray(cube.wavelengths, dtype=np.float32).reshape(-1)
+    fwhm_nm = (
+        np.asarray(cube.fwhm, dtype=np.float32).reshape(-1)
+        if cube.fwhm is not None
+        else None
+    )
+
+    def _mean_angle(array: np.ndarray | None) -> float | None:
+        if array is None:
+            return None
+        arr = np.asarray(array, dtype=np.float32).reshape(-1)
+        if arr.size == 0:
+            return None
+        mean_val = float(np.nanmean(arr.astype(np.float64)))
+        return None if np.isnan(mean_val) else mean_val
+
+    sun_mean = _mean_angle(getattr(cube, "to_sun_zenith", None))
+    sensor_mean = _mean_angle(getattr(cube, "to_sensor_zenith", None))
+
     return {
         "base_key": cube.base_key,
         "stem": corrected_stem,
@@ -104,6 +123,10 @@ def build_correction_parameters_dict(
         "coefficients_path": str(coeff_path.resolve()),
         "geometry": geometry_stats,
         "notes": "generated before BRDF/topo correction",
+        "wavelength_nm": wavelength_nm.tolist(),
+        "fwhm_nm": fwhm_nm.tolist() if fwhm_nm is not None else None,
+        "to_sun_zenith": sun_mean,
+        "to_sensor_zenith": sensor_mean,
     }
 
 

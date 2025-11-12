@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, Optional
 import h5py
 import numpy as np
 
-from .neon_legacy import NeonPaths, detect_legacy_neon_schema, resolve_neon_paths
+from .neon_schema import canonical_vectors, resolve
 
 __all__ = [
     "is_pre_2021",
@@ -157,26 +157,6 @@ def _metadata_root_from_path(dataset_path: str) -> Optional[str]:
     return None
 
 
-def _with_prefix(base_key: Optional[str], paths: NeonPaths) -> NeonPaths:
-    if not base_key:
-        return paths
-
-    prefix = f"{base_key}/"
-
-    def _prefix(value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        return prefix + value
-
-    return NeonPaths(
-        reflectance=_prefix(paths.reflectance) or paths.reflectance,
-        wavelength=_prefix(paths.wavelength) or paths.wavelength,
-        fwhm=_prefix(paths.fwhm) if paths.fwhm else None,
-        solar_zenith=_prefix(paths.solar_zenith) if paths.solar_zenith else None,
-        sensor_zenith=_prefix(paths.sensor_zenith) if paths.sensor_zenith else None,
-    )
-
-
 def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     base_key: Optional[str] = None
     for key in h5_file.keys():
@@ -194,17 +174,17 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
     else:
         base_group = h5_file[base_key]
 
-    is_legacy = detect_legacy_neon_schema(base_group)
-    resolved_paths = resolve_neon_paths(base_group)
-    paths = _with_prefix(base_key, resolved_paths)
-
-    logger.info(
-        "📜 NEON schema: %s",
-        "legacy(pre-2021)" if is_legacy else "modern(2021+)",
-    )
-
-    reflectance_ds = h5_file[paths.reflectance]
+    resolved = resolve(base_group)
+    reflectance_ds = resolved.ds_reflectance
     data = np.asarray(reflectance_ds[()], dtype=np.float32)
+
+    wavelength_nm, fwhm_nm, to_sun_zenith, to_sensor_zenith = canonical_vectors(resolved)
+    wavelengths = np.asarray(wavelength_nm, dtype=np.float32).reshape(-1)
+    fwhm = (
+        np.asarray(fwhm_nm, dtype=np.float32).reshape(-1)
+        if fwhm_nm is not None
+        else None
+    )
 
     reflectance_group = reflectance_ds.parent
     if not isinstance(reflectance_group, h5py.Group):
@@ -214,17 +194,10 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
     if metadata_group is None:
         raise KeyError("Missing 'Metadata' group within NEON reflectance file.")
 
-    wavelength_ds = h5_file[paths.wavelength]
+    wavelength_ds = resolved.ds_wavelength
     spectral_group = wavelength_ds.parent
     if not isinstance(spectral_group, h5py.Group):
         raise KeyError("Missing 'Spectral_Data' group within NEON reflectance metadata.")
-
-    wavelengths = np.asarray(wavelength_ds[()], dtype=np.float32).reshape(-1)
-
-    fwhm_ds = None
-    if paths.fwhm and paths.fwhm in h5_file:
-        fwhm_ds = h5_file[paths.fwhm]
-    fwhm = np.asarray(fwhm_ds[()], dtype=np.float32).reshape(-1) if fwhm_ds is not None else None
     wavelength_units = _extract_units(wavelength_ds, spectral_group) or "Unknown"
 
     coordinate_group = metadata_group.get("Coordinate_System")
@@ -261,6 +234,10 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         "uly": uly,
         "wavelength_units": wavelength_units,
         "fwhm": fwhm,
+        "wavelength_nm": wavelengths,
+        "fwhm_nm": fwhm,
+        "to_sun_zenith": to_sun_zenith,
+        "to_sensor_zenith": to_sensor_zenith,
         "no_data": no_data,
         "samples": int(cube.shape[1]),
         "lines": int(cube.shape[0]),
@@ -329,6 +306,10 @@ def _read_old_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         "uly": uly,
         "wavelength_units": wavelength_units,
         "fwhm": fwhm,
+        "wavelength_nm": wavelengths,
+        "fwhm_nm": fwhm,
+        "to_sun_zenith": None,
+        "to_sensor_zenith": None,
         "no_data": no_data,
         "samples": int(cube.shape[1]),
         "lines": int(cube.shape[0]),
@@ -427,6 +408,10 @@ def _read_site_group_legacy_layout(
         "uly": uly,
         "wavelength_units": wavelength_units,
         "fwhm": fwhm,
+        "wavelength_nm": wavelengths,
+        "fwhm_nm": fwhm,
+        "to_sun_zenith": None,
+        "to_sensor_zenith": None,
         "no_data": no_data,
         "samples": int(cube.shape[1]),
         "lines": int(cube.shape[0]),
