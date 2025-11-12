@@ -123,6 +123,7 @@
     "\ud83d\udccd Preparing ENVI export at: {raw_img_path.name} / {raw_hdr_path.name}",
     "\ud83d\udce6 No existing ENVI export detected \u2014 creating a new one from source data {h5_path.name}",
     "\ud83d\udce6 Parquet export for %s ...",
+    "\ud83e\uddf1 Parquet row group size = %s (legacy=%s)",
     "\ud83e\uddf1 Using Parquet row group size of %s rows"
   ],
   "entry_points": {
