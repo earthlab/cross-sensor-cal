@@ -1939,6 +1939,10 @@ def stage_convolve_all_sensors(
             out_name=None,
             emit_qa_panel=True,
             ray_cpus=ray_cpus,
+            merge_memory_limit_gb=merge_memory_limit_gb,
+            merge_threads=merge_threads,
+            merge_row_group_size=merge_row_group_size,
+            merge_temp_directory=merge_temp_directory,
         )
         logger.info("✅ DuckDB master → %s", merge_out)
         qa_plots_dir = flightline_dir / "qa_plots"
@@ -1999,6 +2003,10 @@ def process_one_flightline(
     parallel_mode: bool = False,
     parquet_chunk_size: int = 50_000,
     ray_cpus: int | None = None,
+    merge_memory_limit_gb: float | str | None = 6.0,
+    merge_threads: int | None = 4,
+    merge_row_group_size: int = 50_000,
+    merge_temp_directory: Path | None = None,
 ):
     """Run the structured, skip-aware workflow for a single flightline.
 
@@ -2100,6 +2108,10 @@ class _FlightlineTask(NamedTuple):
     parallel_mode: bool
     parquet_chunk_size: int
     ray_cpus: int | None
+    merge_memory_limit_gb: float | str | None
+    merge_threads: int | None
+    merge_row_group_size: int
+    merge_temp_directory: Path | None
 
 
 def _execute_flightline(task: "_FlightlineTask") -> str:
@@ -2115,6 +2127,10 @@ def _execute_flightline(task: "_FlightlineTask") -> str:
             parallel_mode=task.parallel_mode,
             parquet_chunk_size=task.parquet_chunk_size,
             ray_cpus=task.ray_cpus,
+            merge_memory_limit_gb=task.merge_memory_limit_gb,
+            merge_threads=task.merge_threads,
+            merge_row_group_size=task.merge_row_group_size,
+            merge_temp_directory=task.merge_temp_directory,
         )
     return task.flight_stem
 
@@ -2261,6 +2277,10 @@ def go_forth_and_multiply(
     max_workers: int = 8,
     parquet_chunk_size: int = 50_000,
     engine: Literal["thread", "process", "ray"] = "ray",
+    merge_memory_limit_gb: float | str | None = 6.0,
+    merge_threads: int | None = 4,
+    merge_row_group_size: int = 50_000,
+    merge_temp_directory: Path | None = None,
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
 
@@ -2409,6 +2429,10 @@ def go_forth_and_multiply(
             parallel_mode=parallel_mode,
             parquet_chunk_size=parquet_chunk_size,
             ray_cpus=ray_cpu_target,
+            merge_memory_limit_gb=merge_memory_limit_gb,
+            merge_threads=merge_threads,
+            merge_row_group_size=merge_row_group_size,
+            merge_temp_directory=merge_temp_directory,
         )
         for flight_stem in flight_lines
     ]

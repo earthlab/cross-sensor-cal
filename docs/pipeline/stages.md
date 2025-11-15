@@ -68,13 +68,17 @@ cross-sensor-cal export-parquet --in corrected/*.img Convolution_Reflectance_Res
 **Behavior** Each candidate Parquet is validated once. Invalid files trigger warnings such
 as `[merge] ⚠️ Skipping invalid parquet <file>: <error>` and are ignored. The merge
 continues as long as at least one valid file remains; it errors only when none are usable
-for the prefix.
+for the prefix. The DuckDB join is now streamed directly to Parquet with configurable
+memory/row-group limits so large flightlines no longer require hundreds of gigabytes of
+RAM.
 **Inputs → Outputs** `parquet/*.parquet` → `<prefix>_merged_pixel_extraction.parquet`.
 **Run it**
 ```bash
 cross-sensor-cal merge-duckdb --in parquet/*.parquet --out merged/<prefix>_merged_pixel_extraction.parquet
 ```
 **Pitfalls** Review warnings for skipped files; regenerate them if the merge aborts because nothing was valid.
+Use `--merge-memory-limit`, `--merge-threads`, or `--merge-row-group-size` when invoking
+the CLI if you need to tune streaming behaviour for especially large scenes.
 
 ## 7) QA panel
 **Purpose** Visual checks and metrics; saves `<prefix>_qa.png` and `<prefix>_qa.json`.

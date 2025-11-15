@@ -216,6 +216,32 @@ def _seed_minimal_tables(flight_dir: Path) -> None:
     )
 
 
+def _seed_multiple_pixels(flight_dir: Path, count: int) -> None:
+    prefix = flight_dir.name
+    orig_rows = []
+    corr_rows = []
+    resamp_rows = []
+    for idx in range(count):
+        pid = f"p{idx}"
+        orig_rows.append(
+            {
+                "pixel_id": pid,
+                "wavelength_nm": 500.0,
+                "reflectance": 0.1 + idx / 100.0,
+            }
+        )
+        corr_rows.append({"pixel_id": pid, "corr_wl0500": 0.2 + idx / 100.0})
+        resamp_rows.append({"pixel_id": pid, "resamp_wl0500": 0.3 + idx / 100.0})
+
+    _write_parquet(orig_rows, flight_dir / f"{prefix}_envi.parquet")
+    _write_parquet(
+        corr_rows, flight_dir / f"{prefix}_brdfandtopo_corrected_envi.parquet"
+    )
+    _write_parquet(
+        resamp_rows, flight_dir / f"{prefix}_resampled_Landsat_8_OLI_envi.parquet"
+    )
+
+
 def test_merge_skips_invalid_inputs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     flight_dir = tmp_path / "NEON_TEST_FLIGHT_INVALID"
     flight_dir.mkdir()
@@ -246,3 +272,30 @@ def test_merge_errors_when_category_empty_after_skip(tmp_path: Path) -> None:
         merge_flightline(flight_dir, emit_qa_panel=False)
 
     assert "Remove or recreate the invalid files" in str(excinfo.value)
+
+
+def test_merge_streaming_controls_row_groups(tmp_path: Path) -> None:
+    flight_dir = tmp_path / "NEON_TEST_ROW_GROUPS"
+    flight_dir.mkdir()
+    (flight_dir / "NEON_TEST_ROW_GROUPS_envi.img").write_bytes(b"")
+
+    _seed_multiple_pixels(flight_dir, count=3000)
+
+    out = merge_flightline(
+        flight_dir,
+        emit_qa_panel=False,
+        merge_row_group_size=2048,
+        merge_memory_limit_gb=0.05,
+        merge_threads=1,
+    )
+
+    with duckdb.connect() as con:
+        rows = con.execute("CALL parquet_metadata(?)", [str(out)]).fetchall()
+
+    grouped: dict[int, int] = {}
+    for _, row_group_id, row_group_num_rows, *_ in rows:
+        grouped[row_group_id] = row_group_num_rows
+
+    assert sum(grouped.values()) == 3000
+    assert len(grouped) >= 2
+    assert max(grouped.values()) <= 2048
