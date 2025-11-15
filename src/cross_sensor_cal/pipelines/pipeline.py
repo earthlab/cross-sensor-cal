@@ -1756,6 +1756,10 @@ def stage_convolve_all_sensors(
     resample_method: str | None = "convolution",
     parallel_mode: bool = False,
     ray_cpus: int | None = None,
+    merge_memory_limit_gb: float | str | None = 6.0,
+    merge_threads: int | None = 4,
+    merge_row_group_size: int = 50_000,
+    merge_temp_directory: Path | None = None,
 ):
     """Convolve the BRDF+topo corrected ENVI cube into sensor bandstacks."""
 
@@ -2087,6 +2091,10 @@ def process_one_flightline(
         resample_method=resample_method,
         parallel_mode=parallel_mode,
         ray_cpus=ray_cpus,
+        merge_memory_limit_gb=merge_memory_limit_gb,
+        merge_threads=merge_threads,
+        merge_row_group_size=merge_row_group_size,
+        merge_temp_directory=merge_temp_directory,
     )
 
     clean_memory("convolution")
