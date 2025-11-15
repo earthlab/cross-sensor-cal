@@ -29,6 +29,7 @@ nav:
       - Stages: pipeline/stages.md
       - Outputs: pipeline/outputs.md
       - QA panel: pipeline/qa_panel.md
+      - Polygon spectral library: pipeline/polygons.md
   - Usage:
       - CLI & examples: usage/cli.md
       - Parquet preview: usage/parquet_preview.md
