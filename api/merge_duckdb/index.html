@@ -1156,7 +1156,18 @@ emit_qa_panel : bool, default True
     If True, renders the standard QA panel (<prefix>_qa.png) after merging.
 ray_cpus : int, optional
     CPU budget forwarded to Ray validation of Parquet shards. Defaults to
-    <code>None</code> which allows the Ray helper to choose the configured default.</p>
+    <code>None</code> which allows the Ray helper to choose the configured default.
+merge_memory_limit_gb : float or str, optional
+    Upper bound on DuckDB's memory usage. Floats are interpreted as GiB.
+    Provide <code>None</code> to leave the default DuckDB behaviour unchanged.
+merge_threads : int, optional
+    Number of threads DuckDB should use for the merge. <code>None</code> keeps the
+    engine default (usually <code>os.cpu_count()</code>).
+merge_row_group_size : int, optional
+    Target number of rows per Parquet row group in the merged output.
+merge_temp_directory : Path, optional
+    Directory where DuckDB should spill temporary data. Defaults to a
+    <code>.duckdb_tmp</code> subdirectory inside <code>flightline_dir</code>.</p>
 <h3 id="cross_sensor_cal.merge_duckdb.merge_flightline--returns">Returns<a class="headerlink" href="#cross_sensor_cal.merge_duckdb.merge_flightline--returns" title="Permanent link">&para;</a></h3>
 <p>Path
     Path to the merged parquet file.</p>

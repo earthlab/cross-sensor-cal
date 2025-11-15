@@ -1316,8 +1316,9 @@ report as a warning.</p>
 cross-sensor-cal<span class="w"> </span>qa-panel<span class="w"> </span>--merged<span class="w"> </span>merged/demo_merged_pixel_extraction.parquet<span class="w"> </span>--out<span class="w"> </span>qa/
 </code></pre></div>
 <strong>Pitfalls</strong> <code>merge-duckdb</code> validates each input once and skips corrupt files with warnings;
-it only fails if none of the candidates are usable. If QA fails, check
-<a href="../../troubleshooting/">Troubleshooting</a>.</p>
+it only fails if none of the candidates are usable. Use <code>--merge-memory-limit</code>,
+<code>--merge-threads</code>, or <code>--merge-row-group-size</code> if you need to further constrain memory
+pressure during the streaming merge. If QA fails, check <a href="../../troubleshooting/">Troubleshooting</a>.</p>
 <h2 id="minimal-python-equivalent">Minimal Python equivalent<a class="headerlink" href="#minimal-python-equivalent" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal</span><span class="w"> </span><span class="kn">import</span> <span class="n">go_forth_and_multiply</span>
 

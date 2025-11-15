@@ -1331,12 +1331,16 @@ deletes + rebuilds any that fail validation. Manual cleanup is rarely needed.
 <strong>Behavior</strong> Each candidate Parquet is validated once. Invalid files trigger warnings such
 as <code>[merge] ⚠️ Skipping invalid parquet &lt;file&gt;: &lt;error&gt;</code> and are ignored. The merge
 continues as long as at least one valid file remains; it errors only when none are usable
-for the prefix.
+for the prefix. The DuckDB join is now streamed directly to Parquet with configurable
+memory/row-group limits so large flightlines no longer require hundreds of gigabytes of
+RAM.
 <strong>Inputs → Outputs</strong> <code>parquet/*.parquet</code> → <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code>.
 <strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>merge-duckdb<span class="w"> </span>--in<span class="w"> </span>parquet/*.parquet<span class="w"> </span>--out<span class="w"> </span>merged/&lt;prefix&gt;_merged_pixel_extraction.parquet
 </code></pre></div>
-<strong>Pitfalls</strong> Review warnings for skipped files; regenerate them if the merge aborts because nothing was valid.</p>
+<strong>Pitfalls</strong> Review warnings for skipped files; regenerate them if the merge aborts because nothing was valid.
+Use <code>--merge-memory-limit</code>, <code>--merge-threads</code>, or <code>--merge-row-group-size</code> when invoking
+the CLI if you need to tune streaming behaviour for especially large scenes.</p>
 <h2 id="7-qa-panel">7) QA panel<a class="headerlink" href="#7-qa-panel" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Visual checks and metrics; saves <code>&lt;prefix&gt;_qa.png</code> and <code>&lt;prefix&gt;_qa.json</code>.
 <strong>Run it</strong>
