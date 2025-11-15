@@ -65,6 +65,33 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Row group size (rows per chunk) used during Parquet export to bound memory usage.",
     )
     parser.add_argument(
+        "--merge-memory-limit",
+        dest="merge_memory_limit",
+        default=None,
+        help="DuckDB memory limit for the merge stage (float GiB, 'auto', or literal).",
+    )
+    parser.add_argument(
+        "--merge-threads",
+        dest="merge_threads",
+        type=int,
+        default=None,
+        help="DuckDB thread count for the merge stage (defaults to 4).",
+    )
+    parser.add_argument(
+        "--merge-row-group-size",
+        dest="merge_row_group_size",
+        type=int,
+        default=None,
+        help="Row group size for merged Parquet output (defaults to 50,000).",
+    )
+    parser.add_argument(
+        "--merge-temp-directory",
+        dest="merge_temp_directory",
+        type=Path,
+        default=None,
+        help="Custom DuckDB temp directory for merge spill files.",
+    )
+    parser.add_argument(
         "--engine",
         choices=["thread", "process", "ray"],
         default="ray",
@@ -88,6 +115,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         max_workers=args.max_workers,
         parquet_chunk_size=args.parquet_chunk_size,
         engine=args.engine,
+        merge_memory_limit_gb=args.merge_memory_limit,
+        merge_threads=args.merge_threads,
+        merge_row_group_size=args.merge_row_group_size,
+        merge_temp_directory=args.merge_temp_directory,
     )
 
     target = args.base_folder.resolve()

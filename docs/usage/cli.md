@@ -76,8 +76,9 @@ cross-sensor-cal merge-duckdb --in parquet/*.parquet --out merged/demo_merged_pi
 cross-sensor-cal qa-panel --merged merged/demo_merged_pixel_extraction.parquet --out qa/
 ```
 **Pitfalls** `merge-duckdb` validates each input once and skips corrupt files with warnings;
-it only fails if none of the candidates are usable. If QA fails, check
-[Troubleshooting](../troubleshooting.md).
+it only fails if none of the candidates are usable. Use `--merge-memory-limit`,
+`--merge-threads`, or `--merge-row-group-size` if you need to further constrain memory
+pressure during the streaming merge. If QA fails, check [Troubleshooting](../troubleshooting.md).
 
 ## Minimal Python equivalent
 ```python

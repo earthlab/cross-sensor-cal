@@ -28,13 +28,51 @@ def main() -> None:
     parser.add_argument("--resampled-glob", type=str, default="**/*resampl*.parquet")
     parser.add_argument("--write-feather", action="store_true")
     parser.add_argument("--no-qa", action="store_true", help="Do not render QA panel after merge")
+    parser.add_argument(
+        "--merge-memory-limit",
+        dest="merge_memory_limit",
+        default=None,
+        help="DuckDB memory limit (float GiB, 'auto', or DuckDB literal).",
+    )
+    parser.add_argument(
+        "--merge-threads",
+        dest="merge_threads",
+        type=int,
+        default=None,
+        help="DuckDB thread count for the merge (defaults to 4).",
+    )
+    parser.add_argument(
+        "--merge-row-group-size",
+        dest="merge_row_group_size",
+        type=int,
+        default=None,
+        help="Row group size for the merged parquet (defaults to 50,000).",
+    )
+    parser.add_argument(
+        "--merge-temp-directory",
+        dest="merge_temp_directory",
+        type=Path,
+        default=None,
+        help="Custom DuckDB temp directory during merge.",
+    )
     args = parser.parse_args()
+
+    merge_kwargs = {}
+    if args.merge_memory_limit is not None:
+        merge_kwargs["merge_memory_limit_gb"] = args.merge_memory_limit
+    if args.merge_threads is not None:
+        merge_kwargs["merge_threads"] = args.merge_threads
+    if args.merge_row_group_size is not None:
+        merge_kwargs["merge_row_group_size"] = args.merge_row_group_size
+    if args.merge_temp_directory is not None:
+        merge_kwargs["merge_temp_directory"] = args.merge_temp_directory
 
     if args.flightline_dir:
         out = merge_flightline(
             args.flightline_dir.resolve(),
             out_name=args.out_name,
             emit_qa_panel=(not args.no_qa),
+            **merge_kwargs,
         )
         print(out)
         return
@@ -48,6 +86,7 @@ def main() -> None:
         resampled_glob=args.resampled_glob,
         write_feather=args.write_feather,
         emit_qa_panel=(not args.no_qa),
+        **merge_kwargs,
     )
 
 

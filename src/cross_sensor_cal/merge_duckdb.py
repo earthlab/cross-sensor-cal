@@ -183,6 +183,25 @@ def _quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+def _coerce_memory_limit(value: float | str | None) -> float | str | None:
+    """Normalise user-supplied memory limits for DuckDB."""
+
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    value = value.strip()
+    if not value:
+        return None
+    if value.lower() == "auto":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
 def _list_spectral_columns(columns: Iterable[str]) -> List[str]:
     spectral: List[str] = []
     for col in columns:
@@ -398,6 +417,11 @@ def merge_flightline(
     write_feather: bool = False,
     emit_qa_panel: bool = True,
     ray_cpus: int | None = None,
+    *,
+    merge_memory_limit_gb: float | str | None = 6.0,
+    merge_threads: int | None = 4,
+    merge_row_group_size: int = 50_000,
+    merge_temp_directory: Path | None = None,
 ) -> Path:
     """
     Merge all pixel-level parquet tables for one flightline.
@@ -422,6 +446,17 @@ def merge_flightline(
     ray_cpus : int, optional
         CPU budget forwarded to Ray validation of Parquet shards. Defaults to
         ``None`` which allows the Ray helper to choose the configured default.
+    merge_memory_limit_gb : float or str, optional
+        Upper bound on DuckDB's memory usage. Floats are interpreted as GiB.
+        Provide ``None`` to leave the default DuckDB behaviour unchanged.
+    merge_threads : int, optional
+        Number of threads DuckDB should use for the merge. ``None`` keeps the
+        engine default (usually ``os.cpu_count()``).
+    merge_row_group_size : int, optional
+        Target number of rows per Parquet row group in the merged output.
+    merge_temp_directory : Path, optional
+        Directory where DuckDB should spill temporary data. Defaults to a
+        ``.duckdb_tmp`` subdirectory inside ``flightline_dir``.
 
     Returns
     -------
@@ -435,8 +470,35 @@ def merge_flightline(
         out_name = f"{prefix}_merged_pixel_extraction.parquet"
     out_parquet = (flightline_dir / out_name).resolve()
 
+    merge_memory_limit_gb = _coerce_memory_limit(merge_memory_limit_gb)
+
+    if merge_row_group_size <= 0:
+        raise ValueError("merge_row_group_size must be a positive integer")
+    if merge_threads is not None and merge_threads <= 0:
+        raise ValueError("merge_threads must be positive when provided")
+
+    tmp_dir = (
+        Path(merge_temp_directory).resolve()
+        if merge_temp_directory is not None
+        else (flightline_dir / ".duckdb_tmp").resolve()
+    )
+
     print(f"[merge] Start flightline={flightline_dir.name} prefix={prefix}")
     print(f"[merge] Output parquet → {out_parquet}")
+
+    if isinstance(merge_memory_limit_gb, str):
+        memory_limit_repr = merge_memory_limit_gb
+    elif merge_memory_limit_gb is None:
+        memory_limit_repr = "auto"
+    else:
+        memory_limit_repr = f"{merge_memory_limit_gb}GB"
+
+    thread_repr = str(merge_threads) if merge_threads and merge_threads > 0 else "auto"
+    print(
+        f"[merge] Engine=duckdb memory_limit={memory_limit_repr} "
+        f"threads={thread_repr} row_group_size={merge_row_group_size} "
+        f"temp_dir={tmp_dir}"
+    )
 
     def _discover_inputs() -> Dict[str, List[Path]]:
         # When default globs are supplied, favour precise patterns with exclusions.
@@ -494,15 +556,24 @@ def merge_flightline(
 
     con = duckdb.connect()
     try:
-        tmp_dir = (flightline_dir / ".duckdb_tmp").resolve()
-        tmp_dir.mkdir(exist_ok=True)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
 
-        con.execute("PRAGMA threads = " + str(os.cpu_count() or 4))
-        try:
-            con.execute("PRAGMA memory_limit = 'auto'")
-        except duckdb.Error as exc:  # pragma: no cover - parser differences across DuckDB versions
-            if "memory limit" not in str(exc).lower():
-                raise
+        effective_threads = merge_threads if merge_threads else (os.cpu_count() or 4)
+        con.execute(f"PRAGMA threads = {effective_threads}")
+
+        if merge_memory_limit_gb is None:
+            try:
+                con.execute("PRAGMA memory_limit = 'auto'")
+            except duckdb.Error as exc:  # pragma: no cover - parser differences
+                if "memory limit" not in str(exc).lower():
+                    raise
+        else:
+            if isinstance(merge_memory_limit_gb, str):
+                memory_limit_value = merge_memory_limit_gb
+            else:
+                memory_limit_value = f"{merge_memory_limit_gb}GB"
+            memory_limit_value = memory_limit_value.replace("'", "''")
+            con.execute(f"PRAGMA memory_limit = '{memory_limit_value}'")
         con.execute("SET enable_progress_bar = true")
         con.execute(
             "PRAGMA temp_directory = '"
@@ -579,9 +650,7 @@ def merge_flightline(
                 """
             )
 
-        with _progress("DuckDB: join + materialize"):
-            con.execute(
-                "CREATE OR REPLACE TABLE merged AS "
+            select_sql = (
                 "SELECT "
                 + ", ".join(select_clause)
                 + " FROM all_pixels p "
@@ -597,16 +666,16 @@ def merge_flightline(
             else:
                 out_parquet.unlink()
 
-        with _progress("DuckDB: write merged parquet"):
-            con.execute(
-                f"""
-      COPY merged TO '{_quote_path(str(out_parquet))}'
-      (FORMAT PARQUET,
-       COMPRESSION ZSTD,
-       ROW_GROUP_SIZE 8388608,
-       PER_THREAD_OUTPUT FALSE);
-    """
+        with _progress("DuckDB: stream join → parquet"):
+            copy_sql = (
+                "COPY ("
+                + select_sql
+                + f") TO '{_quote_path(str(out_parquet))}' (FORMAT PARQUET,"
+                " COMPRESSION ZSTD,"
+                f" ROW_GROUP_SIZE {int(merge_row_group_size)},"
+                " PER_THREAD_OUTPUT FALSE)"
             )
+            con.execute(copy_sql)
         _consolidate_parquet_dir_to_file(con, Path(out_parquet), Path(out_parquet))
         print(
             f"[merge] ✅ Wrote parquet: {out_parquet} (exists={Path(out_parquet).exists()})"
@@ -616,7 +685,9 @@ def merge_flightline(
             out_feather = out_parquet.with_suffix(".feather").resolve()
             with _progress("DuckDB: write feather"):
                 con.execute(
-                    f"COPY merged TO '{_quote_path(str(out_feather))}' (FORMAT ARROW)"
+                    "COPY ("
+                    + select_sql
+                    + f") TO '{_quote_path(str(out_feather))}' (FORMAT ARROW)"
                 )
                 print(
                     f"[merge] ✅ Wrote feather: {out_feather} (exists={out_feather.exists()})"
@@ -702,7 +773,47 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--resampled-glob", type=str, default="**/*resampl*.parquet")
     parser.add_argument("--write-feather", action="store_true")
     parser.add_argument("--no-qa", action="store_true", help="Do not render QA panel after merge")
+    parser.add_argument(
+        "--merge-memory-limit",
+        dest="merge_memory_limit",
+        default=None,
+        help=(
+            "DuckDB memory limit for the merge (float GiB, 'auto', or a DuckDB-compatible value). "
+            "Defaults to 6.0 GiB when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--merge-threads",
+        dest="merge_threads",
+        type=int,
+        default=None,
+        help="Number of DuckDB threads to use during the merge (defaults to 4).",
+    )
+    parser.add_argument(
+        "--merge-row-group-size",
+        dest="merge_row_group_size",
+        type=int,
+        default=None,
+        help="Row group size for the merged Parquet (defaults to 50,000).",
+    )
+    parser.add_argument(
+        "--merge-temp-directory",
+        dest="merge_temp_directory",
+        type=Path,
+        default=None,
+        help="Custom DuckDB temp directory for the merge stage.",
+    )
     args = parser.parse_args(argv)
+
+    merge_kwargs = {}
+    if args.merge_memory_limit is not None:
+        merge_kwargs["merge_memory_limit_gb"] = args.merge_memory_limit
+    if args.merge_threads is not None:
+        merge_kwargs["merge_threads"] = args.merge_threads
+    if args.merge_row_group_size is not None:
+        merge_kwargs["merge_row_group_size"] = args.merge_row_group_size
+    if args.merge_temp_directory is not None:
+        merge_kwargs["merge_temp_directory"] = args.merge_temp_directory
 
     merge_all_flightlines(
         data_root=args.data_root,
@@ -713,6 +824,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         resampled_glob=args.resampled_glob,
         write_feather=args.write_feather,
         emit_qa_panel=(not args.no_qa),
+        **merge_kwargs,
     )
     return 0
 
