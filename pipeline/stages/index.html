@@ -1337,9 +1337,12 @@ to harmonise illumination; the QA JSON will expose the per-band gain/offsets.</e
 </code></pre></div>
 <strong>Pitfalls</strong> If JSON is missing, correction didn’t run; fix paths and rerun.</p>
 <h2 id="4-cross-sensor-convolution">4) Cross-sensor convolution<a class="headerlink" href="#4-cross-sensor-convolution" title="Permanent link">&para;</a></h2>
-<p><strong>Purpose</strong> Resample to target sensor bandpasses.<br />
+<p><strong>Purpose</strong> Resample to target sensor bandpasses.
 <strong>Inputs → Outputs</strong> corrected ENVI → <code>*_resampled_&lt;sensor&gt;_envi.img/.hdr</code> inside
 <code>Convolution_Reflectance_Resample_&lt;sensor&gt;</code> directories.
+Each convolution now also writes a brightness-free companion cube with the suffix
+<code>_undarkened_envi.img/.hdr</code> so you can inspect the raw spectral convolution before
+any Landsat↔MicaSense brightness offset is applied.
 <strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>convolve<span class="w"> </span>--in<span class="w"> </span>corrected/*_brdfandtopo_corrected_envi.img<span class="w"> </span>--sensor<span class="w"> </span>OLI<span class="w"> </span>--out<span class="w"> </span>convolved/
 </code></pre></div>
@@ -1362,6 +1365,9 @@ continues as long as at least one valid file remains; it errors only when none a
 for the prefix. The DuckDB join is now streamed directly to Parquet with configurable
 memory/row-group limits so large flightlines no longer require hundreds of gigabytes of
 RAM.
+Undarkened convolution outputs are merged alongside the darkened stacks with distinct
+column prefixes (for example, <code>micasense_to_match_oli_oli2_undarkened_b###_wl####nm</code>),
+making it easy to compare convolution-only spectra to the brightness-adjusted values.
 <strong>Inputs → Outputs</strong> <code>parquet/*.parquet</code> → <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code>.
 <strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>merge-duckdb<span class="w"> </span>--in<span class="w"> </span>parquet/*.parquet<span class="w"> </span>--out<span class="w"> </span>merged/&lt;prefix&gt;_merged_pixel_extraction.parquet
