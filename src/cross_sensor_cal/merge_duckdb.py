@@ -44,7 +44,6 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import duckdb
 
-from ._ray_utils import ray_map
 from .paths import scene_prefix_from_dir
 
 def _consolidate_parquet_dir_to_file(
@@ -612,7 +611,7 @@ def merge_flightline(
         # ROW_NUMBER() was removed to avoid OOM, but we still need to be conservative with memory
         if merge_threads is None:
             effective_threads = 2  # Reduced from default to save memory
-            print(f"[merge] Using threads=2 to reduce memory pressure")
+            print("[merge] Using threads=2 to reduce memory pressure")
         else:
             effective_threads = min(merge_threads, 2)  # Cap at 2 threads to avoid OOM
             if merge_threads > 2:
@@ -626,7 +625,7 @@ def merge_flightline(
             # Default to 64GB for large merges (user has 368GB available)
             # Increased from 32GB to allow larger hash tables for multiple JOINs
             memory_limit_value = "64GB"
-            print(f"[merge] Using default memory_limit=64GB (can be overridden with merge_memory_limit_gb)")
+            print("[merge] Using default memory_limit=64GB (can be overridden with merge_memory_limit_gb)")
         else:
             if isinstance(merge_memory_limit_gb, str):
                 memory_limit_value = merge_memory_limit_gb
@@ -640,7 +639,7 @@ def merge_flightline(
         
         # Disable insertion-order preservation to reduce memory usage (as suggested by error)
         con.execute("SET preserve_insertion_order=false")
-        print(f"[merge] Disabled insertion-order preservation to reduce memory usage")
+        print("[merge] Disabled insertion-order preservation to reduce memory usage")
         
         # Enable query optimizations for faster JOINs
         con.execute("PRAGMA enable_object_cache=true")
@@ -733,7 +732,7 @@ def merge_flightline(
                 return cte_sql, col_set
             
             # Build streaming CTEs
-            print(f"[merge] 🔨 Building CTEs (streaming, no materialization)...")
+            print("[merge] 🔨 Building CTEs (streaming, no materialization)...")
             orig_cte, orig_cols = _build_streaming_cte(inputs["orig"], "orig")
             print(f"[merge]   ✅ orig CTE built ({len(orig_cols)} columns)")
             corr_cte, corr_cols = _build_streaming_cte(inputs["corr"], "corr")
@@ -762,12 +761,6 @@ def merge_flightline(
             
             # Build select clause - start with orig.* (like old script uses base.*)
             # Then add columns from corr and resampled files
-            present_meta = [
-                col
-                for col in META_CANDIDATES
-                if col in orig_cols or col in corr_cols or col in all_resamp_cols
-            ]
-
             # Start with all columns from orig (base table)
             select_clause: List[str] = ["orig.*"]
             
@@ -821,12 +814,12 @@ def merge_flightline(
         with _progress("DuckDB: stream join → parquet"):
             # Stream directly to parquet - let DuckDB handle chunking automatically
             # No explicit ROW_GROUP_SIZE = faster streaming (matches old template)
-            print(f"[merge] 📤 Streaming join results to parquet (no materialization)...")
+            print("[merge] 📤 Streaming join results to parquet (no materialization)...")
             print(f"[merge]    Output: {out_parquet.name}")
             print(f"[merge]    Input: {len(inputs['orig'])} orig, {len(inputs['corr'])} corr, {len(inputs['resamp'])} resamp")
             
             # Test query first with LIMIT to verify it works (catches errors early)
-            print(f"[merge]    Testing query with LIMIT 1000...")
+            print("[merge]    Testing query with LIMIT 1000...")
             test_sql = select_sql + " LIMIT 1000"
             try:
                 test_result = con.execute(test_sql).fetchall()
@@ -838,7 +831,7 @@ def merge_flightline(
                     if len(test_pixel_ids) != unique_count:
                         print(f"[merge]    ⚠️  WARNING: Test query found {len(test_pixel_ids) - unique_count} duplicate pixel_ids in sample!")
                     else:
-                        print(f"[merge]    ✅ Test query: no duplicate pixel_ids in sample")
+                        print("[merge]    ✅ Test query: no duplicate pixel_ids in sample")
             except Exception as e:
                 print(f"[merge]    ❌ Test query failed: {e}")
                 raise
@@ -862,7 +855,7 @@ def merge_flightline(
                 + f") TO '{_quote_path(str(out_parquet))}' (FORMAT PARQUET,"
                 " COMPRESSION ZSTD)"
             )
-            print(f"[merge]    Executing streaming COPY (this may take 5-15 minutes for large datasets)...")
+            print("[merge]    Executing streaming COPY (this may take 5-15 minutes for large datasets)...")
             print(f"[merge]    You can check progress by monitoring file size: ls -lh {out_parquet.name}")
             import time
             start_time = time.time()
@@ -876,9 +869,9 @@ def merge_flightline(
                     size_gb = out_parquet.stat().st_size / (1024**3)
                     print(f"[merge]    ✅ Output file created: {size_gb:.2f} GB")
                     if size_gb == 0:
-                        print(f"[merge]    ⚠️  WARNING: Output file is 0 bytes - merge may have failed!")
+                        print("[merge]    ⚠️  WARNING: Output file is 0 bytes - merge may have failed!")
                 else:
-                    print(f"[merge]    ❌ ERROR: Output file was not created!")
+                    print("[merge]    ❌ ERROR: Output file was not created!")
             except Exception as e:
                 elapsed = time.time() - start_time
                 print(f"[merge]    ❌ Streaming COPY failed after {elapsed:.1f} seconds: {e}")
@@ -913,7 +906,7 @@ def merge_flightline(
                         if total > unique:
                             print(f"[merge] ⚠️  Found {total - unique:,} duplicate pixel_ids in merged file")
                         else:
-                            print(f"[merge] ⚠️  No duplicate pixel_ids, but row count is higher - check JOIN logic")
+                            print("[merge] ⚠️  No duplicate pixel_ids, but row count is higher - check JOIN logic")
             else:
                 print(f"[merge] ℹ️  Row count: {actual_rows:,} rows (no expected value to compare)")
         except Exception as e:
