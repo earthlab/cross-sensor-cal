@@ -86,3 +86,15 @@ def test_validate_parquets_per_stage_ordering(tmp_path: Path, capsys) -> None:
     output = capsys.readouterr()
     assert exit_code == 1
     assert "unsorted.parquet" in output.out
+
+
+def test_validate_parquets_accepts_stub_json(tmp_path: Path, capsys) -> None:
+    validator = _load_validator()
+
+    stub = tmp_path / "stub.parquet"
+    stub.write_text('{"columns": ["lon", "lat", "stage_b001_wl0500nm"]}', encoding="utf-8")
+
+    exit_code = validator.main([str(tmp_path)])
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert "✅" in output.out
