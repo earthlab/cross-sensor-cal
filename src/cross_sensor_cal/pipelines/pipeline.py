@@ -811,6 +811,50 @@ def _build_resample_header_text(header: dict) -> str:
     return "\n".join(lines)
 
 
+def _with_undarkened_suffix(out_stem: Path) -> Path:
+    name = out_stem.name
+    if name.endswith("_envi"):
+        undarkened_name = f"{name[:-5]}_undarkened_envi"
+    else:  # pragma: no cover - defensive fallback
+        undarkened_name = f"{name}_undarkened"
+    return out_stem.with_name(undarkened_name)
+
+
+def _build_convolution_header(
+    *,
+    samples: int,
+    lines: int,
+    out_bands: int,
+    sensor_band_names: list[str],
+    src_header: dict,
+    brightness_map: dict[str, dict[int, float]] | None,
+) -> dict:
+    out_header = {
+        "samples": samples,
+        "lines": lines,
+        "bands": out_bands,
+        "interleave": "bsq",
+        "data type": 4,
+        "byte order": 0,
+        "map info": src_header.get("map info"),
+        "projection": src_header.get("projection"),
+        "wavelength units": src_header.get("wavelength units"),
+        "wavelength": sensor_band_names,
+        "description": (
+            "Spectrally convolved product generated from BRDF+topo corrected hyperspectral cube"
+        ),
+    }
+
+    if brightness_map:
+        serialized = {
+            system_pair: {str(b): float(v) for b, v in coeffs.items()}
+            for system_pair, coeffs in brightness_map.items()
+        }
+        out_header["brightness_coefficients"] = json.dumps(serialized, sort_keys=True)
+
+    return {k: v for k, v in out_header.items() if v is not None}
+
+
 def _sensor_requires_landsat_adjustment(sensor_name: str | None) -> bool:
     if not sensor_name:
         return False
@@ -968,6 +1012,37 @@ def convolve_resample_product(
     finally:
         reporter.close()
 
+    # Summary:
+    # - Convolution is computed in convolve_resample_product() via resample_chunk_to_sensor tiles above.
+    # - Brightness is applied in _apply_landsat_brightness_adjustment() before the final flush below.
+    # - ENVI is written in the header construction at the end of convolve_resample_product().
+
+    undarkened_stem = _with_undarkened_suffix(out_stem_resampled)
+    undarkened_img_path = undarkened_stem.with_suffix('.img')
+    undarkened_hdr_path = undarkened_stem.with_suffix('.hdr')
+
+    # Save an "undarkened" convolved ENVI cube BEFORE brightness adjustment,
+    # so we can inspect convolution effects separately from the brightness offset.
+    undarkened_img_path.parent.mkdir(parents=True, exist_ok=True)
+    mm_undarkened = np.memmap(
+        undarkened_img_path, dtype='float32', mode='w+', shape=mm_out.shape
+    )
+    mm_undarkened[:] = mm_out[:]
+    mm_undarkened.flush()
+    del mm_undarkened
+
+    undarkened_header = _build_convolution_header(
+        samples=samples,
+        lines=lines,
+        out_bands=out_bands,
+        sensor_band_names=sensor_band_names,
+        src_header=src_header,
+        brightness_map=None,
+    )
+    undarkened_hdr_path.write_text(
+        _build_resample_header_text(undarkened_header), encoding='utf-8'
+    )
+
     if _sensor_requires_landsat_adjustment(sensor_name):
         system_pair = brightness_system_pair or "landsat_to_micasense"
         applied_coeffs = _apply_landsat_brightness_adjustment(mm_out, system_pair=system_pair)
@@ -978,30 +1053,14 @@ def convolve_resample_product(
     del mm_out
     del mm
 
-    out_header = {
-        "samples": samples,
-        "lines": lines,
-        "bands": out_bands,
-        "interleave": "bsq",
-        "data type": 4,
-        "byte order": 0,
-        "map info": src_header.get("map info"),
-        "projection": src_header.get("projection"),
-        "wavelength units": src_header.get("wavelength units"),
-        "wavelength": sensor_band_names,
-        "description": (
-            "Spectrally convolved product generated from BRDF+topo corrected hyperspectral cube"
-        ),
-    }
-
-    if brightness_map:
-        serialized = {
-            system_pair: {str(b): float(v) for b, v in coeffs.items()}
-            for system_pair, coeffs in brightness_map.items()
-        }
-        out_header["brightness_coefficients"] = json.dumps(serialized, sort_keys=True)
-
-    out_header = {k: v for k, v in out_header.items() if v is not None}
+    out_header = _build_convolution_header(
+        samples=samples,
+        lines=lines,
+        out_bands=out_bands,
+        sensor_band_names=sensor_band_names,
+        src_header=src_header,
+        brightness_map=brightness_map,
+    )
 
     hdr_text = _build_resample_header_text(out_header)
     out_hdr_path = out_stem_resampled.with_suffix(".hdr")
