@@ -10,17 +10,21 @@ import pyarrow.parquet as pq
 
 
 def is_ok_columns(cols):
-    # non-spectral can be anything; spectral must match <stage>_b###_wl####nm ascending within each stage
+    # non-spectral can be anything; spectral must match <stage>_b###_wl####nm
+    # and be ordered by wavelength within each stage key (stage ordering may
+    # interleave across the schema, especially for merged tables).
     spec = [c for c in cols if "_wl" in c]
-    last = -1
+    last_seen: dict[str, int] = {}
     for c in spec:
-        m = re.search(r"wl(\d+)nm$", c)
+        m = re.search(r"(.+)_b\d+_wl(\d+)nm$", c)
         if not m:
             return False
-        wl = int(m.group(1))
+        stage, wl_str = m.group(1), m.group(2)
+        wl = int(wl_str)
+        last = last_seen.get(stage, -1)
         if wl < last:
             return False
-        last = wl
+        last_seen[stage] = wl
     return True
 
 
