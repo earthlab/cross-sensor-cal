@@ -42,9 +42,12 @@ cross-sensor-cal correct --in envi/*_envi.img --dtm dtm/NIWO.tif --out corrected
 **Pitfalls** If JSON is missing, correction didn’t run; fix paths and rerun.
 
 ## 4) Cross-sensor convolution
-**Purpose** Resample to target sensor bandpasses.  
+**Purpose** Resample to target sensor bandpasses.
 **Inputs → Outputs** corrected ENVI → `*_resampled_<sensor>_envi.img/.hdr` inside
 `Convolution_Reflectance_Resample_<sensor>` directories.
+Each convolution now also writes a brightness-free companion cube with the suffix
+`_undarkened_envi.img/.hdr` so you can inspect the raw spectral convolution before
+any Landsat↔MicaSense brightness offset is applied.
 **Run it**
 ```bash
 cross-sensor-cal convolve --in corrected/*_brdfandtopo_corrected_envi.img --sensor OLI --out convolved/
@@ -71,6 +74,9 @@ continues as long as at least one valid file remains; it errors only when none a
 for the prefix. The DuckDB join is now streamed directly to Parquet with configurable
 memory/row-group limits so large flightlines no longer require hundreds of gigabytes of
 RAM.
+Undarkened convolution outputs are merged alongside the darkened stacks with distinct
+column prefixes (for example, `micasense_to_match_oli_oli2_undarkened_b###_wl####nm`),
+making it easy to compare convolution-only spectra to the brightness-adjusted values.
 **Inputs → Outputs** `parquet/*.parquet` → `<prefix>_merged_pixel_extraction.parquet`.
 **Run it**
 ```bash

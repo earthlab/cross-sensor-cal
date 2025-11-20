@@ -403,8 +403,23 @@ def read_envi_in_chunks(
                 yield df_chunk
 
     iterator = _iterator()
-    setattr(iterator, "context", shared)
-    return iterator
+    try:
+        setattr(iterator, "context", shared)
+        return iterator
+    except AttributeError:
+        # Generators cannot always accept attributes; wrap to carry context for callers
+        class _IteratorWrapper:
+            def __init__(self, gen):
+                self._gen = gen
+                self.context = shared
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                return next(self._gen)
+
+        return _IteratorWrapper(iterator)
 
 
 def _build_empty_parquet_table(stage_key: str, band_wavelengths: list[int]):
@@ -654,7 +669,12 @@ def ensure_parquet_for_envi(
     chunk_size: int = 2048,
     ray_cpus: int | None = None,
 ) -> Path | None:
-    """Ensure a ``.parquet`` sidecar exists for ``envi_img``."""
+    """Ensure a ``.parquet`` sidecar exists for ``envi_img``.
+
+    This treats the `_undarkened_envi.img/.hdr` convolution-only products the
+    same as their brightness-adjusted counterparts so QA comparisons stay
+    aligned.
+    """
 
     envi_img = Path(envi_img)
     if not envi_img.exists() or envi_img.stat().st_size == 0:

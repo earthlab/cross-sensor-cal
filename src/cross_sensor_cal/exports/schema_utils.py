@@ -52,17 +52,39 @@ SENSOR_WAVELENGTHS_NM = {
     "micasense_to_match_oli_oli2": [482, 561, 655, 865, 1609, 2201],
 }
 
-def infer_stage_from_name(name: str) -> str:
+
+def _infer_base_stage(name: str) -> str:
+    """Infer stage from a filename (without undarkened handling)."""
+
     n = name.lower()
     if "_brdfandtopo_corrected" in n:
         return "corr"
-    if any(k in n for k in ("landsat_tm","landsat_etm+","landsat_oli2","landsat_oli","micasense")):
+    if any(k in n for k in ("landsat_tm", "landsat_etm+", "landsat_oli2", "landsat_oli", "micasense")):
         # return the sensor key as stage (short)
         for k in SENSOR_WAVELENGTHS_NM:
             if k in n:
                 return k.replace("landsat_", "oli" if "oli" in k else k.split("_")[-1])
         return "sensor"
     return "raw"
+
+
+def infer_stage_from_name(name: str) -> str:
+    """Infer the stage key (column prefix) from a filename.
+
+    Files with an ``_undarkened_envi`` suffix are treated as convolution-only
+    cubes (no brightness offset). They inherit the base stage key and append
+    ``_undarkened`` so they remain distinct from the darkened products.
+    """
+
+    n = name.lower()
+    undarkened = "_undarkened_envi" in n
+    if undarkened:
+        n = n.replace("_undarkened_envi", "_envi")
+
+    stage_key = _infer_base_stage(n)
+    if undarkened:
+        return f"{stage_key}_undarkened"
+    return stage_key
 
 def sort_and_rename_spectral_columns(df: pd.DataFrame, stage_key: str, wavelengths_nm: List[int]) -> pd.DataFrame:
     """
