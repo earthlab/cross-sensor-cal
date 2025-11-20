@@ -371,16 +371,34 @@ def _register_union(
         )
     else:
         aug_columns = _table_columns(con, f"{name}_aug")
-        keep_cols = [
+        spectral_cols = _list_spectral_columns(aug_columns)
+        meta_cols = [
+            col for col in meta_candidates if col in aug_columns and col != "pixel_id"
+        ]
+        other_cols = [
             col
             for col in aug_columns
-            if col not in {"wl_nm_int", "reflectance"}
+            if col
+            not in {"pixel_id", "wl_nm_int", "reflectance"}
+            and col not in spectral_cols
+            and col not in meta_cols
         ]
-        select_keep = ", ".join(_quote_identifier(col) for col in keep_cols)
+
+        select_parts = ["pixel_id"]
+        for col in meta_cols:
+            ident = _quote_identifier(col)
+            select_parts.append(f"ANY_VALUE({ident}) AS {ident}")
+        for col in other_cols:
+            ident = _quote_identifier(col)
+            select_parts.append(f"ANY_VALUE({ident}) AS {ident}")
+        for col in spectral_cols:
+            ident = _quote_identifier(col)
+            select_parts.append(f"MAX({ident}) AS {ident}")
+
         con.execute(
             f"CREATE OR REPLACE VIEW {_quote_identifier(name + '_wide')} AS SELECT "
-            + select_keep
-            + f" FROM {_quote_identifier(name + '_aug')}"
+            + ", ".join(select_parts)
+            + f" FROM {_quote_identifier(name + '_aug')} GROUP BY pixel_id"
         )
 
     wide_columns = _table_columns(con, f"{name}_wide")
@@ -526,6 +544,7 @@ def merge_flightline(
                 "*_landsat_*_envi.parquet",
                 "*_micasense*_envi.parquet",
             ]:
+                # Capture both brightness-adjusted and *_undarkened_envi parquet sidecars.
                 resamp.extend(sorted(flightline_dir.glob(pat)))
             inputs["resamp"] = _exclude_parquets(resamp)
             if not any(inputs.values()):

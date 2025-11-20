@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,7 +11,14 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - environment-specific skip
     pytest.skip("duckdb is required for merge tests", allow_module_level=True)
 
-from cross_sensor_cal.merge_duckdb import merge_flightline
+from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
+
+# Remove any lightweight stubs inserted by other tests so we always exercise the
+# real DuckDB merge code path here.
+for module_name in ("cross_sensor_cal.merge_duckdb", "cross_sensor_cal.paths"):
+    sys.modules.pop(module_name, None)
+merge_duckdb = importlib.import_module("cross_sensor_cal.merge_duckdb")
+merge_flightline = merge_duckdb.merge_flightline
 
 
 def _quote_identifier(identifier: str) -> str:
@@ -257,6 +266,50 @@ def test_merge_skips_invalid_inputs(tmp_path: Path, capsys: pytest.CaptureFixtur
     captured = capsys.readouterr()
     assert f"Skipping invalid parquet {bad.name}" in captured.out
     assert out.exists()
+
+
+def test_merge_includes_undarkened_resampled(tmp_path: Path) -> None:
+    flight_dir = tmp_path / "NEON_UNDARKENED_TEST"
+    flight_dir.mkdir()
+
+    prefix = flight_dir.name
+    base_stage = infer_stage_from_name(f"{prefix}_landsat_tm_envi.parquet")
+    undarkened_stage = infer_stage_from_name(
+        f"{prefix}_landsat_tm_undarkened_envi.parquet"
+    )
+
+    _write_parquet(
+        [
+            {
+                "pixel_id": "p0",
+                "wavelength_nm": 500.0,
+                "reflectance": 0.2,
+            }
+        ],
+        flight_dir / f"{prefix}_envi.parquet",
+    )
+    _write_parquet(
+        [{"pixel_id": "p0", "corr_wl0500": 0.3}],
+        flight_dir / f"{prefix}_brdfandtopo_corrected_envi.parquet",
+    )
+    _write_parquet(
+        [{"pixel_id": "p0", f"{base_stage}_b001_wl0500nm": 0.4}],
+        flight_dir / f"{prefix}_landsat_tm_envi.parquet",
+    )
+    _write_parquet(
+        [{"pixel_id": "p0", f"{undarkened_stage}_b001_wl0500nm": 0.45}],
+        flight_dir / f"{prefix}_landsat_tm_undarkened_envi.parquet",
+    )
+
+    out = merge_flightline(flight_dir, emit_qa_panel=False)
+
+    with duckdb.connect() as con:
+        rel = con.from_parquet(str(out))
+        columns = set(rel.columns)
+
+        assert rel.count("*").fetchone()[0] == 1
+        assert f"{base_stage}_b001_wl0500nm" in columns
+        assert f"{undarkened_stage}_b001_wl0500nm" in columns
 
 
 def test_merge_errors_when_category_empty_after_skip(tmp_path: Path) -> None:

@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 import types
 
+import pytest
+from cross_sensor_cal.exports.schema_utils import sort_and_rename_spectral_columns
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -164,6 +166,7 @@ sys.modules["cross_sensor_cal"].__path__ = [str(SRC_ROOT / "cross_sensor_cal")] 
 _stub_module("cross_sensor_cal.pipelines")
 sys.modules["cross_sensor_cal.pipelines"].__path__ = []  # type: ignore[attr-defined]
 _stub_module("cross_sensor_cal.utils", get_package_data_path=lambda *a, **k: Path("data"))
+_stub_module("cross_sensor_cal.utils.memory", clean_memory=lambda *a, **k: None)
 sys.modules["cross_sensor_cal.utils"].__path__ = []  # type: ignore[attr-defined]
 _stub_module("cross_sensor_cal.utils.naming", get_flight_paths=lambda *a, **k: {}, get_flightline_products=lambda base, code, stem: {"work_dir": Path(base) / stem})
 _stub_module("cross_sensor_cal.brdf_topo", apply_brdf_topo_core=lambda *a, **k: None, build_correction_parameters_dict=lambda *a, **k: {})
@@ -562,3 +565,96 @@ def test_build_parquet_from_envi_serial_when_disabled(monkeypatch, tmp_path: Pat
 
     assert writes and writes[0][0] == parquet_path
     assert not plan_called["flag"]
+
+
+def test_ensure_parquet_for_undarkened_envi(tmp_path: Path, monkeypatch) -> None:
+    import importlib
+    import sys as _sys
+
+    # Restore real pandas for this integration-style check (the module-level stub
+    # is sufficient for lightweight unit cases but lacks the Series constructor).
+    _sys.modules.pop("pandas", None)
+    _sys.modules["pandas"] = importlib.import_module("pandas")
+    for _mod in ("pyarrow", "pyarrow.parquet"):
+        _sys.modules.pop(_mod, None)
+    _sys.modules["pyarrow"] = importlib.import_module("pyarrow")
+    _sys.modules["pyarrow.parquet"] = importlib.import_module("pyarrow.parquet")
+
+    rasterio = pytest.importorskip("rasterio")
+    np = pytest.importorskip("numpy")
+    from rasterio.transform import from_origin
+
+    from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
+
+    img_path = tmp_path / "scene_landsat_tm_undarkened_envi.img"
+    transform = from_origin(500000.0, 4100000.0, 1.0, 1.0)
+    data = np.stack(
+        [
+            np.array([[0.1, 0.2], [0.3, 0.4]], dtype="float32"),
+            np.array([[0.5, 0.6], [0.7, 0.8]], dtype="float32"),
+        ]
+    )
+
+    with rasterio.open(
+        img_path,
+        "w",
+        driver="ENVI",
+        height=2,
+        width=2,
+        count=2,
+        dtype="float32",
+        crs="EPSG:32613",
+        transform=transform,
+    ) as dst:
+        dst.write(data)
+
+    hdr_path = img_path.with_suffix(".hdr")
+    header_text = hdr_path.read_text(encoding="utf-8")
+    if "wavelength" not in header_text.lower():
+        header_text = header_text.strip() + "\nwavelength = {485, 560}\n"
+        hdr_path.write_text(header_text, encoding="utf-8")
+
+    logger = DummyLogger()
+    parquet_module = importlib.import_module("cross_sensor_cal.parquet_export")
+
+    def _fake_build(envi_img: Path, envi_hdr: Path, parquet_path: Path, **_kwargs):
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        base = pd.DataFrame(
+                {
+                    "wl0485": [0.1],
+                    "wl0560": [0.2],
+                    "row": [0],
+                    "col": [0],
+                    "pixel_id": [0],
+                    "x": [500000.5],
+                    "y": [4099999.5],
+                    "lon": [0.0],
+                    "lat": [0.0],
+                }
+            )
+        stage = infer_stage_from_name(parquet_path.name)
+        renamed = sort_and_rename_spectral_columns(
+            base, stage_key=stage, wavelengths_nm=[485, 560]
+        )
+        table = pa.Table.from_pandas(renamed, preserve_index=False)
+        pq.write_table(table, parquet_path)
+
+    monkeypatch.setattr(parquet_module, "build_parquet_from_envi", _fake_build)
+
+    parquet_path = parquet_module.ensure_parquet_for_envi(
+        img_path, logger, chunk_size=4, ray_cpus=0
+    )
+
+    assert parquet_path and parquet_path.exists(), logger.warnings
+    table = pq.read_table(parquet_path)
+    cols = table.column_names
+
+    stage_key = infer_stage_from_name(parquet_path.name)
+    spectral_cols = [c for c in cols if c.startswith(stage_key)]
+
+    assert {"lon", "lat", "x", "y"}.issubset(cols)
+    assert len(spectral_cols) == 2
+    assert spectral_cols[0].startswith(f"{stage_key}_b001_wl")
