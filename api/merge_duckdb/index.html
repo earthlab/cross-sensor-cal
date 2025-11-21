@@ -1191,8 +1191,9 @@ merge_memory_limit_gb : float or str, optional
 merge_threads : int, optional
     Number of threads DuckDB should use for the merge. <code>None</code> keeps the
     engine default (usually <code>os.cpu_count()</code>).
-merge_row_group_size : int, optional
+merge_row_group_size : int or None, optional
     Target number of rows per Parquet row group in the merged output.
+    If None, DuckDB will auto-determine the optimal size (better streaming performance).
 merge_temp_directory : Path, optional
     Directory where DuckDB should spill temporary data. Defaults to a
     <code>.duckdb_tmp</code> subdirectory inside <code>flightline_dir</code>.</p>
