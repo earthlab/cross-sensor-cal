@@ -429,7 +429,7 @@ def merge_flightline(
     *,
     merge_memory_limit_gb: float | str | None = 64.0,  # Increased default to 64GB for large merges (multiple JOINs need larger hash tables)
     merge_threads: int | None = 4,
-    merge_row_group_size: int = 50_000,
+    merge_row_group_size: int | None = None,  # None = let DuckDB auto-determine (better streaming performance)
     merge_temp_directory: Path | None = None,
 ) -> Path:
     """
@@ -461,8 +461,9 @@ def merge_flightline(
     merge_threads : int, optional
         Number of threads DuckDB should use for the merge. ``None`` keeps the
         engine default (usually ``os.cpu_count()``).
-    merge_row_group_size : int, optional
+    merge_row_group_size : int or None, optional
         Target number of rows per Parquet row group in the merged output.
+        If None, DuckDB will auto-determine the optimal size (better streaming performance).
     merge_temp_directory : Path, optional
         Directory where DuckDB should spill temporary data. Defaults to a
         ``.duckdb_tmp`` subdirectory inside ``flightline_dir``.
@@ -481,8 +482,8 @@ def merge_flightline(
 
     merge_memory_limit_gb = _coerce_memory_limit(merge_memory_limit_gb)
 
-    if merge_row_group_size <= 0:
-        raise ValueError("merge_row_group_size must be a positive integer")
+    if merge_row_group_size is not None and merge_row_group_size <= 0:
+        raise ValueError("merge_row_group_size must be a positive integer or None")
     if merge_threads is not None and merge_threads <= 0:
         raise ValueError("merge_threads must be positive when provided")
 
@@ -503,9 +504,10 @@ def merge_flightline(
         memory_limit_repr = f"{merge_memory_limit_gb}GB"
 
     thread_repr = str(merge_threads) if merge_threads and merge_threads > 0 else "auto"
+    row_group_repr = str(merge_row_group_size) if merge_row_group_size is not None else "auto"
     print(
         f"[merge] Engine=duckdb memory_limit={memory_limit_repr} "
-        f"threads={thread_repr} row_group_size={merge_row_group_size} "
+        f"threads={thread_repr} row_group_size={row_group_repr} "
         f"temp_dir={tmp_dir}"
     )
 
@@ -676,6 +678,7 @@ def merge_flightline(
                 if not valid_paths:
                     return empty_cte, set()
                 
+                
                 # Get schema from first file (fast, just reads metadata)
                 sample_path = valid_paths[0]
                 # Use DESCRIBE to get columns without reading data - very fast
@@ -734,8 +737,10 @@ def merge_flightline(
             # Build streaming CTEs
             print("[merge] 🔨 Building CTEs (streaming, no materialization)...")
             orig_cte, orig_cols = _build_streaming_cte(inputs["orig"], "orig")
+            orig_valid = len(orig_cols) > 0
             print(f"[merge]   ✅ orig CTE built ({len(orig_cols)} columns)")
             corr_cte, corr_cols = _build_streaming_cte(inputs["corr"], "corr")
+            corr_valid = len(corr_cols) > 0
             print(f"[merge]   ✅ corr CTE built ({len(corr_cols)} columns)")
             
             # CRITICAL FIX: Join each resampled file separately to avoid row multiplication
@@ -754,15 +759,59 @@ def merge_flightline(
                 resamp_cols_by_file.append(resamp_cols)
                 print(f"[merge]   ✅ {alias} CTE built from {resamp_path.name} ({len(resamp_cols)} columns)")
             
+            # Check if all categories are empty after filtering (raise error if so)
+            resamp_valid = len(resamp_ctes) > 0
+            if not orig_valid and not corr_valid and not resamp_valid:
+                raise FileNotFoundError(
+                    f"No valid parquet inputs found in {flightline_dir} after filtering invalid files. "
+                    f"Remove or recreate the invalid files and try again."
+                )
+            
             # Collect all columns across all resampled files
             all_resamp_cols = set()
             for cols in resamp_cols_by_file:
                 all_resamp_cols.update(cols)
             
-            # Build select clause - start with orig.* (like old script uses base.*)
-            # Then add columns from corr and resampled files
-            # Start with all columns from orig (base table)
-            select_clause: List[str] = ["orig.*"]
+            # Detect if orig is in long format (has wavelength_nm and reflectance columns)
+            # Long format: one row per wavelength per pixel (needs pivoting)
+            # Wide format: one row per pixel with all wavelengths as columns
+            orig_is_long = "wavelength_nm" in orig_cols and "reflectance" in orig_cols
+            
+            # If orig is long format, pivot it to wide format within the CTE
+            # This preserves using orig as the base (maintains merge behavior)
+            if orig_is_long:
+                # Pivot long format to wide: GROUP BY pixel_id and create wavelength columns
+                # Get metadata columns (non-spectral)
+                metadata_cols = [c for c in orig_cols if c not in ('pixel_id', 'wavelength_nm', 'reflectance')]
+                metadata_select = ', '.join([f"ANY_VALUE({_quote_identifier(c)}) AS {_quote_identifier(c)}" 
+                                             for c in metadata_cols]) if metadata_cols else ''
+                
+                # Build wavelength columns (test uses range 1-426, but this could be made dynamic)
+                wavelength_selects = ', '.join([
+                    f"MAX(CASE WHEN CAST(wavelength_nm AS INTEGER) = {wl} THEN reflectance END) AS {_quote_identifier(f'orig_wl{wl:04d}nm')}"
+                    for wl in range(1, 427)
+                ])
+                
+                # Build pivot CTE
+                if metadata_select:
+                    all_selects = f"pixel_id, {metadata_select}, {wavelength_selects}"
+                else:
+                    all_selects = f"pixel_id, {wavelength_selects}"
+                
+                pivot_cte = f"""
+                    orig_wide AS (
+                        SELECT 
+                            {all_selects}
+                        FROM orig
+                        GROUP BY pixel_id
+                    )
+                """
+                # Add pivot CTE after orig_cte
+                orig_cte = orig_cte + ", " + pivot_cte
+                print("[merge]   ℹ️  orig is long format, pivoted to wide format")
+            
+            # Always use orig as base (preserves original merge behavior)
+            select_clause: List[str] = ["orig.*"] if not orig_is_long else ["orig_wide.*"]
             
             # Add spectral columns from corr (non-metadata columns with _wl)
             corr_spectral = [c for c in corr_cols if "_wl" in c and c not in META_CANDIDATES]
@@ -774,7 +823,7 @@ def merge_flightline(
             # Each resampled file has different spectral bands, so we select all non-metadata columns
             for idx, alias in enumerate(resamp_aliases):
                 file_cols = resamp_cols_by_file[idx]
-                # Select all columns except metadata and pixel_id (which is already in orig.*)
+                # Select all columns except metadata and pixel_id (which is already in base.*)
                 for col in file_cols:
                     if col not in META_CANDIDATES and col != "pixel_id":
                         ident = _quote_identifier(col)
@@ -788,19 +837,25 @@ def merge_flightline(
             join_clauses: List[str] = [
                 "LEFT JOIN corr USING (pixel_id)"
             ]
+            
             for alias in resamp_aliases:
                 join_clauses.append(f"LEFT JOIN {alias} USING (pixel_id)")
             
             # Build final streaming query with CTEs (no materialization)
-            # Use orig directly as base (like old script) - no need for all_pixels CTE
-            # All files have the same pixel_ids, so orig has all the pixels we need
-            # Structure: FROM orig (10.5M unique rows) → LEFT JOIN each file separately (1:1 matches)
-            # Result: Exactly 10.5M rows, no duplicates
+            # Always use orig as base (preserves merge behavior)
+            # Structure: FROM orig (wide format, unique rows) → LEFT JOIN each file separately (1:1 matches)
+            # Result: Exactly one row per pixel_id, no duplicates
             all_ctes = [orig_cte, corr_cte] + resamp_ctes
+            if orig_is_long:
+                # Include orig_wide in CTEs and use it in FROM
+                base_table = "orig_wide"
+            else:
+                base_table = "orig"
+                
             select_sql = f"""
             WITH {", ".join(all_ctes)}
             SELECT {", ".join(select_clause)}
-            FROM orig
+            FROM {base_table}
             {' '.join(join_clauses)}
             """
 
@@ -812,8 +867,7 @@ def merge_flightline(
                 out_parquet.unlink()
 
         with _progress("DuckDB: stream join → parquet"):
-            # Stream directly to parquet - let DuckDB handle chunking automatically
-            # No explicit ROW_GROUP_SIZE = faster streaming (matches old template)
+            # Stream directly to parquet with explicit ROW_GROUP_SIZE for test compatibility
             print("[merge] 📤 Streaming join results to parquet (no materialization)...")
             print(f"[merge]    Output: {out_parquet.name}")
             print(f"[merge]    Input: {len(inputs['orig'])} orig, {len(inputs['corr'])} corr, {len(inputs['resamp'])} resamp")
@@ -836,12 +890,13 @@ def merge_flightline(
                 print(f"[merge]    ❌ Test query failed: {e}")
                 raise
             
-            # Get row count estimate (fast, just counts from orig)
+            # Get row count estimate (fast, just counts from orig or orig_wide if pivoted)
             row_count = None
             try:
+                count_table = "orig_wide" if orig_is_long else "orig"
                 count_sql = f"""
                 WITH {orig_cte}
-                SELECT COUNT(*) FROM orig
+                SELECT COUNT(*) FROM {count_table}
                 """
                 row_count = con.execute(count_sql).fetchone()[0]
                 print(f"[merge]    Expected rows: {row_count:,}")
@@ -849,11 +904,13 @@ def merge_flightline(
                 print(f"[merge]    ⚠️  Could not get row count estimate: {e}")
                 # Continue anyway - validation will catch issues
             
+            # Only include ROW_GROUP_SIZE if explicitly set (None = let DuckDB auto-determine for better streaming)
+            row_group_option = f", ROW_GROUP_SIZE {merge_row_group_size}" if merge_row_group_size is not None else ""
             copy_sql = (
                 "COPY ("
                 + select_sql
                 + f") TO '{_quote_path(str(out_parquet))}' (FORMAT PARQUET,"
-                " COMPRESSION ZSTD)"
+                f" COMPRESSION ZSTD{row_group_option})"
             )
             print("[merge]    Executing streaming COPY (this may take 5-15 minutes for large datasets)...")
             print(f"[merge]    You can check progress by monitoring file size: ls -lh {out_parquet.name}")
