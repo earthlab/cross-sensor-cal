@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import NamedTuple
 import re
 
-from cross_sensor_cal._ray_utils import ray_map
 
 __all__ = [
     "parquet_exists_and_valid",
