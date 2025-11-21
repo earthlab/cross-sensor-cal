@@ -6,6 +6,8 @@ import re
 import shutil
 from typing import Dict
 
+from .file_types import NEONReflectanceENVIFile, NEONReflectanceFile
+
 
 @dataclass(frozen=True)
 class SensorProductPaths:
@@ -71,15 +73,15 @@ class FlightlinePaths:
 
     @property
     def envi_img(self) -> Path:
-        return self.flight_dir / f"{self.flight_id}_envi.img"
+        return self._raw_envi_base().with_suffix(".img")
 
     @property
     def envi_hdr(self) -> Path:
-        return self.flight_dir / f"{self.flight_id}_envi.hdr"
+        return self._raw_envi_base().with_suffix(".hdr")
 
     @property
     def envi_parquet(self) -> Path:
-        return self.flight_dir / f"{self.flight_id}_envi.parquet"
+        return self._raw_envi_base().with_suffix(".parquet")
 
     @property
     def corrected_img(self) -> Path:
@@ -147,6 +149,112 @@ class FlightlinePaths:
             sensor_suffix=sensor_name,
         )
 
+    def _raw_envi_base(self) -> Path:
+        """
+        Resolve the canonical stem for the uncorrected ENVI export.
+
+        Legacy NEON flightlines that omit the tile identifier in the filename
+        produce ENVI outputs whose stem includes that synthetic tile
+        (e.g. ` …_20200720T163210_20200720_163210_reflectance_envi `). Newer
+        flightlines with explicit tiles already match ` flight_id `.
+
+        When parsing fails for any reason, we fall back to the historic
+        ` <flight_id>_envi ` stem to preserve compatibility.
+        """
+        try:
+            reflectance = NEONReflectanceFile.from_filename(f"{self.flight_id}.h5")
+        except ValueError:
+            return self.flight_dir / f"{self.flight_id}_envi"
+
+        tile: str | None = getattr(reflectance, "tile", None)
+
+        if not tile:
+            return self.flight_dir / f"{self.flight_id}_envi"
+
+        # For legacy datetime format files, the tile is synthetic (e.g., "20200720T163210")
+        # Detect synthetic tile: if tile contains 'T' and matches date+time pattern
+        is_legacy_datetime = tile and 'T' in tile and re.match(r'^\d{8}T\d{6}$', tile)
+        
+        if is_legacy_datetime:
+            # For legacy datetime format, check if files exist with the OLD format first
+            # (with T-separator and duplicate date/time), then fall back to NEW format
+            date = getattr(reflectance, "date", None)
+            time = getattr(reflectance, "time", None)
+            descriptor = getattr(reflectance, "descriptor", "reflectance")
+            
+            # OLD format: NEON_{domain}_{site}_DP1_{date}T{time}_{date}_{time}_reflectance_envi.img
+            # This is what files from previous runs might have
+            product_part = "DP1"
+            old_parts = ["NEON", reflectance.domain, reflectance.site, product_part]
+            if date and time:
+                old_parts.append(f"{date}T{time}")  # T-separator format
+            if date:
+                old_parts.append(date)
+            if time:
+                old_parts.append(time)
+            if descriptor and "directional" in descriptor:
+                old_parts.append("directional")
+            old_parts.append("reflectance")
+            old_parts.append("envi")
+            old_filename = "_".join(old_parts) + ".img"
+            old_path_stem = self.flight_dir / old_filename.replace(".img", "")
+            old_img = old_path_stem.with_suffix(".img")
+            old_hdr = old_path_stem.with_suffix(".hdr")
+            
+            # Check if old format file exists - try/except to handle any path issues
+            try:
+                old_img_exists = old_img.exists()
+                old_hdr_exists = old_hdr.exists()
+                if old_img_exists and old_hdr_exists:
+                    old_img_is_file = old_img.is_file()
+                    old_hdr_is_file = old_hdr.is_file()
+                    if old_img_is_file and old_hdr_is_file:
+                        old_img_size = old_img.stat().st_size
+                        old_hdr_size = old_hdr.stat().st_size
+                        if old_img_size > 0 and old_hdr_size > 0:
+                            return old_path_stem
+            except (OSError, ValueError):
+                # If there's any issue checking the old format, fall through to new format
+                pass
+            
+            # NEW format: NEON_{domain}_{site}_DP1_{date}_{time}_reflectance_envi.img
+            # This is what neon_to_envi_no_hytools() now creates
+            new_parts = ["NEON", reflectance.domain, reflectance.site, product_part]
+            if date:
+                new_parts.append(date)
+            if time:
+                new_parts.append(time)
+            if descriptor and "directional" in descriptor:
+                new_parts.append("directional")
+            new_parts.append("reflectance")
+            new_parts.append("envi")
+            new_filename = "_".join(new_parts) + ".img"
+            return self.flight_dir / new_filename.replace(".img", "")
+
+        product = getattr(reflectance, "product", None) or "DP1"
+
+        date = getattr(reflectance, "date", None)
+        time = getattr(reflectance, "time", None)
+        directional = getattr(reflectance, "directional", False)
+        descriptor = getattr(reflectance, "descriptor", None)
+
+        try:
+            envi_file = NEONReflectanceENVIFile.from_components(
+                domain=reflectance.domain,
+                site=reflectance.site,
+                product=product,
+                tile=tile,
+                date=date,
+                time=time,
+                directional=directional,
+                descriptor=descriptor,
+                folder=self.flight_dir,
+            )
+        except (ValueError, AttributeError):
+            return self.flight_dir / f"{self.flight_id}_envi"
+
+        return envi_file.path.with_suffix("")
+
 
 def scene_prefix_from_dir(flightline_dir: Path) -> str:
     flightline_dir = Path(flightline_dir)
@@ -171,7 +279,7 @@ def site_from_prefix(prefix: str) -> str | None:
 
 def normalize_brdf_model_path(flightline_dir: Path) -> Path | None:
     """
-    Ensure the BRDF model JSON in ``flightline_dir`` matches the scene prefix:
+    Ensure the BRDF model JSON in ` flightline_dir ` matches the scene prefix:
         <prefix>_brdf_model.json
 
     If a legacy file like 'NIWO_brdf_model.json' exists, rename it.
