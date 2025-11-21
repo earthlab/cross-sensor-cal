@@ -322,11 +322,11 @@ def _parse_envi_header(hdr_path: Path) -> dict[str, Any]:
     processed: dict[str, Any] = {}
     for key, raw_value in raw_entries.items():
         if raw_value.startswith("{") and raw_value.endswith("}"):
-            tokens = _split_envi_block(raw_value)
             if key == "wavelength":
-                processed[key] = [float(token) for token in tokens]
+                processed[key] = _parse_wavelength_list(raw_value)
                 continue
 
+            tokens = _split_envi_block(raw_value)
             if key in list_float_keys:
                 processed[key] = [float(token) for token in tokens]
             elif key in list_string_keys:
