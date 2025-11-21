@@ -54,6 +54,12 @@ def _hash_file(path: Path) -> str:
 
 
 def _discover_primary_cube(flightline_dir: Path) -> tuple[Path, Path]:
+    """
+    Discover the raw and corrected ENVI cubes for a flightline.
+    
+    Handles naming mismatches between raw files (which may use legacy T-separator format)
+    and corrected files (which use canonical flight_id format).
+    """
     raw_candidates = sorted(
         p
         for p in flightline_dir.glob("*_envi.img")
@@ -63,10 +69,60 @@ def _discover_primary_cube(flightline_dir: Path) -> tuple[Path, Path]:
         raise FileNotFoundError(f"No ENVI cube found in {flightline_dir}")
     raw_path = raw_candidates[0]
     prefix = raw_path.stem.rsplit("_envi", 1)[0]
+    
+    # Strategy 1: Try exact prefix match first (works if naming is consistent)
     corrected = flightline_dir / f"{prefix}_brdfandtopo_corrected_envi.img"
-    if not corrected.exists():
-        raise FileNotFoundError(f"Missing corrected cube: {corrected}")
-    return raw_path, corrected
+    if corrected.exists():
+        return raw_path, corrected
+    
+    # Strategy 2: Try to construct canonical flight_id from parsed raw file
+    # Raw file might have legacy format: NEON_D13_NIWO_DP1_20200720T163210_20200720_163210_reflectance_envi.img
+    # Corrected file uses canonical format: NEON_D13_NIWO_DP1_20200720_163210_reflectance_brdfandtopo_corrected_envi.img
+    try:
+        from .file_types import NEONReflectanceENVIFile
+        
+        # Try parsing the raw ENVI filename
+        envi_file = NEONReflectanceENVIFile.from_filename(raw_path)
+        
+        # Extract components for canonical flight_id format
+        # Format: NEON_{domain}_{site}_DP1_{date}_{time}_reflectance
+        domain = getattr(envi_file, "domain", None)
+        site = getattr(envi_file, "site", None)
+        date = getattr(envi_file, "date", None)
+        time = getattr(envi_file, "time", None)
+        
+        if domain and site and date and time:
+            # Construct canonical flight_id (remove T-separator and duplicate date/time)
+            canonical_flight_id = f"NEON_{domain}_{site}_DP1_{date}_{time}_reflectance"
+            canonical_corrected = flightline_dir / f"{canonical_flight_id}_brdfandtopo_corrected_envi.img"
+            if canonical_corrected.exists():
+                return raw_path, canonical_corrected
+    except (ValueError, AttributeError):
+        # If parsing fails, fall through to Strategy 3
+        pass
+    except Exception:
+        # Catch any other unexpected errors and log them, then fall through to Strategy 3
+        pass
+    
+    # Strategy 3: Fallback - glob search for any corrected file
+    corrected_candidates = sorted(
+        p
+        for p in flightline_dir.glob("*_brdfandtopo_corrected_envi.img")
+        if p.is_file()
+    )
+    if corrected_candidates:
+        return raw_path, corrected_candidates[0]
+    
+    # If all strategies fail, raise error with helpful message
+    raise FileNotFoundError(
+        f"Missing corrected cube: Could not find corrected ENVI file for raw file {raw_path.name}.\n"
+        f"Tried:\n"
+        f"  1. {corrected.name} (Strategy 1: exact prefix match)\n"
+        f"  2. Canonical format based on flight_id (Strategy 2: parsed from raw file)\n"
+        f"  3. Any *_brdfandtopo_corrected_envi.img in {flightline_dir} (Strategy 3: glob search)\n"
+        f"Raw file may use legacy format (T-separator) while corrected uses canonical format.\n"
+        f"Found {len(corrected_candidates)} corrected file(s) but none matched."
+    )
 
 
 def _list_envi_products(flightline_dir: Path, prefix: str) -> list[Path]:
