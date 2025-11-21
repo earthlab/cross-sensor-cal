@@ -176,7 +176,6 @@ if not logger.handlers:
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
     logger.propagate = False
 # ---------------------------------------------------------------------
 
@@ -613,6 +612,8 @@ def _export_parquet_stage(
             continue
         img_paths.append(img_path)
 
+    logger.info(f"Found {len(img_paths)} ENVI files to export to parquet")
+
     parquet_outputs: list[Path] = []
 
     def _parquet_worker(img_path_str: str) -> str | None:
@@ -636,31 +637,16 @@ def _export_parquet_stage(
             debug_log("Writing Parquet with row_group_size=%s", parquet_chunk_size)
         else:
             logger.info("Writing Parquet with row_group_size=%s", parquet_chunk_size)
-        if ray_cpus is not None and len(img_paths) > 1:
-            if RAY_DEBUG:
-                logger.info(
-                    "Ray Parquet export for %s: %d ENVI cubes (num_cpus=%s)",
-                    flight_stem,
-                    len(img_paths),
-                    ray_cpus,
-                )
-            results = ray_map(
-                _parquet_worker,
-                [str(p) for p in img_paths],
-                num_cpus=ray_cpus,
+        # Process sequentially without Ray to avoid memory issues (OOM fix)
+        # Ray is causing memory issues even with max_workers=1 when processing large ENVI files
+        for img_path in img_paths:
+            pq_path = ensure_parquet_for_envi(
+                img_path,
+                logger,
+                chunk_size=parquet_chunk_size,
             )
-            for result in results:
-                if result:
-                    parquet_outputs.append(Path(result))
-        else:
-            for img_path in img_paths:
-                pq_path = ensure_parquet_for_envi(
-                    img_path,
-                    logger,
-                    chunk_size=parquet_chunk_size,
-                )
-                if pq_path is not None:
-                    parquet_outputs.append(Path(pq_path))
+            if pq_path is not None:
+                parquet_outputs.append(Path(pq_path))
 
     if parquet_outputs:
         validator = Path(__file__).resolve().parents[3] / "bin" / "validate_parquets"
@@ -1539,6 +1525,39 @@ def stage_export_envi_from_h5(
 
     work_dir = flight_paths.flight_dir
     h5_path = flight_paths.h5
+    
+    # Ensure work_dir exists before discovery (files from previous runs should be here)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    
+    # First, try to discover existing ENVI files via get_flightline_products()
+    # This handles files with variant naming (e.g., T-separator format)
+    products = get_flightline_products(base_folder, product_code, flight_stem)
+    discovered_img = products.get("raw_envi_img")
+    discovered_hdr = products.get("raw_envi_hdr")
+    
+    # Use discovered paths if they exist and are valid, otherwise fall back to canonical paths
+    def _looks_valid(img_path: Path, hdr_path: Path) -> bool:
+        if not img_path or not hdr_path:
+            return False
+        try:
+            return (
+                img_path.exists()
+                and img_path.is_file()
+                and img_path.stat().st_size > 0
+                and hdr_path.exists()
+                and hdr_path.is_file()
+                and hdr_path.stat().st_size > 0
+            )
+        except (OSError, ValueError):
+            return False
+    
+    if discovered_img and discovered_hdr and _looks_valid(discovered_img, discovered_hdr):
+        logger.info(
+            f"✅ Discovered existing ENVI export → {discovered_img.name} / {discovered_hdr.name}"
+        )
+        return discovered_img, discovered_hdr
+    
+    # Fall back to canonical paths
     raw_img_path = flight_paths.envi_img
     raw_hdr_path = flight_paths.envi_hdr
 
@@ -1555,8 +1574,6 @@ def stage_export_envi_from_h5(
     raw_name_lower = raw_img_path.name.lower()
     assert "landsat" not in raw_name_lower
     assert "micasense" not in raw_name_lower
-
-    work_dir.mkdir(parents=True, exist_ok=True)
 
     # Announce what we *expect* the raw ENVI export to be called.
     logger.info(
@@ -1596,16 +1613,6 @@ def stage_export_envi_from_h5(
     # FAST SKIP: if canonical raw ENVI already looks valid, avoid
     # calling neon_to_envi_no_hytools() entirely. This is critical to
     # prevent rereading ~23 GB cubes and killing the kernel.
-    def _looks_valid(img_path: Path, hdr_path: Path) -> bool:
-        return (
-            img_path.exists()
-            and img_path.is_file()
-            and img_path.stat().st_size > 0
-            and hdr_path.exists()
-            and hdr_path.is_file()
-            and hdr_path.stat().st_size > 0
-        )
-
     if _looks_valid(raw_img_path, raw_hdr_path):
         logger.info(
             f"✅ Existing ENVI export found — skipping heavy export ({raw_img_path.name} / {raw_hdr_path.name})"
@@ -1642,10 +1649,37 @@ def stage_export_envi_from_h5(
         )
         return raw_img_path, raw_hdr_path
 
+    # If canonical paths don't exist, re-query get_flightline_products() to see
+    # if it can now discover the files (they may have been created in a previous
+    # run with a different naming format, or neon_to_envi_no_hytools may have
+    # created them with a variant name).
+    products = get_flightline_products(base_folder, product_code, flight_stem)
+    discovered_img = products.get("raw_envi_img")
+    discovered_hdr = products.get("raw_envi_hdr")
+    
+    if discovered_img and discovered_hdr and _looks_valid(discovered_img, discovered_hdr):
+        logger.info(
+            f"✅ ENVI export found via discovery → {discovered_img.name} / {discovered_hdr.name}"
+        )
+        return discovered_img, discovered_hdr
+
     # If we still can't validate the canonical "raw_envi_img"/"raw_envi_hdr",
     # we assume get_flightline_products() is wrong for this stage.
     # Raise a RuntimeError that tells the dev EXACTLY which files actually appeared.
     created_pretty = "\n  ".join(created_names) if created_names else "(no new files detected)"
+    
+    # Also list all existing *_reflectance_envi.img files for debugging
+    # Check both work_dir and base_folder for files
+    existing_envi_files = sorted(work_dir.glob("*_reflectance_envi.img"))
+    existing_all_envi = sorted(work_dir.glob("*_envi.img"))
+    # Also check base_folder in case files are there
+    if base_folder != work_dir:
+        existing_envi_files.extend(sorted(base_folder.glob("*_reflectance_envi.img")))
+        existing_all_envi.extend(sorted(base_folder.glob("*_envi.img")))
+    
+    existing_pretty = "\n  ".join(f.name for f in existing_envi_files) if existing_envi_files else "(no *_reflectance_envi.img files found)"
+    existing_all_pretty = "\n  ".join(f.name for f in existing_all_envi) if existing_all_envi else "(no *_envi.img files found)"
+    
 
     raise RuntimeError(
         (
@@ -1656,6 +1690,10 @@ def stage_export_envi_from_h5(
             "  {raw_hdr}\n\n"
             "New files actually created during this export call:\n"
             "  {created}\n\n"
+            "Existing *_reflectance_envi.img files in work directory:\n"
+            "  {existing}\n\n"
+            "All *_envi.img files in work directory:\n"
+            "  {existing_all}\n\n"
             "→ ACTION REQUIRED:\n"
             "Update get_flightline_products() so that keys 'raw_envi_img' and "
             "'raw_envi_hdr' point at the actual uncorrected ENVI output that "
@@ -1668,6 +1706,8 @@ def stage_export_envi_from_h5(
             raw_img=raw_img_path.name,
             raw_hdr=raw_hdr_path.name,
             created=created_pretty,
+            existing=existing_pretty,
+            existing_all=existing_all_pretty,
         )
     )
 
@@ -1815,9 +1855,9 @@ def stage_convolve_all_sensors(
     resample_method: str | None = "convolution",
     parallel_mode: bool = False,
     ray_cpus: int | None = None,
-    merge_memory_limit_gb: float | str | None = 6.0,
+    merge_memory_limit_gb: float | str | None = 64.0,  # Increased default to 64GB for large merges (multiple JOINs need larger hash tables)
     merge_threads: int | None = 4,
-    merge_row_group_size: int = 50_000,
+    merge_row_group_size: int | None = None,
     merge_temp_directory: Path | None = None,
 ):
     """Convolve the BRDF+topo corrected ENVI cube into sensor bandstacks."""
@@ -1983,6 +2023,7 @@ def stage_convolve_all_sensors(
         _is_legacy,
     )
 
+    logger.info("📦 Parquet export for %s ...", flight_stem)
     parquet_outputs = _export_parquet_stage(
         base_folder=base_folder,
         product_code=product_code,
@@ -1997,11 +2038,14 @@ def stage_convolve_all_sensors(
     logger.info("✅ Parquet stage complete for %s", flight_stem)
 
     if parquet_outputs:
+        # Disable Ray in merge when ray_cpus is None (e.g., when engine="thread") to avoid OOM
+        # Process parquet validation sequentially to prevent LocalRayletDiedError
+        merge_ray_cpus = None
         merge_out = merge_flightline(
             flightline_dir,
             out_name=None,
             emit_qa_panel=True,
-            ray_cpus=ray_cpus,
+            ray_cpus=merge_ray_cpus,  # None = no Ray, process sequentially
             merge_memory_limit_gb=merge_memory_limit_gb,
             merge_threads=merge_threads,
             merge_row_group_size=merge_row_group_size,
@@ -2066,9 +2110,9 @@ def process_one_flightline(
     parallel_mode: bool = False,
     parquet_chunk_size: int = 50_000,
     ray_cpus: int | None = None,
-    merge_memory_limit_gb: float | str | None = 6.0,
+    merge_memory_limit_gb: float | str | None = 64.0,  # Increased default to 64GB for large merges (multiple JOINs need larger hash tables)
     merge_threads: int | None = 4,
-    merge_row_group_size: int = 50_000,
+    merge_row_group_size: int | None = None,
     merge_temp_directory: Path | None = None,
 ):
     """Run the structured, skip-aware workflow for a single flightline.
@@ -2344,9 +2388,9 @@ def go_forth_and_multiply(
     max_workers: int = 8,
     parquet_chunk_size: int = 50_000,
     engine: Literal["thread", "process", "ray"] = "ray",
-    merge_memory_limit_gb: float | str | None = 6.0,
+    merge_memory_limit_gb: float | str | None = 64.0,  # Increased default to 64GB for large merges (multiple JOINs need larger hash tables)
     merge_threads: int | None = 4,
-    merge_row_group_size: int = 50_000,
+    merge_row_group_size: int | None = None,
     merge_temp_directory: Path | None = None,
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
