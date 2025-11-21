@@ -780,35 +780,56 @@ def merge_flightline(
             # If orig is long format, pivot it to wide format within the CTE
             # This preserves using orig as the base (maintains merge behavior)
             if orig_is_long:
-                # Pivot long format to wide: GROUP BY pixel_id and create wavelength columns
-                # Get metadata columns (non-spectral)
-                metadata_cols = [c for c in orig_cols if c not in ('pixel_id', 'wavelength_nm', 'reflectance')]
-                metadata_select = ', '.join([f"ANY_VALUE({_quote_identifier(c)}) AS {_quote_identifier(c)}" 
-                                             for c in metadata_cols]) if metadata_cols else ''
-                
-                # Build wavelength columns (test uses range 1-426, but this could be made dynamic)
-                wavelength_selects = ', '.join([
-                    f"MAX(CASE WHEN CAST(wavelength_nm AS INTEGER) = {wl} THEN reflectance END) AS {_quote_identifier(f'orig_wl{wl:04d}nm')}"
-                    for wl in range(1, 427)
-                ])
-                
-                # Build pivot CTE
-                if metadata_select:
-                    all_selects = f"pixel_id, {metadata_select}, {wavelength_selects}"
-                else:
-                    all_selects = f"pixel_id, {wavelength_selects}"
-                
-                pivot_cte = f"""
-                    orig_wide AS (
-                        SELECT 
-                            {all_selects}
-                        FROM orig
-                        GROUP BY pixel_id
-                    )
-                """
-                # Add pivot CTE after orig_cte
-                orig_cte = orig_cte + ", " + pivot_cte
-                print("[merge]   ℹ️  orig is long format, pivoted to wide format")
+                    # First, discover unique wavelengths dynamically (like old _register_union)
+                    # This avoids creating columns for wavelengths that don't exist, saving memory
+                    # Use a simpler query to avoid memory pressure during discovery
+                    try:
+                        wl_discovery_sql = f"""
+                            WITH {orig_cte}
+                            SELECT DISTINCT CAST(wavelength_nm AS INTEGER) AS wl_nm
+                            FROM orig
+                            WHERE wavelength_nm IS NOT NULL
+                            ORDER BY wl_nm
+                            LIMIT 500
+                        """
+                        wl_results = con.execute(wl_discovery_sql).fetchall()
+                        wl_values = [r[0] for r in wl_results]
+                        if not wl_values:
+                            raise ValueError("No wavelengths found in orig data")
+                        print(f"[merge]   ℹ️  orig is long format, discovered {len(wl_values)} unique wavelengths")
+                    except Exception as e:
+                        # Fallback: use a reasonable default range if discovery fails
+                        print(f"[merge]   ⚠️  Could not discover wavelengths dynamically: {e}, using default range 1-426")
+                        wl_values = list(range(1, 427))
+                    
+                    # Get metadata columns (non-spectral)
+                    metadata_cols = [c for c in orig_cols if c not in ('pixel_id', 'wavelength_nm', 'reflectance')]
+                    metadata_select = ', '.join([f"ANY_VALUE({_quote_identifier(c)}) AS {_quote_identifier(c)}"
+                                                 for c in metadata_cols]) if metadata_cols else ''
+                    
+                    # Build wavelength columns only for wavelengths that exist (more memory-efficient)
+                    wavelength_selects = ', '.join([
+                        f"MAX(CASE WHEN CAST(wavelength_nm AS INTEGER) = {wl} THEN reflectance END) AS {_quote_identifier(f'orig_wl{wl:04d}nm')}"
+                        for wl in wl_values
+                    ])
+                    
+                    # Build pivot CTE
+                    if metadata_select:
+                        all_selects = f"pixel_id, {metadata_select}, {wavelength_selects}"
+                    else:
+                        all_selects = f"pixel_id, {wavelength_selects}"
+                    
+                    pivot_cte = f"""
+                        orig_wide AS (
+                            SELECT 
+                                {all_selects}
+                            FROM orig
+                            GROUP BY pixel_id
+                        )
+                    """
+                    # Add pivot CTE after orig_cte
+                    orig_cte = orig_cte + ", " + pivot_cte
+                    print("[merge]   ℹ️  orig is long format, pivoted to wide format")
             
             # Always use orig as base (preserves original merge behavior)
             select_clause: List[str] = ["orig.*"] if not orig_is_long else ["orig_wide.*"]
