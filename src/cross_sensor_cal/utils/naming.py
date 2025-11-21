@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -27,21 +28,21 @@ def _pick_uncorrected_envi_pair(
     legacy_dir: Optional[Path] = None,
 ) -> Tuple[Optional[Path], Optional[Path]]:
     """Try to identify the *uncorrected* ENVI pair for ``flight_stem``."""
-
     search_roots: tuple[Path, ...]
     if legacy_dir is not None and Path(legacy_dir) != Path(primary_dir):
         search_roots = (Path(primary_dir), Path(legacy_dir))
     else:
         search_roots = (Path(primary_dir),)
 
+    # First, try exact match with flight_stem prefix
     for root in search_roots:
+        if not root.exists():
+            continue
         candidates = sorted(root.glob(f"{flight_stem}*.img"))
-
         for img_path in candidates:
             name_lower = img_path.name.lower()
             if "_brdfandtopo_corrected_envi" in name_lower:
                 continue
-
             hdr_path = img_path.with_suffix(".hdr")
             if (
                 img_path.exists()
@@ -52,6 +53,59 @@ def _pick_uncorrected_envi_pair(
                 and hdr_path.stat().st_size > 0
             ):
                 return img_path, hdr_path
+
+    # If exact match fails, try flexible matching for legacy datetime format files
+    # Pattern: NEON_D13_NIWO_DP1_20200720_163210_reflectance
+    # We want to match files like: NEON_D13_NIWO_DP1.30006.001_20200720T163210_20200720_163210_reflectance_envi.img
+    flight_parts = flight_stem.split("_")
+    if len(flight_parts) >= 6 and flight_parts[0] == "NEON":
+        domain = flight_parts[1]  # e.g., "D13"
+        site = flight_parts[2]    # e.g., "NIWO"
+        # Find date pattern (8 digits) and time pattern (6 digits)
+        date_match = re.search(r"(\d{8})", flight_stem)
+        time_match = re.search(r"(\d{6})", flight_stem)
+        
+        if date_match and time_match:
+            date = date_match.group(1)
+            time = time_match.group(1)
+            
+            # Search for all *_envi.img files to catch all variations
+            for root in search_roots:
+                if not root.exists():
+                    continue
+                # First try *_reflectance_envi.img, then fall back to *_envi.img
+                for pattern in ["*_reflectance_envi.img", "*_envi.img"]:
+                    try:
+                        all_candidates = sorted(root.glob(pattern))
+                    except (OSError, PermissionError):
+                        # Skip if we can't read the directory
+                        continue
+                    
+                    for img_path in all_candidates:
+                        name_lower = img_path.name.lower()
+                        if "_brdfandtopo_corrected_envi" in name_lower:
+                            continue
+                        
+                        # Check if this file matches our flight_stem by looking for key components
+                        # Must contain: domain, site, date, and time (with either T or _ separator)
+                        filename = img_path.name
+                        expected_prefix = f"NEON_{domain}_{site}_"
+                        has_domain_site = filename.startswith(expected_prefix)
+                        has_date = date in filename
+                        has_time = time in filename
+                        
+                        # If all key components match, this is likely our file
+                        if has_domain_site and has_date and has_time:
+                            hdr_path = img_path.with_suffix(".hdr")
+                            if (
+                                img_path.exists()
+                                and img_path.is_file()
+                                and img_path.stat().st_size > 0
+                                and hdr_path.exists()
+                                and hdr_path.is_file()
+                                and hdr_path.stat().st_size > 0
+                            ):
+                                return img_path, hdr_path
 
     return None, None
 
@@ -79,6 +133,8 @@ def get_flightline_products(
         raw_envi_img = raw_img_guess
         raw_envi_hdr = raw_hdr_guess
     else:
+        # Ensure work_dir exists before searching (it might not exist on first run)
+        # But we can still search even if it doesn't exist - glob will just return empty
         discovered_img, discovered_hdr = _pick_uncorrected_envi_pair(
             primary_dir=work_dir,
             flight_stem=flight_stem,
