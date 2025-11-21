@@ -557,55 +557,23 @@ def build_parquet_from_envi(
     from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
 
     stage_key = infer_stage_from_name(parquet_name)
-    if num_cpus is not None and num_cpus <= 0:
-        chunk_iter = read_envi_in_chunks(
-            Path(envi_img),
-            Path(envi_hdr),
-            parquet_name,
-            chunk_size=chunk_size,
-        )
-        write_kwargs: dict[str, object] = {}
-        if hasattr(chunk_iter, "context"):
-            write_kwargs["context"] = getattr(chunk_iter, "context")
-
-        parameters = inspect.signature(_write_parquet_chunks).parameters
-        if "row_group_size" in parameters:
-            write_kwargs["row_group_size"] = chunk_size
-
-        _write_parquet_chunks(parquet_path, chunk_iter, stage_key, **write_kwargs)
-        return
-
-    context, jobs, shared = _plan_chunk_jobs(
+    # Always use sequential processing (no Ray) to avoid OOM errors
+    # Ray causes memory issues even with max_workers=1 when processing large ENVI files
+    chunk_iter = read_envi_in_chunks(
         Path(envi_img),
         Path(envi_hdr),
         parquet_name,
-        stage_key,
         chunk_size=chunk_size,
     )
+    write_kwargs: dict[str, object] = {}
+    if hasattr(chunk_iter, "context"):
+        write_kwargs["context"] = getattr(chunk_iter, "context")
 
-    def _worker(job: _ParquetChunkJob):
-        return _process_chunk_to_dataframe(job, context)
-
-    if jobs:
-        chunk_tables = ray_map(_worker, jobs, num_cpus=num_cpus)
-    else:
-        chunk_tables = []
-
-    filtered_tables = (
-        df for df in chunk_tables if getattr(df, "empty", False) is False
-    )
-
-    write_kwargs: dict[str, object] = {"context": shared}
     parameters = inspect.signature(_write_parquet_chunks).parameters
     if "row_group_size" in parameters:
         write_kwargs["row_group_size"] = chunk_size
 
-    _write_parquet_chunks(
-        parquet_path,
-        filtered_tables,
-        stage_key,
-        **write_kwargs,
-    )
+    _write_parquet_chunks(parquet_path, chunk_iter, stage_key, **write_kwargs)
 
 
 def ensure_parquet_from_envi(
