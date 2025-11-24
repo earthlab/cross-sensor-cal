@@ -209,7 +209,23 @@ def _rgb_preview(
 ) -> tuple[np.ndarray, tuple[int, int, int]]:
     bands, rows, cols = cube.shape
     if wavelengths.size:
-        indices = [int(np.nanargmin(np.abs(wavelengths - target))) for target in rgb_targets]
+        # Filter out NaN values before using nanargmin
+        finite_mask = np.isfinite(wavelengths)
+        if not np.any(finite_mask):
+            # All wavelengths are NaN - fall back to first few bands
+            indices = [0, min(1, bands - 1), min(2, bands - 1)]
+        else:
+            # Use only finite wavelengths for band selection
+            finite_wavelengths = wavelengths[finite_mask]
+            finite_indices = np.where(finite_mask)[0]
+            indices = []
+            for target in rgb_targets:
+                try:
+                    idx = int(np.nanargmin(np.abs(finite_wavelengths - target)))
+                    indices.append(finite_indices[idx])
+                except ValueError:
+                    # Fallback if nanargmin fails
+                    indices.append(0)
     else:
         indices = [0, min(1, bands - 1), min(2, bands - 1)]
     rgb = np.stack([_percentile_stretch(cube[idx]) for idx in indices], axis=-1)
@@ -699,8 +715,26 @@ def render_flightline_panel(
     flightline_dir = Path(flightline_dir)
     raw_path, corr_path = _discover_primary_cube(flightline_dir)
     prefix = _flightline_prefix(raw_path)
-    raw_hdr = hdr_to_dict(raw_path.with_suffix(".hdr"))
-    corr_hdr = hdr_to_dict(corr_path.with_suffix(".hdr"))
+    
+    # Check if header files exist before trying to read them
+    raw_hdr_path = raw_path.with_suffix(".hdr")
+    corr_hdr_path = corr_path.with_suffix(".hdr")
+    
+    if not raw_hdr_path.exists():
+        raise FileNotFoundError(
+            f"Missing raw ENVI header: {raw_hdr_path}\n"
+            f"Raw ENVI image exists at: {raw_path}\n"
+            f"Flightline directory: {flightline_dir}"
+        )
+    if not corr_hdr_path.exists():
+        raise FileNotFoundError(
+            f"Missing corrected ENVI header: {corr_hdr_path}\n"
+            f"Corrected ENVI image exists at: {corr_path}\n"
+            f"Flightline directory: {flightline_dir}"
+        )
+    
+    raw_hdr = hdr_to_dict(raw_hdr_path)
+    corr_hdr = hdr_to_dict(corr_hdr_path)
     raw_cube = read_envi_cube(raw_path, raw_hdr)
     corr_cube = read_envi_cube(corr_path, corr_hdr)
     if raw_cube.shape != corr_cube.shape:
