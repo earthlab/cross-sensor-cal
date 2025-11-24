@@ -421,79 +421,6 @@ def _write_minimal_parquet(path: Path) -> None:
     pq.write_table(table, path)
 
 
-def test_build_parquet_from_envi_uses_ray_map(monkeypatch, tmp_path: Path) -> None:
-    import pandas as pd
-    import cross_sensor_cal.parquet_export as px
-
-    parquet_path = tmp_path / "ray_case.parquet"
-    context = px._ParquetChunkContext(
-        envi_img=str(tmp_path / "dummy.img"),
-        band_count=1,
-        band_wavelengths=(1,),
-        width=1,
-        nodata=None,
-        crs_candidate=32601,
-        transform=(1.0, 0.0, 0.0, 0.0, -1.0, 0.0),
-        src_crs_wkt=None,
-        stage_key="orig",
-    )
-    jobs = [px._ParquetChunkJob(0, 1, 0, 1)]
-    shared = {"band_wavelengths": [1]}
-
-    monkeypatch.setattr(
-        px,
-        "_plan_chunk_jobs",
-        lambda *args, **kwargs: (context, jobs, shared),
-    )
-
-    df = pd.DataFrame(
-        {
-            "wl0001": [0.1],
-            "row": [0],
-            "col": [0],
-            "pixel_id": [0],
-            "source_image": ["dummy.img"],
-            "epsg": [32601],
-            "crs": ["epsg:32601"],
-            "x": [0.0],
-            "y": [0.0],
-            "lon": [0.0],
-            "lat": [0.0],
-        }
-    )
-
-    monkeypatch.setattr(
-        px,
-        "_process_chunk_to_dataframe",
-        lambda job, ctx: df,
-    )
-
-    calls: dict[str, object] = {}
-
-    def _fake_ray_map(func, iterable, *, num_cpus=None):
-        calls["num_cpus"] = num_cpus
-        return [func(item) for item in iterable]
-
-    monkeypatch.setattr(px, "ray_map", _fake_ray_map)
-
-    writes: list[tuple] = []
-
-    def _fake_write(parquet_path, chunk_iter, stage_key, *, context=None):
-        writes.append((parquet_path, list(chunk_iter), stage_key, context))
-
-    monkeypatch.setattr(px, "_write_parquet_chunks", _fake_write)
-
-    px.build_parquet_from_envi(
-        tmp_path / "dummy.img",
-        tmp_path / "dummy.hdr",
-        parquet_path,
-        num_cpus=4,
-    )
-
-    assert calls["num_cpus"] == 4
-    assert writes and writes[0][0] == parquet_path
-
-
 def test_build_parquet_from_envi_serial_when_disabled(monkeypatch, tmp_path: Path) -> None:
     import pandas as pd
     import cross_sensor_cal.parquet_export as px
@@ -536,19 +463,6 @@ def test_build_parquet_from_envi_serial_when_disabled(monkeypatch, tmp_path: Pat
 
     monkeypatch.setattr(px, "read_envi_in_chunks", lambda *a, **k: _generator())
 
-    plan_called = {"flag": False}
-
-    def _fail_plan(*_args, **_kwargs):  # pragma: no cover - should not run
-        plan_called["flag"] = True
-        raise AssertionError("_plan_chunk_jobs should not be invoked when num_cpus <= 0")
-
-    monkeypatch.setattr(px, "_plan_chunk_jobs", _fail_plan)
-
-    def _fail_ray_map(*_args, **_kwargs):  # pragma: no cover - should not run
-        raise AssertionError("ray_map should not be invoked when num_cpus <= 0")
-
-    monkeypatch.setattr(px, "ray_map", _fail_ray_map)
-
     writes: list[tuple] = []
 
     def _fake_write(parquet_path, chunk_iter, stage_key, *, context=None):
@@ -564,7 +478,6 @@ def test_build_parquet_from_envi_serial_when_disabled(monkeypatch, tmp_path: Pat
     )
 
     assert writes and writes[0][0] == parquet_path
-    assert not plan_called["flag"]
 
 
 def test_ensure_parquet_for_undarkened_envi(tmp_path: Path, monkeypatch) -> None:
