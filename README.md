@@ -1,8 +1,8 @@
-# Cross-Sensor Calibration
+# Earth Lab Spectral Tool: An open, scalable tool for harmonizing spectra across UAS, airborne, and satellite sensors
 
-Cross-Sensor Calibration provides a Python pipeline for processing NEON Airborne Observation Platform hyperspectral flight lines and resampling them to emulate alternate sensors in a reproducible, scriptable workflow.
+Earth Lab Spectral Tool is a modular Python-based tool that adjusts fine-resolution (few centimeters to ~ 5 meters) “pure” spectra from airborne imaging spectroscopy (IS) and uncrewed aerial system (UAS) multispectral imagery to match the spectral configurations of moderate-resolution satellite sensors (over 30 meters). 
 
-![docs/img/pipeline.png](https://github.com/earthlab/cross-sensor-cal/blob/main/docs/EL_workflow_diagram.png)
+![[docs/img/pipeline.png](https://github.com/earthlab/cross-sensor-cal/blob/main/docs/EL_workflow_diagram.png)](https://github.com/earthlab/cross-sensor-cal/blob/main/docs/EL_workflow_diagram_updatedQA.png)
 
 ## Environment setup
 
