@@ -2,7 +2,7 @@
 
 Cross-Sensor Calibration provides a Python pipeline for processing NEON Airborne Observation Platform hyperspectral flight lines and resampling them to emulate alternate sensors in a reproducible, scriptable workflow.
 
-![Pipeline diagram](docs/img/pipeline.png)
+![EL_workflow_diagram]([docs/img/pipeline.png](https://github.com/earthlab/cross-sensor-cal/blob/main/docs/EL_workflow_diagram.png))
 
 ## Environment setup
 
