@@ -167,6 +167,10 @@ def build_envi_header_text(header_dict: Dict) -> str:
         raise KeyError("header_dict must include 'wavelength units'")
     lines.append(f"wavelength units = {wavelength_units}")
 
+    if "reflectance scale factor" in header_dict:
+        scale = _to_python_scalar(header_dict["reflectance scale factor"])
+        lines.append(f"reflectance scale factor = {scale}")
+
     if "transform" in header_dict:
         transform = header_dict["transform"]
         lines.append(f"; transform = {_format_envi_list(transform)}")

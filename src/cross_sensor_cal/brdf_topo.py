@@ -213,6 +213,7 @@ def apply_brdf_topo_core(
     )
     header.setdefault("data type", 4)
     header.setdefault("byte order", 0)
+    header.setdefault("reflectance scale factor", float(getattr(cube, "scale_factor", 1.0)))
     if hasattr(cube, "no_data"):
         header.setdefault("data ignore value", float(getattr(cube, "no_data")))
 

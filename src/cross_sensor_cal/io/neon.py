@@ -15,6 +15,7 @@ from .neon_schema import canonical_vectors, resolve
 __all__ = [
     "is_pre_2021",
     "read_neon_cube",
+    "read_neon_reflectance_unitless",
     "_prepare_map_info",
     "_map_info_core",
 ]
@@ -112,6 +113,55 @@ def _extract_no_data(dataset: h5py.Dataset) -> float:
     raise RuntimeError("Reflectance dataset missing a recognised no-data attribute.")
 
 
+def _extract_scale_factor(dataset: h5py.Dataset) -> float:
+    """Return the reflectance scale factor for a NEON dataset, defaulting to 1.0."""
+
+    for attr_name in (
+        "Scale_Factor",
+        "scale_factor",
+        "Scale Factor",
+        "scale factor",
+    ):
+        if attr_name in dataset.attrs:
+            value = dataset.attrs[attr_name]
+            if isinstance(value, (np.ndarray, list, tuple)):
+                if len(value) == 0:
+                    continue
+                value = value[0]
+            try:
+                return float(value)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                continue
+    return 1.0
+
+
+def read_neon_reflectance_unitless(
+    reflectance_ds: h5py.Dataset,
+) -> tuple[np.ndarray, float, float]:
+    """Return unitless reflectance scaled by the NEON factor with ignore masked.
+
+    Parameters
+    ----------
+    reflectance_ds : h5py.Dataset
+        The NEON reflectance dataset (``/Reflectance/Reflectance_Data`` or similar).
+
+    Returns
+    -------
+    tuple[np.ndarray, float, float]
+        ``(data_unitless, scale_factor, ignore_value)`` where ``data_unitless`` is a
+        float32 array scaled into 0–1 reflectance with ignore values set to ``NaN``.
+    """
+
+    data = np.asarray(reflectance_ds[()], dtype=np.float32)
+    ignore_value = _extract_no_data(reflectance_ds)
+    scale_factor = _extract_scale_factor(reflectance_ds)
+
+    data_unitless = data * np.float32(scale_factor)
+    data_unitless = np.where(data == ignore_value, np.nan, data_unitless)
+
+    return data_unitless, scale_factor, ignore_value
+
+
 def _find_dataset_path(h5_file: h5py.File, candidates: Iterable[str], ndim: int | None = None) -> Optional[str]:
     lowered = [candidate.lower() for candidate in candidates]
     matches: list[str] = []
@@ -177,6 +227,7 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
     resolved = resolve(base_group)
     reflectance_ds = resolved.ds_reflectance
     data = np.asarray(reflectance_ds[()], dtype=np.float32)
+    scale_factor = _extract_scale_factor(reflectance_ds)
 
     wavelength_nm, fwhm_nm, to_sun_zenith, to_sensor_zenith = canonical_vectors(resolved)
     wavelengths = np.asarray(wavelength_nm, dtype=np.float32).reshape(-1)
@@ -239,6 +290,7 @@ def _read_new_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         "to_sun_zenith": to_sun_zenith,
         "to_sensor_zenith": to_sensor_zenith,
         "no_data": no_data,
+        "scale_factor": scale_factor,
         "samples": int(cube.shape[1]),
         "lines": int(cube.shape[0]),
         "bands": int(cube.shape[2]),
@@ -255,6 +307,7 @@ def _read_old_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         raise KeyError("Legacy NEON file missing a reflectance dataset.")
     data_ds = h5_file[data_path]
     data = np.asarray(data_ds[()], dtype=np.float32)
+    scale_factor = _extract_scale_factor(data_ds)
 
     wavelength_path = _find_dataset_path(
         h5_file,
@@ -311,6 +364,7 @@ def _read_old_neon_layout(h5_file: h5py.File) -> tuple[np.ndarray, np.ndarray, D
         "to_sun_zenith": None,
         "to_sensor_zenith": None,
         "no_data": no_data,
+        "scale_factor": scale_factor,
         "samples": int(cube.shape[1]),
         "lines": int(cube.shape[0]),
         "bands": int(cube.shape[2]),
@@ -342,6 +396,7 @@ def _read_site_group_legacy_layout(
         raise KeyError("Legacy site-group layout missing 'Reflectance_Data' dataset.")
 
     data = np.asarray(data_ds[()], dtype=np.float32)
+    scale_factor = _extract_scale_factor(data_ds)
 
     metadata_group = reflectance_group.get("Metadata")
     if metadata_group is None:
@@ -413,6 +468,7 @@ def _read_site_group_legacy_layout(
         "to_sun_zenith": None,
         "to_sensor_zenith": None,
         "no_data": no_data,
+        "scale_factor": scale_factor,
         "samples": int(cube.shape[1]),
         "lines": int(cube.shape[0]),
         "bands": int(cube.shape[2]),
