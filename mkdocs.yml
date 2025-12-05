@@ -44,6 +44,7 @@ nav:
   - Usage:
       - Command-line interface (CLI): usage/cli.md
       - Working with Parquet outputs: usage/parquet.md
+      - Jupyter notebook example: usage/notebook-example.md
 
   - Reference:
       - Configuration: reference/configuration.md
@@ -58,7 +59,6 @@ nav:
       - How the package is organized: dev/architecture.md
       - Contributing & development workflow: dev/contributing.md
       - Guidelines for AI/Codex edits: dev/codex-guidelines.md
-
 plugins:
   - search
   - mkdocstrings:
