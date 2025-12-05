@@ -1335,7 +1335,11 @@ to harmonise illumination; the QA JSON will expose the per-band gain/offsets.</e
 <strong>Run it</strong>
 <div class="highlight"><pre><span></span><code>cross-sensor-cal<span class="w"> </span>correct<span class="w"> </span>--in<span class="w"> </span>envi/*_envi.img<span class="w"> </span>--dtm<span class="w"> </span>dtm/NIWO.tif<span class="w"> </span>--out<span class="w"> </span>corrected/
 </code></pre></div>
-<strong>Pitfalls</strong> If JSON is missing, correction didn’t run; fix paths and rerun.</p>
+<strong>Pitfalls</strong> If JSON is missing, correction didn’t run; fix paths and rerun.
+All BRDF + topo math is performed on unitless (0–1) reflectance derived from the
+NEON scale factor before being written back out using the original NEON-style
+scaled reflectance semantics, so disk products stay compatible while fits remain
+numerically stable.</p>
 <h2 id="4-cross-sensor-convolution">4) Cross-sensor convolution<a class="headerlink" href="#4-cross-sensor-convolution" title="Permanent link">&para;</a></h2>
 <p><strong>Purpose</strong> Resample to target sensor bandpasses.
 <strong>Inputs → Outputs</strong> corrected ENVI → <code>*_resampled_&lt;sensor&gt;_envi.img/.hdr</code> inside
