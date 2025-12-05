@@ -1,0 +1,397 @@
+# Ty Tuff contributions to cross-sensor-cal (last 12 months)
+
+_Generated from git history using author filters for "ttuff" / "Ty Tuff"._
+
+## Summary
+- Total commits: 178
+- Time window analyzed: 2025-10-29 to 2025-11-20
+- High-level themes:
+  - BRDF/topographic correction improvements
+  - NEON ENVI export + config plumbing
+  - Streaming Parquet export / pixel extraction
+  - Sensor convolution & regression tables (Landsat/MicaSense/etc.)
+  - Documentation, examples, gocmd scripts, CI robustness
+
+## Monthly breakdown
+
+### 2025-11
+- `81d53cc` (2025-11-20) [Docs][NEON pipeline][Parquet] – Merge pull request #234 from earthlab/codex/integrate-undarkened-envi-into-pipeline
+  - Key changes: Touched bin/docs/src/tests; primary focus: tests.
+- `cc47caf` (2025-11-20) [Parquet] – Handle stub parquet schemas in validator
+  - Key changes: Touched bin/tests; primary focus: other.
+- `e850541` (2025-11-20) [Parquet] – Handle stage-scoped spectral ordering in validator
+  - Key changes: Touched bin/tests; primary focus: other.
+- `92efacc` (2025-11-20) [Docs][NEON pipeline][Parquet] – Integrate undarkened ENVI exports across pipeline
+  - Key changes: Touched docs/src/tests; primary focus: code.
+- `9c58499` (2025-11-20) [NEON pipeline][Sensor convolution] – Merge pull request #233 from earthlab/codex/add-undarkened-envi-output-before-brightness
+  - Key changes: Touched src/tests; primary focus: code.
+- `60ed8fb` (2025-11-20) [NEON pipeline][Sensor convolution] – Write undarkened convolved ENVI outputs
+  - Key changes: Touched src/tests; primary focus: code.
+- `7638d18` (2025-11-15) [Docs][Parquet] – Merge pull request #232 from earthlab/codex/add-polygon-extraction-and-merge-pipeline
+  - Key changes: Touched docs/mkdocs.yml/src/tests; primary focus: docs.
+- `d6792f7` (2025-11-15) [Docs] – Add polygon spectral library pipeline
+  - Key changes: Touched docs/mkdocs.yml/src/tests; primary focus: docs.
+- `2b0f378` (2025-11-15) [Docs][Parquet] – Merge pull request #231 from earthlab/codex/refactor-merged_pixel_extraction-process
+  - Key changes: Touched bin/docs/src/tests; primary focus: code.
+- `d8143f1` (2025-11-15) – Fix merge tuning propagation
+  - Key changes: Touched src; primary focus: code.
+- `1f963f3` (2025-11-15) [Docs] – Refactor DuckDB merge for streaming output
+  - Key changes: Touched bin/docs/src/tests; primary focus: code.
+- `6d76fc1` (2025-11-12) [BRDF][NEON pipeline][Parquet] – Merge pull request #229 from earthlab/codex/add-legacy-adapter-for-neon-outputs
+  - Key changes: Touched src/tests; primary focus: code.
+- `1ba282a` (2025-11-12) [BRDF][NEON pipeline][Parquet] – Normalize legacy NEON schema to canonical outputs
+  - Key changes: Touched src/tests; primary focus: code.
+- `36ed0af` (2025-11-12) [NEON pipeline] – Merge pull request #228 from earthlab/codex/fix-pre-2021-neon-hdf5-crash
+  - Key changes: Touched src/tests; primary focus: code.
+- `2f0a4b8` (2025-11-12) [NEON pipeline][Parquet] – Add NEON legacy schema resolver and adapt parquet export
+  - Key changes: Touched src/tests; primary focus: code.
+- `3865766` (2025-11-12) – Merge pull request #227 from earthlab/codex/add-memory-cleanup-between-pipeline-stages
+  - Key changes: Touched README.md/src; primary focus: code.
+- `9f09aa4` (2025-11-12) – Add memory cleanup helper and invoke between pipeline stages
+  - Key changes: Touched README.md/src; primary focus: code.
+- `b38a972` (2025-11-11) [Parquet] – Merge pull request #226 from earthlab/codex/update-parquet-exports-for-smaller-chunks
+  - Key changes: Touched src; primary focus: code.
+- `f6151c7` (2025-11-11) [Parquet] – Adjust Parquet defaults to use smaller row groups
+  - Key changes: Touched src; primary focus: code.
+- `0f7f221` (2025-11-11) – Merge pull request #225 from earthlab/codex/disable-ray-dashboard-on-initialization
+  - Key changes: Touched src; primary focus: code.
+- `f81b0b4` (2025-11-11) – Disable Ray dashboard when initializing
+  - Key changes: Touched src; primary focus: code.
+- `eb756c0` (2025-11-11) – Merge pull request #224 from earthlab/codex/refactor-ray-map-for-concurrency-control
+  - Key changes: Touched src; primary focus: code.
+- `4d66740` (2025-11-11) – Stream Ray map tasks to limit concurrency
+  - Key changes: Touched src; primary focus: code.
+- `30cf38e` (2025-11-10) [Parquet] – Merge pull request #223 from earthlab/codex/fix-indexerror-in-parquet-export
+  - Key changes: Touched src; primary focus: code.
+- `bda1b14` (2025-11-10) [Parquet] – Pad or trim band wavelengths for Parquet export
+  - Key changes: Touched src; primary focus: code.
+- `564066e` (2025-11-10) – Merge pull request #222 from earthlab/codex/modify-ray-init-to-bypass-memory-checks
+  - Key changes: Touched src; primary focus: code.
+- `80f8891` (2025-11-10) – Disable Ray memory monitoring safeguards
+  - Key changes: Touched src; primary focus: code.
+- `5ffbfc6` (2025-11-10) [Parquet] – Merge pull request #221 from earthlab/codex/fix-ray-integration-for-parquet-export
+  - Key changes: Touched src; primary focus: code.
+- `bb58404` (2025-11-10) [Parquet] – Improve Ray parquet parallelism and debugging
+  - Key changes: Touched src; primary focus: code.
+- `741d876` (2025-11-10) [NEON pipeline][Parquet] – Merge pull request #220 from earthlab/codex/add-ray-based-parallelization-for-envi-and-parquet
+  - Key changes: Touched src/tests; primary focus: code.
+- `7891045` (2025-11-10) – Log downstream reuse before Ray dispatch
+  - Key changes: Touched src; primary focus: code.
+- `2e58b34` (2025-11-10) [NEON pipeline] – Surface ENVI skip log before Ray execution
+  - Key changes: Touched src; primary focus: code.
+- `e692bc6` (2025-11-10) – Fix Ray runtime env and pyarrow stubs
+  - Key changes: Touched src/tests; primary focus: code.
+- `83c0f16` (2025-11-10) [Parquet][Sensor convolution] – Fix Ray integration regressions
+  - Key changes: Touched src; primary focus: code.
+- `edde4a3` (2025-11-10) [NEON pipeline][Parquet] – Add Ray defaults and parallelize ENVI and parquet stages
+  - Key changes: Touched src/tests; primary focus: code.
+- `188d5c0` (2025-11-10) [Docs][NEON pipeline] – Merge pull request #219 from earthlab/codex/harden-pipeline-for-optional-ray-dependency
+  - Key changes: Touched README.md/docs/src/tests; primary focus: docs.
+- `0cd9b4e` (2025-11-10) [Docs][NEON pipeline] – Make Ray backend optional and add engine toggle
+  - Key changes: Touched README.md/docs/src/tests; primary focus: docs.
+- `e3a0267` (2025-11-07) – Merge pull request #218 from earthlab/codex/implement-stream_prism_to_polygon-and-update-notebook
+  - Key changes: Touched notebooks/src; primary focus: code.
+- `eb3320a` (2025-11-07) – Add PRISM streaming helper and notebook guard
+  - Key changes: Touched notebooks/src; primary focus: code.
+- `d4ab665` (2025-11-07) [BRDF][NEON pipeline] – Merge pull request #217 from earthlab/revert-216-codex/investigate-cross-sensor-cal-crash-during-envi-export
+  - Key changes: Touched src/tests; primary focus: code.
+- `cfc3266` (2025-11-07) [BRDF][NEON pipeline] – Revert "Stream NeonCube tile access and pipeline stages"
+  - Key changes: Touched src/tests; primary focus: code.
+- `80dba4d` (2025-11-07) [BRDF][NEON pipeline] – Merge pull request #216 from earthlab/codex/investigate-cross-sensor-cal-crash-during-envi-export
+  - Key changes: Touched src/tests; primary focus: code.
+- `7bf0892` (2025-11-07) [BRDF][NEON pipeline] – Stream NeonCube tile access and pipeline stages
+  - Key changes: Touched src/tests; primary focus: code.
+- `7fe95f9` (2025-11-07) [NEON pipeline] – Merge pull request #215 from earthlab/codex/implement-support-for-legacy-hdf5-layout
+  - Key changes: Touched src/tests; primary focus: code.
+- `5e6ea12` (2025-11-07) [NEON pipeline] – Support legacy NEON site-group reflectance layouts
+  - Key changes: Touched src/tests; primary focus: code.
+- `9aad367` (2025-11-07) [NEON pipeline] – Merge pull request #214 from earthlab/codex/audit-code-for-kernel-crash-issue
+  - Key changes: Touched src/tests; primary focus: code.
+- `e8d249a` (2025-11-07) [NEON pipeline] – Handle mixed-layout NEON HDF5 files
+  - Key changes: Touched src/tests; primary focus: code.
+- `2703a34` (2025-11-07) [NEON pipeline][Parquet] – Merge pull request #213 from earthlab/codex/refactor-neon-pipeline-for-flightline-isolation
+  - Key changes: Touched src/tests; primary focus: code.
+- `73173fe` (2025-11-07) [NEON pipeline][Sensor convolution] – Fix lint regressions
+  - Key changes: Touched src/tests; primary focus: code.
+- `165f662` (2025-11-07) [NEON pipeline][Parquet] – Harden flightline isolation, NEON reader, and parquet export
+  - Key changes: Touched src/tests; primary focus: code.
+- `baac043` (2025-11-05) [Docs][Parquet] – Merge pull request #212 from earthlab/codex/update-documentation-for-parquet-pipeline
+  - Key changes: Touched README.md/docs; primary focus: docs.
+- `f6fde8d` (2025-11-05) [Docs][Parquet] – Document hardened Parquet pipeline behavior
+  - Key changes: Touched README.md/docs; primary focus: docs.
+- `16e0be4` (2025-11-05) [Parquet] – Merge pull request #211 from earthlab/codex/harden-parquet-processing-pipeline
+  - Key changes: Touched __pycache__/bin/src/tests; primary focus: code.
+- `feafc1a` (2025-11-05) [Parquet] – Improve pyarrow stub parquet schema detection
+  - Key changes: Touched tests; primary focus: tests.
+- `7a5ba5f` (2025-11-05) – Refactor DuckDB merge tests to avoid pandas dependency
+  - Key changes: Touched tests; primary focus: tests.
+- `3cffe96` (2025-11-05) [Parquet] – Ensure export tests don't block module imports
+  - Key changes: Touched tests; primary focus: tests.
+- `9c11722` (2025-11-05) [Parquet] – Fix lazy import ordering for lint
+  - Key changes: Touched src; primary focus: code.
+- `bdd8962` (2025-11-05) [CI][NEON pipeline][Parquet] – Guard optional dependencies for lite test environments
+  - Key changes: Touched src/tests; primary focus: code.
+- `e7b7722` (2025-11-05) – Move file_sort type imports above optional pandas shim
+  - Key changes: Touched src; primary focus: code.
+- `a16a041` (2025-11-05) – Make optional deps lazy for lite test env
+  - Key changes: Touched src/tests; primary focus: code.
+- `7404f97` (2025-11-05) [Parquet] – Fix validator test loader
+  - Key changes: Touched tests; primary focus: tests.
+- `5513d65` (2025-11-05) [Parquet] – Stabilize parquet validation tests
+  - Key changes: Touched __pycache__/tests; primary focus: tests.
+- `f27e98f` (2025-11-05) [Parquet] – Improve parquet auto-heal logging
+  - Key changes: Touched bin/src/tests; primary focus: code.
+- `b592ab1` (2025-11-03) [NEON pipeline] – Merge pull request #210 from earthlab/codex/enhance-neon-filename-parsing-for-envi-export
+  - Key changes: Touched src/tests; primary focus: code.
+- `87c7946` (2025-11-03) [NEON pipeline] – Handle legacy NEON reflectance filenames
+  - Key changes: Touched src/tests; primary focus: code.
+- `d2ec152` (2025-11-03) [NEON pipeline] – Merge pull request #209 from earthlab/codex/support-robust-neon-filename-parsing
+  - Key changes: Touched src/tests; primary focus: code.
+- `18c15a0` (2025-11-03) [NEON pipeline] – Handle legacy NEON reflectance filename formats
+  - Key changes: Touched src/tests; primary focus: code.
+- `4549385` (2025-11-03) [NEON pipeline] – Merge pull request #208 from earthlab/codex/run-go_forth_and_multiply-function
+  - Key changes: Touched src; primary focus: code.
+- `108305e` (2025-11-03) [NEON pipeline] – Handle proxy failures when downloading NEON data
+  - Key changes: Touched src; primary focus: code.
+- `0b4a6b1` (2025-11-03) [CI][Docs][Parquet] – Merge pull request #207 from earthlab/codex/audit-scientific-and-logical-pipeline-integrity
+  - Key changes: Touched bin/docs/src/tests; primary focus: docs.
+- `c187d9e` (2025-11-03) [Docs][Parquet] – Ensure QA pipeline uses corrected metadata and guard DuckDB merge
+  - Key changes: Touched bin/docs/src/tests; primary focus: docs.
+- `de912b3` (2025-11-03) [Parquet] – Merge pull request #206 from earthlab/codex/fix-parquet-file-validation-errors
+  - Key changes: Touched bin; primary focus: other.
+- `37d87af` (2025-11-03) [Parquet] – Handle invalid parquet files during validation
+  - Key changes: Touched bin; primary focus: other.
+- `31b45e5` (2025-11-03) – Merge pull request #205 from earthlab/codex/fix-binderexception-in-_register_union
+  - Key changes: Touched src; primary focus: code.
+- `7b19956` (2025-11-03) – Fix DuckDB union registration
+  - Key changes: Touched src; primary focus: code.
+- `aaae2d3` (2025-11-03) [Docs][Parquet] – Merge pull request #204 from earthlab/codex/promote-deprecated-pixel-extraction-plots
+  - Key changes: Touched deprecated/docs/src; primary focus: code.
+- `76e9b3c` (2025-11-03) – Fix __all__ imports for sensor panel helpers
+  - Key changes: Touched src; primary focus: code.
+- `3ff2c4e` (2025-11-03) [Docs][Parquet] – Add sensor comparison panel plots to pipeline
+  - Key changes: Touched deprecated/docs/src; primary focus: code.
+- `29ae168` (2025-11-03) [CI][Docs][NEON pipeline] – Merge pull request #203 from earthlab/codex/document-qa-and-brightness-ci-changes
+  - Key changes: Touched CHANGELOG.md/docs; primary focus: docs.
+- `07f3a42` (2025-11-03) [CI][Docs][NEON pipeline] – docs: update QA, brightness, and CI documentation
+  - Key changes: Touched CHANGELOG.md/docs; primary focus: docs.
+- `f367e17` (2025-11-03) [Docs][NEON pipeline][Sensor convolution] – Merge pull request #202 from earthlab/codex/implement-config-driven-brightness-adjustment
+  - Key changes: Touched docs/pyproject.toml/src; primary focus: code.
+- `5fbb9ed` (2025-11-03) – Fix __all__ export for brightness loader
+  - Key changes: Touched src; primary focus: code.
+- `752cb52` (2025-11-03) [Docs][NEON pipeline][Sensor convolution] – Add config-driven Landsat brightness adjustment
+  - Key changes: Touched docs/pyproject.toml/src; primary focus: code.
+- `815968c` (2025-11-03) [BRDF][CI][Docs][NEON pipeline][Parquet] – Merge pull request #201 from earthlab/codex/streamline-ci-checks-and-remove-duplicates
+  - Key changes: Touched .github/src/tests; primary focus: code.
+- `c65bc07` (2025-11-03) [BRDF][Parquet] – lint: resolve remaining ruff violations
+  - Key changes: Touched src/tests; primary focus: code.
+- `f0c56ab` (2025-11-03) [NEON pipeline] – lint: resolve outstanding ruff findings
+  - Key changes: Touched src/tests; primary focus: code.
+- `47d7590` (2025-11-03) [Parquet] – fix: resolve lint warnings
+  - Key changes: Touched src/tests; primary focus: code.
+- `693cffb` (2025-11-03) [CI][Docs] – ci: make docs drift path-aware and PR-only
+  - Key changes: Touched .github; primary focus: other.
+- `4e5543f` (2025-11-03) [NEON pipeline] – Merge pull request #200 from earthlab/codex/update-envi-export-log-messages
+  - Key changes: Touched src; primary focus: code.
+- `9fc5b95` (2025-11-03) – logs: restore heavy export skip phrasing
+  - Key changes: Touched src; primary focus: code.
+- `335720d` (2025-11-03) – logs: clarify skipped and existing file statuses
+  - Key changes: Touched src; primary focus: code.
+- `56d88c2` (2025-11-03) [Docs] – Merge pull request #199 from earthlab/codex/add-multi-page-pdf-qa-report-generation
+  - Key changes: Touched docs/src; primary focus: docs.
+- `bcdb3a1` (2025-11-03) [Docs] – Add multi-page QA PDF report for flightline QA
+  - Key changes: Touched docs/src; primary focus: docs.
+- `7426ea0` (2025-11-03) [CI][Docs] – Merge pull request #198 from earthlab/codex/document-qa-tests-and-decision-criteria
+  - Key changes: Touched docs; primary focus: docs.
+- `0505055` (2025-11-03) [Docs] – docs: link validation reference and home summary
+  - Key changes: Touched docs; primary focus: docs.
+- `60289b1` (2025-11-01) [Docs] – Merge pull request #197 from earthlab/codex/fix-glightbox-plugin-installation-error
+  - Key changes: Touched mkdocs.yml; primary focus: config.
+- `d88edde` (2025-11-01) [Docs] – Fix MkDocs glightbox plugin dependency
+  - Key changes: Touched mkdocs.yml; primary focus: config.
+- `5ffe92f` (2025-11-01) [NEON pipeline] – Merge pull request #196 from earthlab/codex/fix-configuration-error-for-glightbox-plugin
+  - Key changes: Touched pyproject.toml/requirements-dev.txt; primary focus: config.
+- `58ae57f` (2025-11-01) [Docs] – Add mkdocs glightbox plugin dependency
+  - Key changes: Touched pyproject.toml/requirements-dev.txt; primary focus: config.
+- `2edf52e` (2025-11-01) [CI][Docs] – Merge pull request #195 from earthlab/codex/upgrade-qa-pipeline-and-document-brightness-correction
+  - Key changes: Touched .github/docs/pyproject.toml/src/tests; primary focus: docs.
+- `98a2590` (2025-11-01) [CI][Docs] – qa: metrics + brightness documentation
+  - Key changes: Touched .github/docs/pyproject.toml/src/tests; primary focus: docs.
+
+### 2025-10
+- `5be4363` (2025-10-31) [Docs][NEON pipeline][Parquet] – Merge pull request #192 from earthlab/codex/refactor-and-expand-documentation-for-cross-sensor-cal
+  - Key changes: Touched docs/mkdocs.yml/vendor; primary focus: docs.
+- `fa4e5c0` (2025-10-31) [Docs][NEON pipeline][Parquet] – docs: add quickstart, env, troubleshooting
+  - Key changes: Touched docs/mkdocs.yml/vendor; primary focus: docs.
+- `8a0a52a` (2025-10-31) [CI][Docs] – Merge pull request #191 from earthlab/codex/improve-github-pages-documentation
+  - Key changes: Touched docs/mkdocs.yml; primary focus: docs.
+- `cbc281a` (2025-10-31) [Docs] – Refresh documentation landing page and navigation
+  - Key changes: Touched docs/mkdocs.yml; primary focus: docs.
+- `8d34f11` (2025-10-30) – cleaned up
+  - Key changes: Touched Raster_processing.ipynb; primary focus: other.
+- `e99ac25` (2025-10-30) – basic run
+  - Key changes: Touched Raster_processing.ipynb; primary focus: other.
+- `fb26523` (2025-10-30) [Parquet] – Merge pull request #190 from earthlab/codex/fix-duckdb-merge-and-update-qa-panel
+  - Key changes: Touched bin/src; primary focus: code.
+- `531c505` (2025-10-30) [Parquet] – Ensure parquet lon/lat and robust QA panel
+  - Key changes: Touched bin/src; primary focus: code.
+- `48c9065` (2025-10-30) [Parquet] – Merge pull request #189 from earthlab/codex/add-geo-helpers-and-lon/lat-support
+  - Key changes: Touched bin/pyproject.toml/src; primary focus: code.
+- `af84364` (2025-10-30) [Parquet] – Ensure lon/lat enrichment and single-file merges
+  - Key changes: Touched bin/pyproject.toml/src; primary focus: code.
+- `713a640` (2025-10-30) [Docs] – Merge pull request #188 from earthlab/codex/fix-modulenotfounderror-in-documentation-build
+  - Key changes: Touched mkdocs.yml; primary focus: config.
+- `7b56f9c` (2025-10-30) [Docs] – Fix mkdocstrings import path
+  - Key changes: Touched mkdocs.yml; primary focus: config.
+- `4bc157b` (2025-10-30) [Docs] – Merge pull request #187 from earthlab/codex/fix-mkdocstrings_handlers-module-error
+  - Key changes: Touched docs; primary focus: docs.
+- `c808554` (2025-10-30) [Docs] – Ensure mkdocstrings python handler is installed
+  - Key changes: Touched docs; primary focus: docs.
+- `dfb78fd` (2025-10-30) [Docs] – Merge pull request #186 from earthlab/codex/fix-mkdocstrings_handlers-import-error
+  - Key changes: Touched requirements-dev.txt; primary focus: other.
+- `90a18f1` (2025-10-30) [CI][Docs] – Include MkDocs dependencies in dev requirements
+  - Key changes: Touched requirements-dev.txt; primary focus: other.
+- `27c26e1` (2025-10-30) [Docs][NEON pipeline] – Merge pull request #185 from earthlab/codex/fix-mkdocs-build-configuration-error
+  - Key changes: Touched docs; primary focus: docs.
+- `7bee57d` (2025-10-30) [Docs] – Add mkdocs macros plugin dependency
+  - Key changes: Touched docs; primary focus: docs.
+- `93596df` (2025-10-30) [Parquet] – Merge pull request #184 from earthlab/codex/fix-parquet-validation-errors
+  - Key changes: Touched bin; primary focus: other.
+- `110e6de` (2025-10-30) [Parquet] – Handle parquet schema inspection without requiring lat/lon data
+  - Key changes: Touched bin; primary focus: other.
+- `c84434c` (2025-10-30) [Docs][Parquet] – Merge pull request #183 from earthlab/codex/unify-parquet-schema-and-validation
+  - Key changes: Touched bin/docs/src/tests; primary focus: code.
+- `af9ff47` (2025-10-30) [Docs][Parquet] – Standardize parquet exports and add schema validator
+  - Key changes: Touched bin/docs/src/tests; primary focus: code.
+- `7cf1743` (2025-10-30) [BRDF] – Merge pull request #182 from earthlab/codex/normalize-brdf-model-filename-to-scene-prefix
+  - Key changes: Touched src/tests; primary focus: code.
+- `2913efb` (2025-10-30) [BRDF] – Normalize BRDF model filenames
+  - Key changes: Touched src/tests; primary focus: code.
+- `e43696b` (2025-10-30) [Parquet] – Merge pull request #181 from earthlab/codex/improve-parquet-write-speed-and-qa-panel
+  - Key changes: Touched src; primary focus: code.
+- `5f47f9b` (2025-10-30) – Tune DuckDB merge output and harden QA panel discovery
+  - Key changes: Touched src; primary focus: code.
+- `45acaa4` (2025-10-30) – Merge pull request #180 from earthlab/codex/improve-merge-and-qa-logging
+  - Key changes: Touched bin/src; primary focus: code.
+- `218eaed` (2025-10-30) [Parquet] – Guard DuckDB merge when Parquet outputs are missing
+  - Key changes: Touched src; primary focus: code.
+- `85dea63` (2025-10-30) – Enhance DuckDB merge orchestration and QA reporting
+  - Key changes: Touched bin/src; primary focus: code.
+- `6390270` (2025-10-30) [CI][Docs] – Merge pull request #179 from earthlab/codex/update-mkdocs-site-for-new-pipeline-behavior
+  - Key changes: Touched .github/docs/mkdocs.yml/pyproject.toml/src/tools; primary focus: docs.
+- `064258b` (2025-10-30) [CI][Docs] – Refresh documentation for merge pipeline updates
+  - Key changes: Touched .github/docs/mkdocs.yml/pyproject.toml/src/tools; primary focus: docs.
+- `240f014` (2025-10-30) [CI][Docs] – Merge pull request #178 from earthlab/codex/implement-repo-wide-doc-drift-audit-tool
+  - Key changes: Touched .github/Makefile/README.md/docs/tools; primary focus: other.
+- `013286e` (2025-10-30) [CI][Docs] – Add documentation drift audit tooling
+  - Key changes: Touched .github/Makefile/README.md/docs/tools; primary focus: other.
+- `6adf4d5` (2025-10-30) [Docs] – Merge pull request #177 from earthlab/codex/update-documentation-for-merge-stage-and-qa-panel
+  - Key changes: Touched CHANGELOG.md/README.md/src; primary focus: other.
+- `dc04b25` (2025-10-30) [Docs][Parquet] – Update docs for merged parquet and QA panel
+  - Key changes: Touched CHANGELOG.md/README.md/src; primary focus: other.
+- `d04aa88` (2025-10-30) [Parquet] – Merge pull request #176 from earthlab/codex/restore-qa-panel-and-fix-parquet-naming
+  - Key changes: Touched bin/src/tests; primary focus: code.
+- `b7d9b84` (2025-10-30) [Parquet] – Narrow merge test parquet globs
+  - Key changes: Touched tests; primary focus: tests.
+- `e30a1ce` (2025-10-30) – Stabilize DuckDB merge naming test
+  - Key changes: Touched tests; primary focus: tests.
+- `b8d478e` (2025-10-30) – Restore merge naming and QA panel
+  - Key changes: Touched bin/src/tests; primary focus: code.
+- `fcc47b1` (2025-10-29) – clean up
+  - Key changes: Touched Raster_processing.ipynb; primary focus: other.
+- `676bb41` (2025-10-29) [NEON pipeline] – Merge pull request #175 from earthlab/codex/fix-qa-thumbnails-for-envi-products
+  - Key changes: Touched src; primary focus: code.
+- `3d788ca` (2025-10-29) – Improve QA plots header parsing and metrics
+  - Key changes: Touched src; primary focus: code.
+- `e7e53cc` (2025-10-29) – Merge pull request #174 from earthlab/codex/add-duckdb-merge-functionality
+  - Key changes: Touched bin/pyproject.toml/requirements-dev.txt/src/tests; primary focus: other.
+- `aa8d355` (2025-10-29) – Quote DuckDB identifiers without duckdb.escape_identifier
+  - Key changes: Touched src; primary focus: code.
+- `2870d10` (2025-10-29) – Gracefully handle DuckDB memory limit pragma
+  - Key changes: Touched src; primary focus: code.
+- `e7ee57e` (2025-10-29) – Add DuckDB merge stage and CLI
+  - Key changes: Touched bin/pyproject.toml/requirements-dev.txt/src/tests; primary focus: other.
+- `acae51c` (2025-10-29) – Merge pull request #173 from earthlab/codex/add-robust-band-parsing-and-safe-json-serialization
+  - Key changes: Touched src; primary focus: code.
+- `409d0f5` (2025-10-29) – Handle QA bands without wavelengths
+  - Key changes: Touched src; primary focus: code.
+- `0eec240` (2025-10-29) [NEON pipeline] – Merge pull request #172 from earthlab/codex/add-local-envi-reader-for-qa-metrics
+  - Key changes: Touched src; primary focus: code.
+- `4c12a8b` (2025-10-29) – Fix band axis helper reference in QA plots
+  - Key changes: Touched src; primary focus: code.
+- `909f4c0` (2025-10-29) [NEON pipeline] – Refactor ENVI helpers for QA metrics
+  - Key changes: Touched src; primary focus: code.
+- `3ede902` (2025-10-29) – Merge pull request #171 from earthlab/codex/fix-qa-metrics-computation-issue
+  - Key changes: Touched src; primary focus: code.
+- `174991a` (2025-10-29) [NEON pipeline] – Add lightweight ENVI reader fallback
+  - Key changes: Touched src; primary focus: code.
+- `4fa6ad2` (2025-10-29) [Docs] – Merge pull request #170 from earthlab/codex/add-qa_dashboard.py-for-qa-metrics-aggregation
+  - Key changes: Touched .gitignore/README.md/docs/pyproject.toml/src; primary focus: other.
+- `d48d683` (2025-10-29) [Docs] – Add QA dashboard aggregation CLI
+  - Key changes: Touched .gitignore/README.md/docs/pyproject.toml/src; primary focus: other.
+- `420d7e4` (2025-10-29) [BRDF] – Merge pull request #169 from earthlab/codex/add-brdf-and-topo-qa-metrics-module
+  - Key changes: Touched .gitignore/pyproject.toml/src; primary focus: code.
+- `b62c5c4` (2025-10-29) [BRDF] – Add QA metrics module for BRDF and topo corrections
+  - Key changes: Touched .gitignore/pyproject.toml/src; primary focus: code.
+- `8579f8a` (2025-10-29) [BRDF] – Merge pull request #168 from earthlab/codex/fix-qa-spectra-averaging-and-add-logging
+  - Key changes: Touched src; primary focus: code.
+- `5b5e903` (2025-10-29) [BRDF] – Fix QA spectra handling and guard double corrections
+  - Key changes: Touched src; primary focus: code.
+- `9e5f93e` (2025-10-29) [BRDF] – Merge pull request #167 from earthlab/codex/enhance-brdf+topo-qa-for-unit-detection-and-logging
+  - Key changes: Touched src; primary focus: code.
+- `856b9f1` (2025-10-29) [BRDF] – Enhance BRDF QA diagnostics and correction guards
+  - Key changes: Touched src; primary focus: code.
+- `e5191c2` (2025-10-29) [BRDF][Docs] – Merge pull request #166 from earthlab/codex/clarify-brdf-panel-and-enforce-qa-png-regeneration
+  - Key changes: Touched README.md/docs/src/tests; primary focus: code.
+- `0687735` (2025-10-29) [Docs] – Clarify QA panel scaling and always regenerate output
+  - Key changes: Touched README.md/docs/src/tests; primary focus: code.
+- `6779147` (2025-10-29) – Merge pull request #165 from earthlab/codex/make-qa-plots-robust-to-missing-wavelengths
+  - Key changes: Touched src; primary focus: code.
+- `299c5c6` (2025-10-29) – Handle missing wavelengths in QA plots
+  - Key changes: Touched src; primary focus: code.
+- `215154b` (2025-10-29) [NEON pipeline] – Merge pull request #164 from earthlab/codex/add-raw-envi-recovery-and-backfill-cli
+  - Key changes: Touched pyproject.toml/src/tests; primary focus: code.
+- `7ae98c4` (2025-10-29) – Adjust stage export tests for raw recovery
+  - Key changes: Touched tests; primary focus: tests.
+- `0b05737` (2025-10-29) [NEON pipeline] – Add raw ENVI recovery, backfill CLI, and QA safeguards
+  - Key changes: Touched pyproject.toml/src; primary focus: code.
+- `970f298` (2025-10-29) [NEON pipeline][Sensor convolution] – Merge pull request #163 from earthlab/codex/fix-envi-export-and-improve-pipeline-logging
+  - Key changes: Touched src/tests; primary focus: code.
+- `b4206df` (2025-10-29) [NEON pipeline][Sensor convolution] – Fix ENVI export targets, add MicaSense to-match variants, and QA auto-panels
+  - Key changes: Touched src/tests; primary focus: code.
+- `0ecbc99` (2025-10-29) [BRDF][NEON pipeline] – Merge pull request #162 from earthlab/codex/refactor-progress-reporting-for-tiling-stages
+  - Key changes: Touched src; primary focus: code.
+- `765df30` (2025-10-29) [BRDF][NEON pipeline] – Improve tile progress reporting in parallel runs
+  - Key changes: Touched src; primary focus: code.
+- `35244e9` (2025-10-29) [CI][Docs][NEON pipeline] – Merge pull request #161 from earthlab/codex/prepare-cross-sensor-cal-for-publication
+  - Key changes: Touched CHANGELOG.md/CITATION.cff/README.md/docs/environment.yaml/mkdocs.yml/pyproject.toml/src; primary focus: code.
+- `c7b6cc1` (2025-10-29) [CI][Docs][NEON pipeline] – Replace QA image placeholder with text notes
+  - Key changes: Touched CHANGELOG.md/CITATION.cff/README.md/docs/environment.yaml/mkdocs.yml/pyproject.toml/src; primary focus: code.
+- `8c853a6` (2025-10-29) – Merge pull request #160 from earthlab/codex/add-qa-summary-plots-to-cross-sensor-cal
+  - Key changes: Touched pyproject.toml/src; primary focus: code.
+- `2918d66` (2025-10-29) [BRDF][CI][Docs][NEON pipeline][Parquet][Sensor convolution][gocmd] – Add QA summary plotting utilities
+  - Key changes: Touched .../...rectional_reflectance__envi_resample_Landsat_9_OLI-2_masked_spectral_data.csv/.DS_Store/.github/.gitignore/CHANGELOG.md/CITATION.cff/CODE_OF_CONDUCT.md/CONTRIBUTING.md/Datasets/LICENSE/Makefile/README.md/__pycache__/bin/constraints/data/deprecated/docs/environment.yaml/gocmd/mkdocs.yml/publication_checklist.md/pyproject.toml/pytest.ini/requirements-dev.txt/scripts/setup.py/src/tests; primary focus: other.
+- `49dc706` (2025-10-29) [BRDF][CI][Docs][NEON pipeline][Parquet][Sensor convolution][gocmd] – Merge pull request #159 from earthlab/codex/update-documentation-for-v2.2-changes
+  - Key changes: Touched .../...rectional_reflectance__envi_resample_Landsat_9_OLI-2_masked_spectral_data.csv/.DS_Store/.github/.gitignore/CHANGELOG.md/CITATION.cff/CODE_OF_CONDUCT.md/CONTRIBUTING.md/Datasets/LICENSE/Makefile/README.md/__pycache__/bin/constraints/data/deprecated/docs/environment.yaml/gocmd/mkdocs.yml/publication_checklist.md/pyproject.toml/pytest.ini/requirements-dev.txt/scripts/setup.py/src/tests; primary focus: other.
+
+## Thematic summary (for NSF reporting)
+
+- **NEON pipeline**  
+  - 56 commits (81d53cc (2025-11-20), 92efacc (2025-11-20), 9c58499 (2025-11-20), 60ed8fb (2025-11-20), 6d76fc1 (2025-11-12), 1ba282a (2025-11-12), 36ed0af (2025-11-12), 2f0a4b8 (2025-11-12), 741d876 (2025-11-10), 2e58b34 (2025-11-10), edde4a3 (2025-11-10), 188d5c0 (2025-11-10), 0cd9b4e (2025-11-10), d4ab665 (2025-11-07), cfc3266 (2025-11-07), 80dba4d (2025-11-07), 7bf0892 (2025-11-07), 7fe95f9 (2025-11-07), 5e6ea12 (2025-11-07), 9aad367 (2025-11-07), e8d249a (2025-11-07), 2703a34 (2025-11-07), 73173fe (2025-11-07), 165f662 (2025-11-07), bdd8962 (2025-11-05), b592ab1 (2025-11-03), 87c7946 (2025-11-03), d2ec152 (2025-11-03), 18c15a0 (2025-11-03), 4549385 (2025-11-03), 108305e (2025-11-03), 29ae168 (2025-11-03), 07f3a42 (2025-11-03), f367e17 (2025-11-03), 752cb52 (2025-11-03), 815968c (2025-11-03), f0c56ab (2025-11-03), 4e5543f (2025-11-03), 5ffe92f (2025-11-01), 5be4363 (2025-10-31), fa4e5c0 (2025-10-31), 27c26e1 (2025-10-30), 676bb41 (2025-10-29), 0eec240 (2025-10-29), 909f4c0 (2025-10-29), 174991a (2025-10-29), 215154b (2025-10-29), 0b05737 (2025-10-29), 970f298 (2025-10-29), b4206df (2025-10-29), 0ecbc99 (2025-10-29), 765df30 (2025-10-29), 35244e9 (2025-10-29), c7b6cc1 (2025-10-29), 2918d66 (2025-10-29), 49dc706 (2025-10-29))
+  - Emphasized robustness, scalability, and reproducibility across processing steps.
+
+- **Pixel extraction & Parquet streaming**  
+  - 56 commits (81d53cc (2025-11-20), cc47caf (2025-11-20), e850541 (2025-11-20), 92efacc (2025-11-20), 7638d18 (2025-11-15), 2b0f378 (2025-11-15), 6d76fc1 (2025-11-12), 1ba282a (2025-11-12), 2f0a4b8 (2025-11-12), b38a972 (2025-11-11), f6151c7 (2025-11-11), 30cf38e (2025-11-10), bda1b14 (2025-11-10), 5ffbfc6 (2025-11-10), bb58404 (2025-11-10), 741d876 (2025-11-10), 83c0f16 (2025-11-10), edde4a3 (2025-11-10), 2703a34 (2025-11-07), 165f662 (2025-11-07), baac043 (2025-11-05), f6fde8d (2025-11-05), 16e0be4 (2025-11-05), feafc1a (2025-11-05), 3cffe96 (2025-11-05), 9c11722 (2025-11-05), bdd8962 (2025-11-05), 7404f97 (2025-11-05), 5513d65 (2025-11-05), f27e98f (2025-11-05), 0b4a6b1 (2025-11-03), c187d9e (2025-11-03), de912b3 (2025-11-03), 37d87af (2025-11-03), aaae2d3 (2025-11-03), 3ff2c4e (2025-11-03), 815968c (2025-11-03), c65bc07 (2025-11-03), 47d7590 (2025-11-03), 5be4363 (2025-10-31), fa4e5c0 (2025-10-31), fb26523 (2025-10-30), 531c505 (2025-10-30), 48c9065 (2025-10-30), af84364 (2025-10-30), 93596df (2025-10-30), 110e6de (2025-10-30), c84434c (2025-10-30), af9ff47 (2025-10-30), e43696b (2025-10-30), 218eaed (2025-10-30), dc04b25 (2025-10-30), d04aa88 (2025-10-30), b7d9b84 (2025-10-30), 2918d66 (2025-10-29), 49dc706 (2025-10-29))
+  - Emphasized robustness, scalability, and reproducibility across processing steps.
+
+- **Data movement, docs, gocmd, and CI**  
+  - 121 commits (81d53cc (2025-11-20), 92efacc (2025-11-20), 7638d18 (2025-11-15), d6792f7 (2025-11-15), 2b0f378 (2025-11-15), d8143f1 (2025-11-15), 1f963f3 (2025-11-15), 3865766 (2025-11-12), 9f09aa4 (2025-11-12), 0f7f221 (2025-11-11), f81b0b4 (2025-11-11), eb756c0 (2025-11-11), 4d66740 (2025-11-11), 564066e (2025-11-10), 80f8891 (2025-11-10), 7891045 (2025-11-10), e692bc6 (2025-11-10), 188d5c0 (2025-11-10), 0cd9b4e (2025-11-10), e3a0267 (2025-11-07), eb3320a (2025-11-07), baac043 (2025-11-05), f6fde8d (2025-11-05), 7a5ba5f (2025-11-05), bdd8962 (2025-11-05), e7b7722 (2025-11-05), a16a041 (2025-11-05), 0b4a6b1 (2025-11-03), 0b4a6b1 (2025-11-03), c187d9e (2025-11-03), 31b45e5 (2025-11-03), 7b19956 (2025-11-03), aaae2d3 (2025-11-03), 76e9b3c (2025-11-03), 3ff2c4e (2025-11-03), 29ae168 (2025-11-03), 29ae168 (2025-11-03), 07f3a42 (2025-11-03), 07f3a42 (2025-11-03), f367e17 (2025-11-03), 5fbb9ed (2025-11-03), 752cb52 (2025-11-03), 815968c (2025-11-03), 815968c (2025-11-03), 693cffb (2025-11-03), 693cffb (2025-11-03), 9fc5b95 (2025-11-03), 335720d (2025-11-03), 56d88c2 (2025-11-03), bcdb3a1 (2025-11-03), 7426ea0 (2025-11-03), 7426ea0 (2025-11-03), 0505055 (2025-11-03), 60289b1 (2025-11-01), d88edde (2025-11-01), 58ae57f (2025-11-01), 2edf52e (2025-11-01), 2edf52e (2025-11-01), 98a2590 (2025-11-01), 98a2590 (2025-11-01), 5be4363 (2025-10-31), fa4e5c0 (2025-10-31), 8a0a52a (2025-10-31), 8a0a52a (2025-10-31), cbc281a (2025-10-31), 8d34f11 (2025-10-30), e99ac25 (2025-10-30), 713a640 (2025-10-30), 7b56f9c (2025-10-30), 4bc157b (2025-10-30), c808554 (2025-10-30), dfb78fd (2025-10-30), 90a18f1 (2025-10-30), 90a18f1 (2025-10-30), 27c26e1 (2025-10-30), 7bee57d (2025-10-30), c84434c (2025-10-30), af9ff47 (2025-10-30), 5f47f9b (2025-10-30), 45acaa4 (2025-10-30), 85dea63 (2025-10-30), 6390270 (2025-10-30), 6390270 (2025-10-30), 064258b (2025-10-30), 064258b (2025-10-30), 240f014 (2025-10-30), 240f014 (2025-10-30), 013286e (2025-10-30), 013286e (2025-10-30), 6adf4d5 (2025-10-30), dc04b25 (2025-10-30), e30a1ce (2025-10-30), b8d478e (2025-10-30), fcc47b1 (2025-10-29), 3d788ca (2025-10-29), e7e53cc (2025-10-29), aa8d355 (2025-10-29), 2870d10 (2025-10-29), e7ee57e (2025-10-29), acae51c (2025-10-29), 409d0f5 (2025-10-29), 4c12a8b (2025-10-29), 3ede902 (2025-10-29), 4fa6ad2 (2025-10-29), d48d683 (2025-10-29), e5191c2 (2025-10-29), 0687735 (2025-10-29), 6779147 (2025-10-29), 299c5c6 (2025-10-29), 7ae98c4 (2025-10-29), 35244e9 (2025-10-29), 35244e9 (2025-10-29), c7b6cc1 (2025-10-29), c7b6cc1 (2025-10-29), 8c853a6 (2025-10-29), 2918d66 (2025-10-29), 2918d66 (2025-10-29), 2918d66 (2025-10-29), 49dc706 (2025-10-29), 49dc706 (2025-10-29), 49dc706 (2025-10-29))
+  - Emphasized robustness, scalability, and reproducibility across processing steps.
+
+- **Sensor convolution and regression**  
+  - 10 commits (9c58499 (2025-11-20), 60ed8fb (2025-11-20), 83c0f16 (2025-11-10), 73173fe (2025-11-07), f367e17 (2025-11-03), 752cb52 (2025-11-03), 970f298 (2025-10-29), b4206df (2025-10-29), 2918d66 (2025-10-29), 49dc706 (2025-10-29))
+  - Emphasized robustness, scalability, and reproducibility across processing steps.
+
+- **BRDF + topographic correction**  
+  - 21 commits (6d76fc1 (2025-11-12), 1ba282a (2025-11-12), d4ab665 (2025-11-07), cfc3266 (2025-11-07), 80dba4d (2025-11-07), 7bf0892 (2025-11-07), 815968c (2025-11-03), c65bc07 (2025-11-03), 7cf1743 (2025-10-30), 2913efb (2025-10-30), 420d7e4 (2025-10-29), b62c5c4 (2025-10-29), 8579f8a (2025-10-29), 5b5e903 (2025-10-29), 9e5f93e (2025-10-29), 856b9f1 (2025-10-29), e5191c2 (2025-10-29), 0ecbc99 (2025-10-29), 765df30 (2025-10-29), 2918d66 (2025-10-29), 49dc706 (2025-10-29))
+  - Emphasized robustness, scalability, and reproducibility across processing steps.
