@@ -23,26 +23,41 @@ theme:
 
 nav:
   - Home: index.md
-  - Quickstart: quickstart.md
-  - Environment: env.md
+
+  - Getting started:
+      - Quickstart: quickstart.md
+
+  - Concepts:
+      - Why cross-sensor calibration?: concepts/why-calibration.md
+
+  - Tutorials:
+      - NEON → corrected ENVI: tutorials/neon-to-envi.md
+      - NEON → Landsat-style reflectance: tutorials/neon-to-landsat.md
+      - MicaSense → Landsat harmonization: tutorials/micasense-to-landsat.md
+      - Cloud & HPC workflows: tutorials/cloud-workflow.md
+
   - Pipeline:
-      - Stages: pipeline/stages.md
-      - Outputs: pipeline/outputs.md
-      - QA panel: pipeline/qa_panel.md
-      - Polygon spectral library: pipeline/polygons.md
+      - Pipeline overview & stages: pipeline/stages.md
+      - Outputs & file structure: pipeline/outputs.md
+      - QA panels & metrics: pipeline/qa.md
+
   - Usage:
-      - CLI & examples: usage/cli.md
-      - Parquet preview: usage/parquet_preview.md
+      - Command-line interface (CLI): usage/cli.md
+      - Working with Parquet outputs: usage/parquet.md
+
   - Reference:
       - Configuration: reference/configuration.md
-      - Schemas: reference/schemas.md
-      - Validation: reference/validation.md
-      - Extending: reference/extending.md
-  - API:
-      - Python API: api/index.md
-  - Troubleshooting: troubleshooting.md
-  - Contributing: dev/contributing.md
-  - Doc Drift: dev/doc_drift.md
+      - JSON schemas: reference/schemas.md
+      - Validation metrics: reference/validation.md
+
+  - Troubleshooting:
+      - Troubleshooting guide: troubleshooting.md
+      - FAQ: faq.md
+
+  - Developer:
+      - How the package is organized: dev/architecture.md
+      - Contributing & development workflow: dev/contributing.md
+      - Guidelines for AI/Codex edits: dev/codex-guidelines.md
 
 plugins:
   - search
