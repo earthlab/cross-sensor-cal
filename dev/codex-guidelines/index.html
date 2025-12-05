@@ -1430,6 +1430,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guidelines for AI/Codex edits
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1446,6 +1464,152 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core rules
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core rules">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-do-not-invent-scientific-claims" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Do NOT invent scientific claims
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-do-not-alter-conceptual-meaning-without-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Do NOT alter conceptual meaning without review
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-do-not-change-navigation-or-folder-structure-unless-instructed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Do NOT change navigation or folder structure unless instructed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-do-not-remove-placeholders-schemas-or-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Do NOT remove placeholders, schemas, or metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-editing-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code-editing rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation-editing-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation-editing rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-not-to-use-ai-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When NOT to use AI tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#safe-tasks-for-ai-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Safe tasks for AI tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1484,9 +1648,69 @@
   
 
 
-<h1 id="guidelines-for-ai-codex-edits">Guidelines for AI / Codex edits<a class="headerlink" href="#guidelines-for-ai-codex-edits" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page with guidelines for future AI-assisted edits.</p>
-<p>It will be replaced with explicit rules for how AI tools should modify this repository (for example, not inventing new scientific claims, keeping documentation structure intact, and running tests where appropriate).</p>
+<h1 id="guidelines-for-ai-codex-edits">Guidelines for AI / Codex Edits<a class="headerlink" href="#guidelines-for-ai-codex-edits" title="Permanent link">&para;</a></h1>
+<p>This page defines explicit rules for using AI tools (such as GitHub Copilot, ChatGPT, or Codex) when editing this repository. The goal is to maintain scientific accuracy, structural integrity, and documentation consistency.</p>
+<hr />
+<h2 id="core-rules">Core rules<a class="headerlink" href="#core-rules" title="Permanent link">&para;</a></h2>
+<h3 id="1-do-not-invent-scientific-claims">1. Do NOT invent scientific claims<a class="headerlink" href="#1-do-not-invent-scientific-claims" title="Permanent link">&para;</a></h3>
+<p>All scientific statements must come from:
+- NEON documentation<br />
+- sensor metadata<br />
+- existing package logic<br />
+- peer-reviewed sources  </p>
+<h3 id="2-do-not-alter-conceptual-meaning-without-review">2. Do NOT alter conceptual meaning without review<a class="headerlink" href="#2-do-not-alter-conceptual-meaning-without-review" title="Permanent link">&para;</a></h3>
+<p>Edits must preserve:
+- scientific correctness<br />
+- processing assumptions<br />
+- pipeline logic  </p>
+<h3 id="3-do-not-change-navigation-or-folder-structure-unless-instructed">3. Do NOT change navigation or folder structure unless instructed<a class="headerlink" href="#3-do-not-change-navigation-or-folder-structure-unless-instructed" title="Permanent link">&para;</a></h3>
+<p>Documentation layout is intentional and should not be reorganized automatically.</p>
+<h3 id="4-do-not-remove-placeholders-schemas-or-metadata">4. Do NOT remove placeholders, schemas, or metadata<a class="headerlink" href="#4-do-not-remove-placeholders-schemas-or-metadata" title="Permanent link">&para;</a></h3>
+<p>These are required for reproducibility.</p>
+<hr />
+<h2 id="code-editing-rules">Code-editing rules<a class="headerlink" href="#code-editing-rules" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Do not introduce new APIs without discussion  </li>
+<li>Do not refactor internal architecture without review  </li>
+<li>Avoid automatic renaming of variables or functions  </li>
+<li>Confirm that unit tests pass after any edit  </li>
+</ul>
+<hr />
+<h2 id="documentation-editing-rules">Documentation-editing rules<a class="headerlink" href="#documentation-editing-rules" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Only modify the files explicitly referenced in a prompt  </li>
+<li>Never rewrite entire sections unless provided with exact text  </li>
+<li>Preserve all fenced code blocks  </li>
+<li>Maintain consistency with mkdocs navigation  </li>
+</ul>
+<hr />
+<h2 id="when-not-to-use-ai-tools">When NOT to use AI tools<a class="headerlink" href="#when-not-to-use-ai-tools" title="Permanent link">&para;</a></h2>
+<p>Avoid automatic editing when:</p>
+<ul>
+<li>adding new scientific explanations  </li>
+<li>modifying BRDF/topographic formulas  </li>
+<li>updating spectral response files  </li>
+<li>changing reflectance scaling logic  </li>
+</ul>
+<p>These require domain expertise.</p>
+<hr />
+<h2 id="safe-tasks-for-ai-tools">Safe tasks for AI tools<a class="headerlink" href="#safe-tasks-for-ai-tools" title="Permanent link">&para;</a></h2>
+<ul>
+<li>inserting text provided by the user  </li>
+<li>reorganizing text when explicitly instructed  </li>
+<li>generating placeholder scaffolding  </li>
+<li>performing mechanical refactors with tests  </li>
+</ul>
+<hr />
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
+<p>AI tools in this repository should behave like careful editors—not authors.<br />
+Always prioritize scientific correctness, reproducibility, and transparency.</p>
+<hr />
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../contributing/">Contributing &amp; development workflow</a>  </li>
+<li><a href="../architecture/">Package architecture</a></li>
+</ul>
 
 
 

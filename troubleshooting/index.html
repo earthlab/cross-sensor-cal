@@ -1261,6 +1261,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting guide
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1277,6 +1295,109 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#general-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General issues
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="General issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-pipeline-crashes-or-silently-stops" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The pipeline crashes or silently stops
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#download-hdf5-access-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download &amp; HDF5 access issues
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Download &amp; HDF5 access issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#missing-or-corrupted-hdf5-tiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Missing or corrupted HDF5 tiles
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hdf5-envi-export-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HDF5 → ENVI export issues
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HDF5 → ENVI export issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#envi-header-not-recognized-or-wavelengths-missing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ENVI header not recognized or wavelengths missing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1607,113 @@
   
 
 
-<h1 id="troubleshooting-guide">Troubleshooting guide<a class="headerlink" href="#troubleshooting-guide" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder troubleshooting guide.</p>
-<p>It will be replaced with problem-oriented entries for common issues (e.g., BRDF failures, NaNs, brightness mismatches, Ray out-of-memory errors, and ENVI header problems).</p>
+<h1 id="troubleshooting-guide">Troubleshooting Guide<a class="headerlink" href="#troubleshooting-guide" title="Permanent link">&para;</a></h1>
+<p>This page lists common problems encountered when running the cross-sensor-cal pipeline, along with likely causes and recommended solutions. It is organized by pipeline stage.</p>
+<hr />
+<h2 id="general-issues">General issues<a class="headerlink" href="#general-issues" title="Permanent link">&para;</a></h2>
+<h3 id="the-pipeline-crashes-or-silently-stops">The pipeline crashes or silently stops<a class="headerlink" href="#the-pipeline-crashes-or-silently-stops" title="Permanent link">&para;</a></h3>
+<p>Likely causes:
+- out-of-memory (OOM) errors<br />
+- temporary directory filling up<br />
+- unexpected NEON file structure  </p>
+<p>Solutions:
+- reduce <code>--max-workers</code><br />
+- set <code>CSCAL_TMPDIR</code> to a larger scratch disk<br />
+- run stages independently using <code>--start-at</code> and <code>--end-at</code></p>
+<hr />
+<h2 id="download-hdf5-access-issues">Download &amp; HDF5 access issues<a class="headerlink" href="#download-hdf5-access-issues" title="Permanent link">&para;</a></h2>
+<h3 id="missing-or-corrupted-hdf5-tiles">Missing or corrupted HDF5 tiles<a class="headerlink" href="#missing-or-corrupted-hdf5-tiles" title="Permanent link">&para;</a></h3>
+<ul>
+<li>NEON occasionally updates directory structures  </li>
+<li>Cloud storage sessions may time out  </li>
+</ul>
+<p>Solutions:
+- manually verify the HDF5 path<br />
+- re-run pipeline; downloads are restart-safe<br />
+- use a fresh working directory  </p>
+<hr />
+<h2 id="hdf5-envi-export-issues">HDF5 → ENVI export issues<a class="headerlink" href="#hdf5-envi-export-issues" title="Permanent link">&para;</a></h2>
+<h3 id="envi-header-not-recognized-or-wavelengths-missing">ENVI header not recognized or wavelengths missing<a class="headerlink" href="#envi-header-not-recognized-or-wavelengths-missing" title="Permanent link">&para;</a></h3>
+<p>Causes:
+- malformed or incomplete HDF5 metadata<br />
+- older NEON tiles with inconsistent naming conventions  </p>
+<p>Solutions:
+- verify the HDF5 product name includes <code>directional_reflectance</code><br />
+- ensure correct product code (usually <code>DP1.30006.001</code>)<br />
+- re-run the export stage only:</p>
+<p>```bash
+cscal-pipeline --start-at export-envi --end-at export-envi ...
+ENVI export produces extremely large or slow files
+This stage is I/O intensive.
+Solutions:
+avoid running many exports concurrently
+use local SSD scratch storage
+use thread engine instead of Ray for single-tile workflows
+Topographic correction issues
+Dark or clipped areas after topo correction
+Causes:
+deep shadows
+DEM mismatch
+slope/aspect irregularities
+Solutions:
+check DEM resolution
+visually inspect slope/aspect rasters
+mask problematic areas if needed
+BRDF correction issues
+BRDF correction produces NaNs or extreme values
+Causes:
+unstable BRDF coefficient fitting
+missing or unrealistic geometry values
+low-SNR or noisy bands
+Solutions:
+inspect BRDF coefficients in QA JSON
+limit BRDF correction to certain bands
+check for invalid view/solar geometry
+Sudden brightness shift after BRDF
+Possible causes:
+incorrect per-band scaling
+extreme solar/view geometry
+BRDF coefficients failing to converge
+Check the QA PNG or PDF to verify brightness changes.
+Convolution (sensor harmonization) issues
+Landsat-convolved reflectance looks wrong
+Causes:
+wavelength mismatch
+empty or incorrect SRF tables
+bright or dark artifacts from BRDF stage
+Solutions:
+inspect SRF metadata in QA JSON
+confirm NEON wavelengths match expected ranges
+compare band means to expected Landsat reflectance ranges
+Brightness coefficients are unusually large
+This indicates poor alignment between corrected spectra and sensor response functions.
+Check:
+reflectance scaling
+BRDF coefficient stability
+QA brightness plots
+Parquet extraction issues
+Memory errors during extraction or merge
+Solutions:
+reduce number of workers
+increase scratch space
+use DuckDB for large-table operations rather than pandas
+QA issues
+QA PNG or PDF missing
+Causes:
+pipeline interrupted before QA stage
+insufficient permissions in output directory
+Re-run:
+cscal-pipeline --start-at qa ...
+When to reach out for help
+If the pipeline produces persistent artifacts, consider:
+sharing the QA PNG/PDF
+sharing a small snippet of metadata
+describing environment, RAM, and tile size
+These provide critical clues about where failure occurs.
+Next steps
+Pipeline stages
+QA metrics</p>
+<hr />
 
 
 

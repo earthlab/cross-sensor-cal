@@ -72,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#how-the-package-is-organized" class="md-skip">
+        <a href="#package-architecture" class="md-skip">
           Skip to content
         </a>
       
@@ -1376,6 +1376,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How the package is organized
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1392,6 +1410,174 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#high-level-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        High-level design
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#directory-structure-python-package" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Directory structure (Python package)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline modules
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pipeline modules">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#downloadpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        download.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export_envipy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        export_envi.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#topopy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        topo.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#brdfpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        brdf.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#convolutionpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        convolution.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parquetpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parquet.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#qapy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        qa.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data assets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-new-sensor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a new sensor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1672,71 @@
   
 
 
-<h1 id="how-the-package-is-organized">How the package is organized<a class="headerlink" href="#how-the-package-is-organized" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder developer page describing the internal architecture of cross-sensor-cal.</p>
-<p>It will be replaced with an overview of the main modules, pipeline orchestration, and where to add new sensors or processing stages.</p>
+<h1 id="package-architecture">Package Architecture<a class="headerlink" href="#package-architecture" title="Permanent link">&para;</a></h1>
+<p>This page describes how cross-sensor-cal is organized internally. Understanding this structure helps contributors extend the pipeline or integrate new sensors.</p>
+<hr />
+<h2 id="high-level-design">High-level design<a class="headerlink" href="#high-level-design" title="Permanent link">&para;</a></h2>
+<p>The package is built around a <strong>stage-based pipeline</strong>. Each stage:</p>
+<ul>
+<li>consumes well-defined inputs  </li>
+<li>writes ENVI/Parquet outputs  </li>
+<li>logs metadata to JSON sidecar files  </li>
+<li>is restart-safe  </li>
+</ul>
+<p>Stages are orchestrated by the main CLI driver.</p>
+<hr />
+<h2 id="directory-structure-python-package">Directory structure (Python package)<a class="headerlink" href="#directory-structure-python-package" title="Permanent link">&para;</a></h2>
+<p>cross_sensor_cal/
+pipeline/
+download.py
+export_envi.py
+topo.py
+brdf.py
+convolution.py
+parquet.py
+qa.py
+utils/
+data/
+srf/
+regression/</p>
+<hr />
+<h2 id="pipeline-modules">Pipeline modules<a class="headerlink" href="#pipeline-modules" title="Permanent link">&para;</a></h2>
+<h3 id="downloadpy"><code>download.py</code><a class="headerlink" href="#downloadpy" title="Permanent link">&para;</a></h3>
+<p>Fetches NEON HDF5 tiles.</p>
+<h3 id="export_envipy"><code>export_envi.py</code><a class="headerlink" href="#export_envipy" title="Permanent link">&para;</a></h3>
+<p>Extracts directional reflectance and writes ENVI + metadata.</p>
+<h3 id="topopy"><code>topo.py</code><a class="headerlink" href="#topopy" title="Permanent link">&para;</a></h3>
+<p>Applies DEM-based topographic correction.</p>
+<h3 id="brdfpy"><code>brdf.py</code><a class="headerlink" href="#brdfpy" title="Permanent link">&para;</a></h3>
+<p>Computes BRDF coefficients and corrects reflectance.</p>
+<h3 id="convolutionpy"><code>convolution.py</code><a class="headerlink" href="#convolutionpy" title="Permanent link">&para;</a></h3>
+<p>Performs sensor bandpass integration.</p>
+<h3 id="parquetpy"><code>parquet.py</code><a class="headerlink" href="#parquetpy" title="Permanent link">&para;</a></h3>
+<p>Extracts pixel-level data and merges tables.</p>
+<h3 id="qapy"><code>qa.py</code><a class="headerlink" href="#qapy" title="Permanent link">&para;</a></h3>
+<p>Generates PNG, PDF, and JSON QA outputs.</p>
+<hr />
+<h2 id="data-assets">Data assets<a class="headerlink" href="#data-assets" title="Permanent link">&para;</a></h2>
+<p>Stored under <code>cross_sensor_cal/data/</code>:</p>
+<ul>
+<li>spectral response functions (SRFs)  </li>
+<li>MicaSense → Landsat regression tables  </li>
+<li>wavelength lookup and metadata reference files  </li>
+</ul>
+<hr />
+<h2 id="adding-a-new-sensor">Adding a new sensor<a class="headerlink" href="#adding-a-new-sensor" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Add SRF tables under <code>data/srf/</code>  </li>
+<li>Update convolution stage mappings  </li>
+<li>Add tests and metadata checks  </li>
+<li>Document the new sensor in tutorials and reference pages  </li>
+</ol>
+<hr />
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../contributing/">Contributing &amp; development workflow</a>  </li>
+<li><a href="../codex-guidelines/">Guidelines for AI/Codex edits</a></li>
+</ul>
 
 
 

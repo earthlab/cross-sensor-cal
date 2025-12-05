@@ -1289,6 +1289,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1305,6 +1323,124 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-the-purpose-of-cross-sensor-calibration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is the purpose of cross-sensor calibration?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-does-neon-use-scaled-reflectance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why does NEON use scaled reflectance?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#do-i-need-both-topographic-and-brdf-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do I need both topographic and BRDF correction?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-do-some-bands-look-noisy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why do some bands look noisy?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-sensors-can-i-harmonize-to" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What sensors can I harmonize to?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-does-the-pipeline-take-so-long" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why does the pipeline take so long?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-do-some-pixels-have-reflectance-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why do some pixels have reflectance &gt; 1?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#can-i-run-analyses-without-touching-envi-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I run analyses without touching ENVI files?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1622,46 @@
   
 
 
-<h1 id="frequently-asked-questions-faq">Frequently asked questions (FAQ)<a class="headerlink" href="#frequently-asked-questions-faq" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder FAQ page.</p>
-<p>It will be replaced with concise answers to common conceptual and operational questions about using cross-sensor-cal.</p>
+<h1 id="frequently-asked-questions-faq">Frequently Asked Questions (FAQ)<a class="headerlink" href="#frequently-asked-questions-faq" title="Permanent link">&para;</a></h1>
+<hr />
+<h2 id="what-is-the-purpose-of-cross-sensor-calibration">What is the purpose of cross-sensor calibration?<a class="headerlink" href="#what-is-the-purpose-of-cross-sensor-calibration" title="Permanent link">&para;</a></h2>
+<p>To make reflectance from NEON, drones, and satellites comparable by removing geometric artifacts and aligning spectral responses.</p>
+<hr />
+<h2 id="why-does-neon-use-scaled-reflectance">Why does NEON use scaled reflectance?<a class="headerlink" href="#why-does-neon-use-scaled-reflectance" title="Permanent link">&para;</a></h2>
+<p>NEON stores reflectance as scaled integers for performance. The export stage automatically converts these into floating-point reflectance values using NEON’s scale factors.</p>
+<hr />
+<h2 id="do-i-need-both-topographic-and-brdf-correction">Do I need both topographic and BRDF correction?<a class="headerlink" href="#do-i-need-both-topographic-and-brdf-correction" title="Permanent link">&para;</a></h2>
+<p>Yes, for most ecological analyses.<br />
+Topographic correction removes slope/aspect artifacts; BRDF correction normalizes view/sun geometry.</p>
+<hr />
+<h2 id="why-do-some-bands-look-noisy">Why do some bands look noisy?<a class="headerlink" href="#why-do-some-bands-look-noisy" title="Permanent link">&para;</a></h2>
+<p>Low-SNR wavelength regions (especially in the SWIR) are more sensitive to BRDF fitting errors.</p>
+<hr />
+<h2 id="what-sensors-can-i-harmonize-to">What sensors can I harmonize to?<a class="headerlink" href="#what-sensors-can-i-harmonize-to" title="Permanent link">&para;</a></h2>
+<p>Currently:</p>
+<ul>
+<li>Landsat OLI / OLI-2  </li>
+<li>MicaSense RedEdge (via regression)  </li>
+</ul>
+<p>More sensors can be added as SRF tables become available.</p>
+<hr />
+<h2 id="why-does-the-pipeline-take-so-long">Why does the pipeline take so long?<a class="headerlink" href="#why-does-the-pipeline-take-so-long" title="Permanent link">&para;</a></h2>
+<p>NEON tiles are very large (tens of GB).<br />
+BRDF and ENVI export steps are computationally expensive.</p>
+<p>Parallelization helps, but memory constraints matter.</p>
+<hr />
+<h2 id="why-do-some-pixels-have-reflectance-1">Why do some pixels have reflectance &gt; 1?<a class="headerlink" href="#why-do-some-pixels-have-reflectance-1" title="Permanent link">&para;</a></h2>
+<p>BRDF or DEM correction may amplify noise at certain angles or terrain slopes.<br />
+Such pixels are reported in QA metrics and usually masked.</p>
+<hr />
+<h2 id="can-i-run-analyses-without-touching-envi-files">Can I run analyses without touching ENVI files?<a class="headerlink" href="#can-i-run-analyses-without-touching-envi-files" title="Permanent link">&para;</a></h2>
+<p>Yes—use the Parquet outputs (<code>*_merged_pixel_extraction.parquet</code>) for large-scale analysis.</p>
+<hr />
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../troubleshooting/">Troubleshooting</a>  </li>
+<li><a href="../pipeline/outputs/">Pipeline outputs</a></li>
+</ul>
 
 
 

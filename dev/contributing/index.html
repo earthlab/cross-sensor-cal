@@ -1404,6 +1404,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing & development workflow
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1420,6 +1438,47 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#basic-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1545,48 @@
   
 
 
-<h1 id="contributing-development-workflow">Contributing &amp; development workflow<a class="headerlink" href="#contributing-development-workflow" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder developer page for contributors.</p>
-<p>It will be replaced with guidelines on how to propose changes, coding style, how to run tests and docs builds, and how to avoid breaking the pipeline or documentation.</p>
+<h1 id="contributing-development-workflow">Contributing &amp; Development Workflow<a class="headerlink" href="#contributing-development-workflow" title="Permanent link">&para;</a></h1>
+<p>We welcome contributions from the community. This page outlines the workflow for proposing changes, running tests, and maintaining documentation quality.</p>
+<hr />
+<h2 id="basic-principles">Basic principles<a class="headerlink" href="#basic-principles" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Keep all processing steps <strong>transparent and auditable</strong>  </li>
+<li>Do not introduce new scientific claims without citation or review  </li>
+<li>Maintain consistent naming and directory conventions  </li>
+<li>Ensure any new feature is accompanied by documentation updates  </li>
+</ul>
+<hr />
+<h2 id="development-environment">Development environment<a class="headerlink" href="#development-environment" title="Permanent link">&para;</a></h2>
+<p>Install the package in editable mode:</p>
+<p>```bash
+pip install -e ".[dev]"
+Run tests:
+pytest
+Build documentation:
+mkdocs build
+Making code changes
+Open an issue describing the proposed change
+Create a feature branch
+Add or update unit tests
+Update relevant documentation pages
+Submit a pull request
+Modifying documentation
+Update Markdown files directly under docs/
+Ensure navigation in mkdocs.yml remains valid
+Keep sections coherent and avoid duplication
+Run mkdocs serve locally to preview
+Adding datasets or SRFs
+Place files under cross_sensor_cal/data/
+Update relevant stages to load the new assets
+Document usage in tutorials
+Coding standards
+Prefer pure functions and isolated dependencies
+Avoid large in-memory operations unless necessary
+Log processing decisions clearly
+Next steps
+Package architecture
+Codex edit guidelines</p>
+<hr />
 
 
 
