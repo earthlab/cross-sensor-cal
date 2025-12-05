@@ -888,6 +888,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outputs & file structure
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -904,6 +922,130 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#flight-line-directory-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flight line directory layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key outputs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Key outputs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-corrected-envi-products" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Corrected ENVI products
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-sensor-harmonized-envi-cubes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Sensor-harmonized ENVI cubes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-per-product-parquet-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Per-product Parquet tables
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-merged-pixel-extraction-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Merged pixel extraction table
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-qa-artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. QA artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#naming-conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Naming conventions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-outputs-in-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using outputs in analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1628,91 @@
   
 
 
-<h1 id="outputs-file-structure">Outputs &amp; file structure<a class="headerlink" href="#outputs-file-structure" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page describing the file and directory structure produced by the pipeline.</p>
-<p>It will be replaced with detailed descriptions of ENVI outputs, Parquet tables, QA artifacts, and naming conventions.</p>
+<h1 id="outputs-file-structure">Outputs &amp; File Structure<a class="headerlink" href="#outputs-file-structure" title="Permanent link">&para;</a></h1>
+<p>The cross-sensor-cal pipeline produces a consistent directory structure for each flight line. This page describes every artifact, what it contains, and how to use it.</p>
+<hr />
+<h2 id="flight-line-directory-layout">Flight line directory layout<a class="headerlink" href="#flight-line-directory-layout" title="Permanent link">&para;</a></h2>
+<p>A typical directory looks like:</p>
+<p>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/
+directional/
+topo/
+brdf/
+convolved/
+parquet/
+qa/</p>
+<p>Within each folder, ENVI images, Parquet tables, and sidecar JSON files share common prefixes.</p>
+<hr />
+<h2 id="key-outputs">Key outputs<a class="headerlink" href="#key-outputs" title="Permanent link">&para;</a></h2>
+<h3 id="1-corrected-envi-products">1. Corrected ENVI products<a class="headerlink" href="#1-corrected-envi-products" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong></p>
+<p><em>_directional_reflectance_envi.img
+</em>_topocorrected_envi.img
+*_brdfandtopo_corrected_envi.img</p>
+<p><strong>Contents:</strong></p>
+<ul>
+<li>reflectance bands  </li>
+<li>wavelength metadata  </li>
+<li>masks (cloud, shadow, water, snow, invalid)  </li>
+<li>CRS and pixel geometry  </li>
+</ul>
+<hr />
+<h3 id="2-sensor-harmonized-envi-cubes">2. Sensor-harmonized ENVI cubes<a class="headerlink" href="#2-sensor-harmonized-envi-cubes" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong></p>
+<p>*_landsat_convolved_envi.img</p>
+<p>One file is produced for each requested sensor type.</p>
+<p><strong>Contents:</strong></p>
+<ul>
+<li>band-averaged reflectance values for the sensor  </li>
+<li>metadata documenting SRFs used  </li>
+<li>brightness adjustment coefficients (if applicable)  </li>
+</ul>
+<hr />
+<h3 id="3-per-product-parquet-tables">3. Per-product Parquet tables<a class="headerlink" href="#3-per-product-parquet-tables" title="Permanent link">&para;</a></h3>
+<p>Every ENVI file has a corresponding Parquet table:</p>
+<p><em>_brdfandtopo_corrected.parquet
+</em>_landsat_convolved.parquet</p>
+<p>Each row = one pixel.<br />
+Columns include:</p>
+<ul>
+<li>reflectance values  </li>
+<li>masks  </li>
+<li>wavelengths  </li>
+<li>pixel coordinates  </li>
+</ul>
+<p>These tables are ideal for large-scale analysis using DuckDB, pandas, or xarray.</p>
+<hr />
+<h3 id="4-merged-pixel-extraction-table">4. Merged pixel extraction table<a class="headerlink" href="#4-merged-pixel-extraction-table" title="Permanent link">&para;</a></h3>
+<p>*_merged_pixel_extraction.parquet</p>
+<p>This contains all extracted pixel-level data for the flight line, merged across products.</p>
+<hr />
+<h3 id="5-qa-artifacts">5. QA artifacts<a class="headerlink" href="#5-qa-artifacts" title="Permanent link">&para;</a></h3>
+<p><em>_qa.png
+</em>_qa.pdf
+*_qa.json</p>
+<p>See the <a href="../qa/">QA page</a> for details.</p>
+<hr />
+<h2 id="naming-conventions">Naming conventions<a class="headerlink" href="#naming-conventions" title="Permanent link">&para;</a></h2>
+<p>Files follow a consistent pattern:</p>
+<p><NEON ID><date><stage><sensor?><format>.{img|hdr|parquet}</p>
+<p>Examples:</p>
+<ul>
+<li><code>NEON_D13_NIWO_DP1_L020-1_20230815_brdfandtopo_corrected_envi.img</code>  </li>
+<li><code>NEON_D13_NIWO_DP1_L020-1_20230815_landsat_convolved_parquet</code>  </li>
+</ul>
+<p>The prefixes and suffixes are designed for predictable sorting and automation.</p>
+<hr />
+<h2 id="using-outputs-in-analysis">Using outputs in analysis<a class="headerlink" href="#using-outputs-in-analysis" title="Permanent link">&para;</a></h2>
+<p>Example with DuckDB:</p>
+<p>```python
+import duckdb
+duckdb.query("SELECT NIR, Red FROM '..._landsat_convolved.parquet' LIMIT 10").df()
+Example with rioxarray:
+import rioxarray as rxr
+cube = rxr.open_rasterio("..._brdfandtopo_corrected_envi.img")
+Next steps
+Pipeline stages
+QA panels &amp; metrics</p>
+<hr />
 
 
 

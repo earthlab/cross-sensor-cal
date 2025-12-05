@@ -916,6 +916,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    QA panels & metrics
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -932,6 +950,141 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#qa-png" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QA PNG
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#qa-pdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QA PDF
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#qa-json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QA JSON
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QA JSON">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reflectance-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reflectance metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mask-summary-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mask summary metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#brdf-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BRDF metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sensor-harmonization-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sensor harmonization metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geometry-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interpreting-qa-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interpreting QA results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1639,90 @@
   
 
 
-<h1 id="qa-panels-metrics">QA panels &amp; metrics<a class="headerlink" href="#qa-panels-metrics" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page describing the QA panel imagery, PDF reports, and JSON metrics emitted by the pipeline.</p>
-<p>It will be replaced with explanations of each metric and examples of how to interpret them.</p>
+<h1 id="qa-panels-metrics">QA Panels &amp; Metrics<a class="headerlink" href="#qa-panels-metrics" title="Permanent link">&para;</a></h1>
+<p>Each processed NEON flight line generates a set of quality assurance (QA) artifacts designed to summarize reflectance distributions, masks, geometry, and harmonization decisions.</p>
+<p>This page describes the QA PNG, QA PDF, and QA JSON outputs.</p>
+<hr />
+<h2 id="qa-png">QA PNG<a class="headerlink" href="#qa-png" title="Permanent link">&para;</a></h2>
+<p>The QA PNG provides a quick visual summary of:</p>
+<ul>
+<li>reflectance distributions for key wavelengths  </li>
+<li>spatial distribution of masks  </li>
+<li>before/after brightness comparison  </li>
+<li>BRDF correction diagnostics  </li>
+<li>wavelength alignment checks  </li>
+</ul>
+<p>A typical PNG includes panels for:</p>
+<ol>
+<li>reflectance histograms  </li>
+<li>strip-based brightness summaries  </li>
+<li>cloud/water/snow/invalid pixel frequencies  </li>
+<li>wavelength metadata  </li>
+<li>sensor-specific diagnostics  </li>
+</ol>
+<p>Use this for fast visual inspection.</p>
+<hr />
+<h2 id="qa-pdf">QA PDF<a class="headerlink" href="#qa-pdf" title="Permanent link">&para;</a></h2>
+<p>The PDF includes:</p>
+<ul>
+<li>all PNG content  </li>
+<li>multi-page extended diagnostics  </li>
+<li>tabulated statistics  </li>
+<li>optional per-band summaries  </li>
+<li>BRDF coefficient tables  </li>
+<li>brightness adjustment coefficients  </li>
+</ul>
+<p>This document serves as a flight-line-level audit record.</p>
+<hr />
+<h2 id="qa-json">QA JSON<a class="headerlink" href="#qa-json" title="Permanent link">&para;</a></h2>
+<p>The JSON file contains machine-readable metrics including:</p>
+<h3 id="reflectance-metrics">Reflectance metrics<a class="headerlink" href="#reflectance-metrics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>min/max/median for each band  </li>
+<li>proportion of saturated or masked pixels  </li>
+<li>brightness differences across correction stages  </li>
+</ul>
+<h3 id="mask-summary-metrics">Mask summary metrics<a class="headerlink" href="#mask-summary-metrics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>percent cloud  </li>
+<li>percent cloud shadow  </li>
+<li>percent snow  </li>
+<li>percent water  </li>
+<li>percent invalid  </li>
+</ul>
+<h3 id="brdf-metrics">BRDF metrics<a class="headerlink" href="#brdf-metrics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>per-band BRDF coefficients  </li>
+<li>reconstruction error statistics  </li>
+</ul>
+<h3 id="sensor-harmonization-metrics">Sensor harmonization metrics<a class="headerlink" href="#sensor-harmonization-metrics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>brightness coefficients (per band)  </li>
+<li>spectral alignment checks  </li>
+<li>per-band RMSE for regression-based harmonization (if applicable)  </li>
+</ul>
+<h3 id="geometry-metadata">Geometry metadata<a class="headerlink" href="#geometry-metadata" title="Permanent link">&para;</a></h3>
+<ul>
+<li>solar zenith/azimuth  </li>
+<li>view zenith/azimuth  </li>
+<li>DEM statistics  </li>
+</ul>
+<hr />
+<h2 id="interpreting-qa-results">Interpreting QA results<a class="headerlink" href="#interpreting-qa-results" title="Permanent link">&para;</a></h2>
+<p>Flags to watch for:</p>
+<ul>
+<li><strong>Reflectance values &gt; 1.5</strong> → possible BRDF or DEM issues  </li>
+<li><strong>Large brightness shifts</strong> → check convolution stage  </li>
+<li><strong>High invalid or shadow fraction</strong> → consider masking strategy  </li>
+<li><strong>Noisy BRDF coefficients</strong> → unstable correction in low-SNR regions  </li>
+</ul>
+<hr />
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../stages/">Pipeline stages</a>  </li>
+<li><a href="../outputs/">Outputs &amp; file structure</a>  </li>
+<li><a href="../../troubleshooting/">Troubleshooting</a></li>
+</ul>
 
 
 
