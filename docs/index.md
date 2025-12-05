@@ -16,9 +16,9 @@ The goal is to make it easy and repeatable to move from *raw NEON tiles* to *cro
 
 Ecologists increasingly need to align data from different platforms:
 
-- **NEON hyperspectral imaging**  
-- **Drone multispectral cameras (e.g., MicaSense)**  
-- **Moderate-resolution satellites (e.g., Landsat OLI/OLI-2, Sentinel-2)**  
+- NEON hyperspectral imaging  
+- drone multispectral cameras (e.g., MicaSense)  
+- moderate-resolution satellites (e.g., Landsat OLI/OLI-2, Sentinel-2)  
 
 These sensors differ in band definitions, viewing and illumination geometry, radiometric assumptions, and file formats. Without harmonization, differences between sensors can overwhelm differences in vegetation or ecosystem state.
 
@@ -34,21 +34,26 @@ cross-sensor-cal provides a **transparent, auditable, restart-safe** workflow th
 
 Use this package when you need to:
 
-- Compare NEON hyperspectral reflectance to satellite reflectance  
-- Translate drone-scale multispectral data into Landsat-equivalent bands  
-- Build cross-scale ecological models (plot → drone → NEON → satellite)  
-- Process multiple NEON flight lines reproducibly in the cloud  
-- Generate standardized QA artifacts for calibration decisions  
+- compare NEON hyperspectral reflectance to satellite reflectance  
+- translate drone-scale multispectral data into Landsat-equivalent bands  
+- build cross-scale ecological models (plot → drone → NEON → satellite)  
+- process multiple NEON flight lines reproducibly in the cloud  
+- generate standardized QA artifacts for calibration decisions  
 
-If you only need to open a single NEON HDF5 file in a viewer, this package is more than you need. But if you need **many flight lines** and **scientifically interpretable harmonization**, this pipeline is designed for that workflow.
+If you only need to open a single NEON HDF5 file in a viewer, this package is more than you need. If you need **many flight lines** and **scientifically interpretable harmonization**, this pipeline is designed for that workflow.
 
 ---
 
-## A minimal example: run one NEON flight line
+## A minimal example: run one NEON flight line (CLI)
+
+The fastest way to see the pipeline working is via the command-line interface.
 
 ```bash
-BASE=output_demo && mkdir -p "$BASE"
+# 1. Choose an output base
+BASE=output_demo
+mkdir -p "$BASE"
 
+# 2. Run the pipeline on one NEON flight line
 cscal-pipeline \
   --base-folder "$BASE" \
   --site-code NIWO \
@@ -57,10 +62,11 @@ cscal-pipeline \
   --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
   --max-workers 2 \
   --engine thread
-Inspect QA outputs:
+
+# 3. Inspect QA outputs (macOS example)
 open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png"
-open "$BASE/..._qa.pdf"
-See the Quickstart for a more guided introduction.
+open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.pdf"
+For a Python/Jupyter version of this example, see the Jupyter notebook example.
 How the pipeline works (conceptual view)
 HDF5 → ENVI export
 Convert directional reflectance into ENVI .img/.hdr with clean metadata.
@@ -72,7 +78,7 @@ Parquet generation & merging
 Produce analysis-ready tables with wavelengths, masks, and derived indices.
 Quality assurance
 Emit a QA panel, multi-page PDF, and JSON metrics for each flight line.
-Detailed descriptions are in the Pipeline section.
+Detailed descriptions are in the Pipeline overview & stages page.
 What you get out
 Each processed flight line produces:
 corrected ENVI cubes
@@ -88,9 +94,10 @@ GoalWhere to go
 Run your first full workflowQuickstart
 Understand scientific contextWhy calibration?
 Work through examplesTutorials
-Inspect and validate resultsQA metrics
 Use outputs in analysisWorking with Parquet
+Try it in a notebooks/Jupyter notebook example
+Inspect and validate resultsQA panels & metrics
 Tune or extend the pipelineReference
-
+Something looks offTroubleshooting guide
 
 ---
