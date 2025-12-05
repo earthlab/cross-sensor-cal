@@ -773,6 +773,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloud & HPC workflows
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -789,6 +807,47 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-working-with-object-storage-eg-cyverse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Working with object storage (e.g., CyVerse)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1545,80 @@
   
 
 
-<h1 id="tutorial-cloud-hpc-workflows">Tutorial: Cloud &amp; HPC workflows<a class="headerlink" href="#tutorial-cloud-hpc-workflows" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder tutorial for running cross-sensor-cal in cloud or HPC environments.</p>
-<p>It will be replaced with examples using object storage, gocmd/iRODS, and Ray-based parallelism, along with guidance on memory and performance.</p>
+<h1 id="tutorial-cloud-hpc-workflows">Tutorial: Cloud &amp; HPC Workflows<a class="headerlink" href="#tutorial-cloud-hpc-workflows" title="Permanent link">&para;</a></h1>
+<p>This tutorial describes how to run the cross-sensor-cal pipeline efficiently in cloud or HPC environments where data access, storage, and memory constraints differ from a local workstation.</p>
+<hr />
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>You will learn:</p>
+<ul>
+<li>best practices for running the pipeline in object-storage environments  </li>
+<li>when to use thread mode vs. Ray mode  </li>
+<li>how to work with large NEON datasets without local persistence  </li>
+<li>strategies for scaling multi-flightline workflows  </li>
+</ul>
+<hr />
+<h2 id="1-working-with-object-storage-eg-cyverse">1. Working with object storage (e.g., CyVerse)<a class="headerlink" href="#1-working-with-object-storage-eg-cyverse" title="Permanent link">&para;</a></h2>
+<p>NEON HDF5 tiles can be accessed using <code>gocmd</code> or iRODS commands.</p>
+<p>Recommended workflow:</p>
+<ol>
+<li>Stage a small number of HDF5 tiles into a temporary working directory  </li>
+<li>Run the pipeline on those tiles  </li>
+<li>Upload corrected ENVI + Parquet outputs to persistent storage  </li>
+<li>Clean intermediate files to save space  </li>
+</ol>
+<p>Example staging command:</p>
+<p>```bash
+gocmd get i:/iplant/home/.../NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance.h5 .
+2. Engine selection: threads vs Ray
+Thread engine
+Best for:
+small to medium flight lines
+machines with limited memory
+single-tile debugging
+Ray engine
+Best for:
+many flight lines
+distributed cloud environments
+parallel extraction and merging
+Enable Ray:
+pip install cross-sensor-cal[ray]
+Run:
+cscal-pipeline ... --engine ray
+3. Memory considerations
+Large NEON flight lines may be tens of gigabytes. To avoid memory pressure:
+reduce chunk sizes
+use --max-workers conservatively
+prefer per-tile processing rather than large batch merging
+avoid keeping many ENVI cubes in memory simultaneously
+In Ray mode, ensure worker memory matches expected tile size (e.g., 16–32 GB per worker).
+4. Recommended HPC workflow
+Submit one job per flight line
+Request enough memory for a single NEON tile (~20–40 GB)
+Use local scratch storage for temporary files
+Upload final ENVI + Parquet products to shared storage
+Merge results downstream using DuckDB or Python
+This scales cleanly across sites and years.
+5. Example SLURM script</p>
+<h1 id="binbash">!/bin/bash<a class="headerlink" href="#binbash" title="Permanent link">&para;</a></h1>
+<h1 id="sbatch-job-namecscal">SBATCH --job-name=cscal<a class="headerlink" href="#sbatch-job-namecscal" title="Permanent link">&para;</a></h1>
+<h1 id="sbatch-mem64g">SBATCH --mem=64G<a class="headerlink" href="#sbatch-mem64g" title="Permanent link">&para;</a></h1>
+<h1 id="sbatch-cpus-per-task8">SBATCH --cpus-per-task=8<a class="headerlink" href="#sbatch-cpus-per-task8" title="Permanent link">&para;</a></h1>
+<p>module load python</p>
+<p>BASE=$SCRATCH/cscal_${SLURM_JOB_ID}
+mkdir -p "$BASE"</p>
+<p>cscal-pipeline \
+  --base-folder "$BASE" \
+  --site-code NIWO \
+  --year-month 2023-08 \
+  --product-code DP1.30006.001 \
+  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
+  --engine thread \
+  --max-workers 8
+6. Next steps
+Pipeline stages
+Using Parquet outputs
+Troubleshooting</p>
+<hr />
 
 
 

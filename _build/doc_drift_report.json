@@ -9,6 +9,7 @@
   },
   "stale_in_docs": {
     "outputs": [
+      "_landsat_convolved_envi.hdr",
       "_landsat_convolved_envi.img",
       "_landsat_etm+_envi.img",
       "_landsat_oli_envi.parquet",
@@ -47,6 +48,7 @@
       "micasense'],,,,,,",
       "micasense*_envi.img,",
       "micasense*_envi.img`,",
+      "micasense-to-landsat",
       "micasense.json`",
       "micasense_envi\",",
       "micasense_envi.hdr",
@@ -70,6 +72,9 @@
       "micasense_envi.img/.hdr/.parquet,,,,",
       "micasense_envi.img/.hdr/.parquet,,,,,",
       "micasense_envi.img/.hdr/.parquet,,,,,,",
+      "micasense_input",
+      "micasense_landsat_harmonized.parquet\")",
+      "micasense_to_landsat.csv",
       "micasense_to_match_oli_and_oli,",
       "micasense_to_match_oli_and_oli,,",
       "micasense_to_match_oli_and_oli,,,",

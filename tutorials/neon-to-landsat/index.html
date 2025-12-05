@@ -717,6 +717,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    NEON → Landsat-style reflectance
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -733,6 +751,58 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-select-a-corrected-envi-cube" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Select a corrected ENVI cube
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-run-the-convolution-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Run the convolution stage
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1556,82 @@
   
 
 
-<h1 id="tutorial-neon-landsat-style-reflectance">Tutorial: NEON → Landsat-style reflectance<a class="headerlink" href="#tutorial-neon-landsat-style-reflectance" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder tutorial for convolving corrected NEON ENVI cubes to Landsat-like bandpasses.</p>
-<p>It will be replaced with a step-by-step workflow and sanity-checks (e.g., NDVI comparisons).</p>
+<h1 id="tutorial-neon-landsat-style-reflectance">Tutorial: NEON → Landsat-Style Reflectance<a class="headerlink" href="#tutorial-neon-landsat-style-reflectance" title="Permanent link">&para;</a></h1>
+<p>This tutorial shows how to convert physically corrected NEON ENVI reflectance into <strong>Landsat-equivalent reflectance</strong> using sensor spectral response functions (SRFs).</p>
+<p>The output is a set of ENVI cubes and Parquet tables representing NEON reflectance expressed in the Landsat bandspace.</p>
+<hr />
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<p>Before running this tutorial, complete:</p>
+<ul>
+<li><a href="../neon-to-envi/">NEON → corrected ENVI</a></li>
+</ul>
+<p>You will need the <code>*_brdfandtopo_corrected_envi.img</code> output for convolution.</p>
+<hr />
+<h2 id="1-select-a-corrected-envi-cube">1. Select a corrected ENVI cube<a class="headerlink" href="#1-select-a-corrected-envi-cube" title="Permanent link">&para;</a></h2>
+<p>Your corrected data should look like:</p>
+<p>.../NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/
+NEON_D13_NIWO_..._brdfandtopo_corrected_envi.img</p>
+<p>This file is the input to Landsat bandpass convolution.</p>
+<hr />
+<h2 id="2-run-the-convolution-stage">2. Run the convolution stage<a class="headerlink" href="#2-run-the-convolution-stage" title="Permanent link">&para;</a></h2>
+<p>If you used the main pipeline, convolution runs automatically after BRDF+topo correction.<br />
+To run only the convolution stage manually:</p>
+<p>```bash
+cscal-pipeline \
+  --base-folder "$BASE" \
+  --site-code NIWO \
+  --year-month 2023-08 \
+  --product-code DP1.30006.001 \
+  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
+  --max-workers 2 \
+  --engine thread \
+  --start-at convolution
+Outputs include:
+<em>_landsat_convolved_envi.img
+</em>_landsat_convolved_envi.hdr
+*_landsat_convolved.parquet
+3. Understanding Landsat bandpass integration
+The convolution stage integrates each corrected spectrum against Landsat OLI SRFs:
+Coastal / Blue / Green / Red
+NIR
+SWIR1
+SWIR2
+This process produces reflectance values aligned to Landsat definitions, enabling:
+direct comparison to satellite imagery
+validation exercises
+cross-scale modeling
+harmonized NDVI and other vegetation indices
+4. Inspecting Landsat-like ENVI outputs
+Example in Python:
+import rioxarray as rxr</p>
+<p>landsat = rxr.open_rasterio("path/to/..._landsat_convolved_envi.img")
+landsat
+Band order, wavelengths, and metadata will match the Landsat OLI sensor.
+5. Checking the QA metrics
+The QA JSON and QA PNG will now include:
+brightness adjustments used in Landsat harmonization
+bandwise statistics after convolution
+wavelength alignment checks
+mask and no-data diagnostics
+Use this to verify successful harmonization.
+6. Using the Parquet tables
+The *_landsat_convolved.parquet file contains:
+one row per pixel
+columns for each Landsat-equivalent band
+pixel geometry and mask indicators
+Example:
+import duckdb</p>
+<p>duckdb.query("""
+    SELECT Red, NIR, (NIR - Red) / (NIR + Red) AS ndvi
+    FROM '..._landsat_convolved.parquet'
+    LIMIT 5
+""").df()
+7. Next steps
+Continue to:
+MicaSense → Landsat harmonization
+Working with Parquet
+Pipeline QA</p>
+<hr />
 
 
 

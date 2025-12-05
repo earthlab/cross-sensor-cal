@@ -745,6 +745,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MicaSense → Landsat harmonization
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -761,6 +779,58 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-inputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Inputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-harmonization-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Harmonization workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1556,64 @@
   
 
 
-<h1 id="tutorial-micasense-landsat-harmonization">Tutorial: MicaSense → Landsat harmonization<a class="headerlink" href="#tutorial-micasense-landsat-harmonization" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder tutorial for harmonizing MicaSense or other drone-scale multispectral data into Landsat bandspace.</p>
-<p>It will be replaced with regression-based workflows and example plots.</p>
+<h1 id="tutorial-micasense-landsat-harmonization">Tutorial: MicaSense → Landsat Harmonization<a class="headerlink" href="#tutorial-micasense-landsat-harmonization" title="Permanent link">&para;</a></h1>
+<p>This tutorial demonstrates how to harmonize drone-scale multispectral reflectance (e.g., MicaSense RedEdge) into Landsat-equivalent band values using the cross-sensor-cal regression workflow.</p>
+<hr />
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>You will learn how to:</p>
+<ol>
+<li>prepare MicaSense reflectance inputs  </li>
+<li>apply band mapping and wavelength matching  </li>
+<li>use regression tables to harmonize reflectance  </li>
+<li>inspect harmonized Landsat-style products  </li>
+</ol>
+<p>This allows direct comparison between drone and satellite observations.</p>
+<hr />
+<h2 id="1-inputs">1. Inputs<a class="headerlink" href="#1-inputs" title="Permanent link">&para;</a></h2>
+<p>You need reflectance values from a calibrated drone multispectral system. These can be:</p>
+<ul>
+<li>stacked reflectance TIFFs  </li>
+<li>ENVI-formatted band images  </li>
+<li>Parquet tables exported from your workflow  </li>
+</ul>
+<p>Each band should have known center wavelengths.</p>
+<hr />
+<h2 id="2-harmonization-workflow">2. Harmonization workflow<a class="headerlink" href="#2-harmonization-workflow" title="Permanent link">&para;</a></h2>
+<p>cross-sensor-cal uses regression relationships linking MicaSense band values to Landsat OLI bands. These regressions are derived from calibrated field and NEON comparisons.</p>
+<p>Run the following command:</p>
+<p>```bash
+cscal-micasense-to-landsat \
+  --input your_micasense_input \
+  --output ms_to_ls_output \
+  --regression-table data/regression/micasense_to_landsat.csv
+Outputs include:
+Landsat-equivalent reflectance table
+diagnostic statistics
+optional ENVI export
+3. Inspecting harmonized reflectance
+Example:
+import pandas as pd</p>
+<p>df = pd.read_parquet("ms_to_ls_output/micasense_landsat_harmonized.parquet")
+df.head()
+Columns will match Landsat bands:
+Blue
+Green
+Red
+NIR
+SWIR1
+SWIR2
+4. NDVI sanity check
+df["ndvi"] = (df["NIR"] - df["Red"]) / (df["NIR"] + df["Red"])
+df["ndvi"].describe()
+If harmonization worked correctly, NDVI should fall within typical vegetation ranges (0.1–0.9 for most cases).
+5. Next steps
+Integrate drone → NEON → Landsat comparisons
+Combine harmonized products with NEON-derived spectra
+Use the merged output in ecological modeling workflows
+See also:
+NEON → Landsat tutorial
+Pipeline outputs</p>
+<hr />
 
 
 
