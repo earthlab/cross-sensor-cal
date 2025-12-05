@@ -106,6 +106,8 @@ class NeonCube:
             else None
         )
 
+        self.scale_factor = float(meta.get("scale_factor", 1.0))
+
         self.wavelength_units = str(meta.get("wavelength_units", "Unknown"))
         self.map_info_list = list(meta.get("map_info", []))
         self.projection_wkt = str(meta.get("projection", ""))

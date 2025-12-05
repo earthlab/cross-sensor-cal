@@ -40,6 +40,10 @@ to harmonise illumination; the QA JSON will expose the per-band gain/offsets._
 cross-sensor-cal correct --in envi/*_envi.img --dtm dtm/NIWO.tif --out corrected/
 ```
 **Pitfalls** If JSON is missing, correction didn’t run; fix paths and rerun.
+All BRDF + topo math is performed on unitless (0–1) reflectance derived from the
+NEON scale factor before being written back out using the original NEON-style
+scaled reflectance semantics, so disk products stay compatible while fits remain
+numerically stable.
 
 ## 4) Cross-sensor convolution
 **Purpose** Resample to target sensor bandpasses.

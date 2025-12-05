@@ -32,6 +32,7 @@ if TYPE_CHECKING:  # pragma: no cover - only for type hints
 
 
 _BRDF_COEFF_CACHE: dict[Path, dict[str, np.ndarray | str]] = {}
+MAX_UNITLESS_REFLECTANCE = 1.2
 
 
 def load_brdf_model(flightline_dir: Path) -> dict:
@@ -301,6 +302,8 @@ def apply_brdf_correct(
     if chunk_array.dtype != np.float32:
         raise ValueError("Chunks passed to apply_brdf_correct must be float32 arrays.")
 
+    scale_factor = float(getattr(cube, "scale_factor", 1.0)) or 1.0
+
     coeffs_dict: dict[str, np.ndarray | str] | None = None
     coeff_path_resolved: Path | None = None
     if coeff_path is not None:
@@ -424,15 +427,27 @@ def apply_brdf_correct(
 
     denominator = np.where(np.abs(denominator) < 1e-6, np.nan, denominator)
 
-    corrected = chunk_array / denominator
-    corrected = np.where(np.isfinite(corrected), corrected, chunk_array)
+    chunk_unitless = chunk_array * np.float32(scale_factor)
+
+    valid_mask = np.isfinite(chunk_unitless)
+    valid_mask &= chunk_unitless >= 0.0
+    valid_mask &= chunk_unitless <= MAX_UNITLESS_REFLECTANCE
+    valid_mask &= np.isfinite(denominator)
+
+    corrected_unitless = chunk_unitless / denominator
+    corrected_unitless = np.where(np.isfinite(corrected_unitless), corrected_unitless, np.nan)
 
     if hasattr(cube, "mask_no_data"):
         mask = cube.mask_no_data[ys:ye, xs:xe]
-        no_data_value = np.float32(getattr(cube, "no_data", np.nan))
-        corrected = np.where(mask[..., np.newaxis], corrected, no_data_value)
+        valid_mask &= mask[..., np.newaxis]
 
-    return corrected.astype(np.float32, copy=False)
+    no_data_value = np.float32(getattr(cube, "no_data", np.nan))
+    corrected_unitless = np.where(valid_mask, corrected_unitless, np.nan)
+
+    corrected_scaled = corrected_unitless / np.float32(scale_factor)
+    corrected_scaled = np.where(valid_mask, corrected_scaled, no_data_value)
+
+    return corrected_scaled.astype(np.float32, copy=False)
 
 
 def apply_glint_correct(*args, **kwargs):
@@ -493,6 +508,10 @@ def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
     valid = mask.astype(bool)
     valid &= np.isfinite(volume_kernel) & np.isfinite(geom_kernel)
 
+    reflectance_unitless = (
+        np.asarray(cube.data, dtype=np.float32) * np.float32(getattr(cube, "scale_factor", 1.0) or 1.0)
+    )
+
     flat_valid = valid.reshape(-1)
     if np.count_nonzero(flat_valid) < 3:
         logging.warning(
@@ -514,15 +533,17 @@ def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
         design_flat = design_stack.reshape(-1, 3)
         design_valid = design_flat[flat_valid]
 
-        reflectance = np.asarray(cube.data, dtype=np.float32).reshape(-1, cube.bands)
+        reflectance_flat = reflectance_unitless.reshape(-1, cube.bands)
 
         iso = np.ones(cube.bands, dtype=np.float32)
         vol = np.zeros(cube.bands, dtype=np.float32)
         geo = np.zeros(cube.bands, dtype=np.float32)
 
         for band_idx in range(cube.bands):
-            y = reflectance[flat_valid, band_idx].astype(np.float64, copy=False)
+            y = reflectance_flat[flat_valid, band_idx].astype(np.float64, copy=False)
             finite_mask = np.isfinite(y)
+            finite_mask &= y >= 0.0
+            finite_mask &= y <= MAX_UNITLESS_REFLECTANCE
             if np.count_nonzero(finite_mask) < 3:
                 continue
             X = design_valid[finite_mask].astype(np.float64, copy=False)
