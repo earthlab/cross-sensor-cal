@@ -9,6 +9,7 @@
   },
   "stale_in_docs": {
     "outputs": [
+      "_landsat_convolved_envi.img",
       "_landsat_etm+_envi.img",
       "_landsat_oli_envi.parquet",
       "_landsat_tm_envi.hdr",
@@ -19,6 +20,8 @@
     ],
     "sensors": [
       "MicaSense",
+      "MicaSense)",
+      "MicaSense)**",
       "MicaSense,",
       "MicaSense,,",
       "MicaSense,,,",
@@ -26,6 +29,7 @@
       "MicaSense,,,,,",
       "MicaSense,,,,,,",
       "MicaSense,,,,,,,",
+      "MicaSense-equivalent",
       "MicaSense-matched",
       "Micasense,",
       "Micasense,,",

@@ -602,6 +602,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why cross-sensor calibration?
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -618,6 +636,108 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-problem-apples-and-oranges-reflectance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The problem: apples and oranges reflectance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#correcting-vs-harmonizing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Correcting vs. harmonizing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Correcting vs. harmonizing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-physical-corrections" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Physical corrections
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-sensor-harmonization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Sensor harmonization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-neon-as-the-foundation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why NEON as the foundation?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-still-requires-care" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What still requires care
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-go-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to go next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1487,8 +1607,88 @@
 
 
 <h1 id="why-cross-sensor-calibration">Why cross-sensor calibration?<a class="headerlink" href="#why-cross-sensor-calibration" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page for explaining why cross-sensor calibration is needed, how different sensors "see" the landscape, and what problems this package is designed to solve.</p>
-<p>It will be replaced with a full conceptual overview describing the scientific context and assumptions behind the pipeline.</p>
+<p>Understanding vegetation, disturbance, and ecosystem structure often requires integrating information from <strong>multiple sensors</strong> operating at different spatial, temporal, and spectral scales. These include:</p>
+<ul>
+<li>NEON airborne imaging spectroscopy  </li>
+<li>drone multispectral systems (e.g., MicaSense)  </li>
+<li>moderate-resolution satellites like Landsat and Sentinel  </li>
+</ul>
+<p>Each sensor “sees” the landscape differently, and these differences can obscure the ecological signals we care about unless we account for them.</p>
+<hr />
+<h2 id="the-problem-apples-and-oranges-reflectance">The problem: apples and oranges reflectance<a class="headerlink" href="#the-problem-apples-and-oranges-reflectance" title="Permanent link">&para;</a></h2>
+<p>Sensors differ in:</p>
+<ul>
+<li><strong>spectral response</strong> (band centers, widths, shapes)  </li>
+<li><strong>illumination geometry</strong> (solar zenith, azimuth, atmospheric path)  </li>
+<li><strong>viewing geometry</strong> (sensor zenith, azimuth)  </li>
+<li><strong>radiometric scaling and masking conventions</strong>  </li>
+<li><strong>ground sampling distance and spatial aggregation</strong>  </li>
+</ul>
+<p>Even when they image the same location on the same day, their raw reflectance values are <em>not</em> directly comparable.</p>
+<p>This creates challenges when trying to:</p>
+<ul>
+<li>validate satellite products using NEON  </li>
+<li>relate drone measurements to NEON or Landsat  </li>
+<li>build cross-scale ecological models  </li>
+<li>interpret changes in reflectance through time or across terrain  </li>
+</ul>
+<hr />
+<h2 id="correcting-vs-harmonizing">Correcting vs. harmonizing<a class="headerlink" href="#correcting-vs-harmonizing" title="Permanent link">&para;</a></h2>
+<p>cross-sensor-cal performs two distinct operations:</p>
+<h3 id="1-physical-corrections">1. Physical corrections<a class="headerlink" href="#1-physical-corrections" title="Permanent link">&para;</a></h3>
+<p>These aim to reduce variation caused by <strong>illumination and terrain</strong>:</p>
+<ul>
+<li>topographic correction (slope and aspect effects)  </li>
+<li>BRDF correction (view/sun geometry effects)  </li>
+</ul>
+<p>The result is a reflectance product that is more comparable across acquisition conditions.</p>
+<h3 id="2-sensor-harmonization">2. Sensor harmonization<a class="headerlink" href="#2-sensor-harmonization" title="Permanent link">&para;</a></h3>
+<p>This converts corrected hyperspectral data into another sensor’s bandspace by integrating spectra against <strong>published spectral response functions</strong> (e.g., Landsat OLI, MicaSense RedEdge).</p>
+<p>Optional brightness adjustments are documented in the QA outputs.</p>
+<hr />
+<h2 id="why-neon-as-the-foundation">Why NEON as the foundation?<a class="headerlink" href="#why-neon-as-the-foundation" title="Permanent link">&para;</a></h2>
+<p>NEON AOP data provide:</p>
+<ul>
+<li>high spectral resolution  </li>
+<li>per-pixel geometry information  </li>
+<li>consistent radiometric processing  </li>
+<li>spatial coverage aligned with ecological research sites  </li>
+</ul>
+<p>These properties make NEON a powerful intermediary between plot-scale measurements and satellite observations.</p>
+<p>cross-sensor-cal implements a <em>reproducible stepwise process</em> to:</p>
+<ol>
+<li>extract NEON reflectance into ENVI  </li>
+<li>correct it physically  </li>
+<li>harmonize it to satellite/drone sensors  </li>
+<li>output analysis-ready tables and QA documentation  </li>
+</ol>
+<hr />
+<h2 id="what-still-requires-care">What still requires care<a class="headerlink" href="#what-still-requires-care" title="Permanent link">&para;</a></h2>
+<p>Even after calibration and harmonization:</p>
+<ul>
+<li>residual BRDF effects can remain  </li>
+<li>atmospheric differences between sensors matter  </li>
+<li>snow, smoke, water, and shadows require attention  </li>
+<li>scale mismatch affects interpretation  </li>
+<li>masks and quality flags differ across platforms  </li>
+</ul>
+<p>The pipeline aims to make all assumptions explicit—every major processing step writes a JSON sidecar describing inputs, parameters, and results.</p>
+<hr />
+<h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p>Learn how each pipeline stage works:<br />
+<a href="../../pipeline/stages/">Pipeline overview &amp; stages</a></p>
+</li>
+<li>
+<p>Follow a practical workflow:<br />
+<a href="../../tutorials/neon-to-envi/">NEON → corrected ENVI</a></p>
+</li>
+<li>
+<p>Explore validation and metrics:<br />
+<a href="../../pipeline/qa/">QA panels &amp; metrics</a></p>
+</li>
+</ul>
 
 
 

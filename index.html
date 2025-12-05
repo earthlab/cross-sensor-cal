@@ -480,10 +480,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#run-your-first-tile-3-steps" class="md-nav__link">
+  <a href="#why-this-package-exists" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Run your first tile (3 steps)
+        Why this package exists
       
     </span>
   </a>
@@ -491,10 +491,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-teams-use-cross-sensor-cal" class="md-nav__link">
+  <a href="#what-problems-does-cross-sensor-cal-solve" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why teams use cross-sensor-cal
+        What problems does cross-sensor-cal solve?
       
     </span>
   </a>
@@ -502,54 +502,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-in-minutes" class="md-nav__link">
+  <a href="#a-minimal-example-run-one-neon-flight-line" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install in minutes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#understand-the-pipeline" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Understand the pipeline
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quality-assurance-overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quality Assurance Overview
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#release-highlights" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Release highlights
+        A minimal example: run one NEON flight line
       
     </span>
   </a>
@@ -1593,114 +1549,89 @@
   
 
 
-<!-- HOME:START -->
 <h1 id="cross-sensor-calibration">Cross-Sensor Calibration<a class="headerlink" href="#cross-sensor-calibration" title="Permanent link">&para;</a></h1>
-<p>Turn raw <strong>NEON hyperspectral</strong> flight lines into corrected ENVI cubes, sensor-matched products, tidy Parquet, and a QA panel—<strong>in one restart-safe command</strong>.</p>
-<h2 id="run-your-first-tile-3-steps">Run your first tile (3 steps)<a class="headerlink" href="#run-your-first-tile-3-steps" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1) Create an output base</span>
-<span class="nv">BASE</span><span class="o">=</span>output_demo<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span>
-
-<span class="c1"># 2) Process one flight line (replace IDs as needed)</span>
-cscal-pipeline<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--base-folder<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--flight-lines<span class="w"> </span>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--engine<span class="w"> </span>thread<span class="w">  </span><span class="c1"># swap for &quot;ray&quot; once the optional dependency is installed</span>
-
-<span class="c1"># 3) Open the QA image (and PDF report)</span>
-open<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png&quot;</span>
-open<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.pdf&quot;</span>
-</code></pre></div>
-<p>New here? See the <a href="quickstart/">Quickstart</a>.</p>
-<p>Something broke? Jump to <a href="troubleshooting/">Troubleshooting</a>.</p>
-<!-- HOME:END -->
-
-<hr />
-<h2 id="why-teams-use-cross-sensor-cal">Why teams use cross-sensor-cal<a class="headerlink" href="#why-teams-use-cross-sensor-cal" title="Permanent link">&para;</a></h2>
+<p>Earth Lab’s <strong>cross-sensor-cal</strong> is a Python package for producing physically corrected and sensor-harmonized reflectance from NEON hyperspectral data and other fine-resolution imagery. It provides a reproducible pipeline that:</p>
 <ul>
-<li><strong>Restart-safe orchestration</strong> – rerun the same command after a crash; completed stages are skipped automatically.</li>
-<li><strong>Consistent artifacts</strong> – every tile produces ENVI cubes, tidy Parquet, and QA outputs named predictably.</li>
-<li><strong>Built-in QA and calibration</strong> – each run emits a single-page <a href="pipeline/qa_panel/">QA panel</a>, a multi-page QA PDF, and a JSON metrics file. Brightness adjustments between Landsat and MicaSense are applied from a versioned JSON and recorded across every QA artifact for full traceability.</li>
-<li><strong>Python &amp; CLI parity</strong> – drive the pipeline from scripts or automate it in schedulers with the same arguments.</li>
+<li>converts NEON HDF5 directional reflectance into clean ENVI cubes  </li>
+<li>applies topographic and BRDF corrections  </li>
+<li>harmonizes corrected spectra into Landsat, MicaSense, and other sensor bandspaces  </li>
+<li>produces analysis-ready Parquet tables  </li>
+<li>emits QA panels, PDF reports, and JSON metrics  </li>
 </ul>
-<h2 id="install-in-minutes">Install in minutes<a class="headerlink" href="#install-in-minutes" title="Permanent link">&para;</a></h2>
-<p>Choose a clean virtual environment (see the detailed <a href="env/">Environment</a> page for Conda tips and GDAL notes).</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">venv + PyPI</label><label for="__tabbed_1_2">From source</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
-pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>pip
-pip<span class="w"> </span>install<span class="w"> </span>cross-sensor-cal
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/earthlab/cross-sensor-cal.git
-<span class="nb">cd</span><span class="w"> </span>cross-sensor-cal
-python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
-pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>pip
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>dev<span class="o">]</span>
-</code></pre></div>
-</div>
-</div>
-</div>
-<h2 id="understand-the-pipeline">Understand the pipeline<a class="headerlink" href="#understand-the-pipeline" title="Permanent link">&para;</a></h2>
+<p>The goal is to make it easy and repeatable to move from <em>raw NEON tiles</em> to <em>cross-sensor comparable reflectance</em> across sites, years, and platforms.</p>
+<hr />
+<h2 id="why-this-package-exists">Why this package exists<a class="headerlink" href="#why-this-package-exists" title="Permanent link">&para;</a></h2>
+<p>Ecologists increasingly need to align data from different platforms:</p>
+<ul>
+<li><strong>NEON hyperspectral imaging</strong>  </li>
+<li><strong>Drone multispectral cameras (e.g., MicaSense)</strong>  </li>
+<li><strong>Moderate-resolution satellites (e.g., Landsat OLI/OLI-2, Sentinel-2)</strong>  </li>
+</ul>
+<p>These sensors differ in band definitions, viewing and illumination geometry, radiometric assumptions, and file formats. Without harmonization, differences between sensors can overwhelm differences in vegetation or ecosystem state.</p>
+<p>cross-sensor-cal provides a <strong>transparent, auditable, restart-safe</strong> workflow that implements:</p>
 <ol>
-<li><strong>Download NEON HDF5</strong> tiles.</li>
-<li><strong>Export ENVI</strong> cubes and apply <strong>topographic + BRDF correction</strong>.</li>
-<li><strong>Convolve</strong> to other sensors, <strong>flatten to Parquet</strong>, and finish with QA outputs (PNG, PDF, JSON).</li>
+<li>physical corrections that reduce geometry-driven variation  </li>
+<li>sensor-bandpass harmonization  </li>
+<li>consistent, interpretable outputs for analysis or model ingestion  </li>
 </ol>
-<p>See the <a href="pipeline/stages/">Pipeline Stages</a> overview for purpose, inputs, outputs, and pitfalls at every step.</p>
-<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Goal</th>
-<th>Start with</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Rerun the full flow on multiple tiles</td>
-<td><a href="usage/cli/">CLI &amp; examples</a></td>
-</tr>
-<tr>
-<td>Inspect Parquet outputs in notebooks</td>
-<td><a href="usage/parquet_preview/">Parquet preview</a></td>
-</tr>
-<tr>
-<td>Tune configuration for HPC or CI</td>
-<td><a href="reference/configuration/">Reference → Configuration</a></td>
-</tr>
-<tr>
-<td>Validate artifacts and schemas</td>
-<td><a href="reference/schemas/">Reference → Schemas</a> &amp; <a href="reference/validation/">Reference → Validation</a></td>
-</tr>
-<tr>
-<td>Extend to a new sensor or reader</td>
-<td><a href="reference/extending/">Reference → Extending</a></td>
-</tr>
-<tr>
-<td>Something looks off</td>
-<td><a href="troubleshooting/">Troubleshooting</a></td>
-</tr>
-</tbody>
-</table>
 <hr />
-<h2 id="quality-assurance-overview">Quality Assurance Overview<a class="headerlink" href="#quality-assurance-overview" title="Permanent link">&para;</a></h2>
-<p>All processed tiles automatically produce a <strong>QA panel</strong>, a <strong>multi-page QA PDF</strong>, and <strong>JSON metrics</strong>.</p>
-<p>✅ <strong>Good:</strong> reflectance within [0, 1.2], low ΔReflectance, high mask coverage.<br />
-⚠️ <strong>Needs Review:</strong> 1–2 metrics outside thresholds.<br />
-❌ <strong>Fail:</strong> large brightness shifts, missing wavelengths, or high spectral error.</p>
-<p>Each QA artifact lists any Landsat→MicaSense brightness coefficients that were applied so you can audit sensor harmonization settings quickly.</p>
-<p><a href="pipeline/qa_panel/">Read full QA interpretation →</a> and the <a href="reference/validation/">JSON metrics reference</a>.</p>
-<h2 id="release-highlights">Release highlights<a class="headerlink" href="#release-highlights" title="Permanent link">&para;</a></h2>
+<h2 id="what-problems-does-cross-sensor-cal-solve">What problems does cross-sensor-cal solve?<a class="headerlink" href="#what-problems-does-cross-sensor-cal-solve" title="Permanent link">&para;</a></h2>
+<p>Use this package when you need to:</p>
 <ul>
-<li>Per-flightline master table written as <strong><code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code></strong></li>
-<li>QA panel <strong><code>&lt;prefix&gt;_qa.png</code></strong> is emitted <strong>after the merge</strong> during full runs</li>
+<li>Compare NEON hyperspectral reflectance to satellite reflectance  </li>
+<li>Translate drone-scale multispectral data into Landsat-equivalent bands  </li>
+<li>Build cross-scale ecological models (plot → drone → NEON → satellite)  </li>
+<li>Process multiple NEON flight lines reproducibly in the cloud  </li>
+<li>Generate standardized QA artifacts for calibration decisions  </li>
 </ul>
+<p>If you only need to open a single NEON HDF5 file in a viewer, this package is more than you need. But if you need <strong>many flight lines</strong> and <strong>scientifically interpretable harmonization</strong>, this pipeline is designed for that workflow.</p>
+<hr />
+<h2 id="a-minimal-example-run-one-neon-flight-line">A minimal example: run one NEON flight line<a class="headerlink" href="#a-minimal-example-run-one-neon-flight-line" title="Permanent link">&para;</a></h2>
+<p>```bash
+BASE=output_demo &amp;&amp; mkdir -p "$BASE"</p>
+<p>cscal-pipeline \
+  --base-folder "$BASE" \
+  --site-code NIWO \
+  --year-month 2023-08 \
+  --product-code DP1.30006.001 \
+  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
+  --max-workers 2 \
+  --engine thread
+Inspect QA outputs:
+open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png"
+open "$BASE/..._qa.pdf"
+See the Quickstart for a more guided introduction.
+How the pipeline works (conceptual view)
+HDF5 → ENVI export
+Convert directional reflectance into ENVI .img/.hdr with clean metadata.
+Topographic + BRDF correction
+Use DEM and per-pixel sun/view geometry to create reflectance aligned to a common geometry.
+Convolution / harmonization
+Integrate corrected spectra into target sensor bandpasses (e.g., Landsat OLI).
+Parquet generation &amp; merging
+Produce analysis-ready tables with wavelengths, masks, and derived indices.
+Quality assurance
+Emit a QA panel, multi-page PDF, and JSON metrics for each flight line.
+Detailed descriptions are in the Pipeline section.
+What you get out
+Each processed flight line produces:
+corrected ENVI cubes
+Landsat- and/or MicaSense-equivalent reflectance cubes
+per-product Parquet tables
+merged pixel extraction tables
+PNG QA panel
+multi-page QA PDF
+JSON validation metrics
+The structure is described in Outputs &amp; file structure.
+Next steps
+GoalWhere to go
+Run your first full workflowQuickstart
+Understand scientific contextWhy calibration?
+Work through examplesTutorials
+Inspect and validate resultsQA metrics
+Use outputs in analysisWorking with Parquet
+Tune or extend the pipelineReference</p>
+<hr />
 
 
 
