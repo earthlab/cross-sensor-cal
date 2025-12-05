@@ -576,6 +576,95 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#1-cli-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. CLI path
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. CLI path">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run-a-neon-flight-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run a NEON flight line
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inspect-qa-files-example-on-macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspect QA files (example on macOS)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-notebook-path-jupyter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Notebook path (Jupyter)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Notebook path (Jupyter)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run-the-pipeline-from-python" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run the pipeline from Python
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#preview-the-merged-parquet-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preview the merged Parquet table
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1572,63 +1661,89 @@
 <hr />
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <p>Install from PyPI:</p>
-<p>```bash
-pip install cross-sensor-cal
-For Ray support:
-pip install "cross-sensor-cal[ray]"
-1. CLI path
-Use the CLI if you run jobs on your laptop or HPC cluster.
-Run a NEON flight line</p>
-<h1 id="choose-an-output-directory">Choose an output directory<a class="headerlink" href="#choose-an-output-directory" title="Permanent link">&para;</a></h1>
-<p>BASE=output_quickstart
-mkdir -p "$BASE"</p>
-<h1 id="run-the-pipeline">Run the pipeline<a class="headerlink" href="#run-the-pipeline" title="Permanent link">&para;</a></h1>
-<p>cscal-pipeline \
-  --base-folder "$BASE" \
+<div class="codehilite"><pre><span></span><code>pip install cross-sensor-cal
+</code></pre></div>
+
+<p>For Ray support:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">pip</span><span class="w"> </span><span class="n">install</span><span class="w"> </span><span class="ss">&quot;cross-sensor-cal[ray]&quot;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="1-cli-path">1. CLI path<a class="headerlink" href="#1-cli-path" title="Permanent link">&para;</a></h2>
+<p>Use the CLI if you run jobs on your laptop, server, or HPC cluster.</p>
+<h3 id="run-a-neon-flight-line">Run a NEON flight line<a class="headerlink" href="#run-a-neon-flight-line" title="Permanent link">&para;</a></h3>
+<p>Choose an output directory:</p>
+<div class="codehilite"><pre><span></span><code>BASE=output_quickstart
+mkdir -p &quot;$BASE&quot;
+</code></pre></div>
+
+<p>Run the pipeline:</p>
+<div class="codehilite"><pre><span></span><code>cscal-pipeline \
+  --base-folder &quot;$BASE&quot; \
   --site-code NIWO \
   --year-month 2023-08 \
   --product-code DP1.30006.001 \
   --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
   --max-workers 2 \
   --engine thread
-The first time this runs, it will:
-download NEON HDF5 tiles
-export ENVI cubes
-apply topographic + BRDF correction
-convolve to Landsat style reflectance
-write Parquet tables
-produce QA PNG, PDF, and JSON summaries
-If rerun, completed stages are skipped safely.
-Inspect QA files
-open $BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/<em>_qa.png
-open $BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/</em>_qa.pdf
-2. Notebook path (Jupyter)
-Use this if you want a reproducible, interactive workflow.
-Python example
-from cross_sensor_cal import go_forth_and_multiply</p>
-<p>base = "output_quickstart_py"</p>
-<p>go_forth_and_multiply(
-    base_folder=base,
-    site_code="NIWO",
-    year_month="2023-08",
-    product_code="DP1.30006.001",
-    flight_lines=["NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"],
-    max_workers=2,
-    engine="thread",
-)
-Preview merged Parquet
-import duckdb, os</p>
-<p>fl = "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"
-merged = os.path.join(base, fl, f"{fl}_merged_pixel_extraction.parquet")</p>
-<p>duckdb.query(f"SELECT * FROM '{merged}' LIMIT 5").df()
-For a complete notebook example, see:
-Usage → Jupyter notebook example
-Next steps
-Why calibration?
-Tutorials
-Pipeline overview
-Working with Parquet</p>
+</code></pre></div>
+
+<p>The first time this runs, it will:</p>
+<ul>
+<li>download NEON HDF5 tiles  </li>
+<li>export ENVI cubes  </li>
+<li>apply topographic + BRDF correction  </li>
+<li>convolve to Landsat-style reflectance  </li>
+<li>write Parquet tables  </li>
+<li>produce QA PNG, PDF, and JSON summaries  </li>
+</ul>
+<p>If rerun, completed stages are skipped safely.</p>
+<h3 id="inspect-qa-files-example-on-macos">Inspect QA files (example on macOS)<a class="headerlink" href="#inspect-qa-files-example-on-macos" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>open $BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/*_qa.png
+open $BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/*_qa.pdf
+</code></pre></div>
+
 <hr />
+<h2 id="2-notebook-path-jupyter">2. Notebook path (Jupyter)<a class="headerlink" href="#2-notebook-path-jupyter" title="Permanent link">&para;</a></h2>
+<p>Use this if you want an interactive, reproducible workflow.</p>
+<h3 id="run-the-pipeline-from-python">Run the pipeline from Python<a class="headerlink" href="#run-the-pipeline-from-python" title="Permanent link">&para;</a></h3>
+<p>In a notebook cell:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal</span><span class="w"> </span><span class="kn">import</span> <span class="n">go_forth_and_multiply</span>
+
+<span class="n">base</span> <span class="o">=</span> <span class="s2">&quot;output_quickstart_py&quot;</span>
+
+<span class="n">go_forth_and_multiply</span><span class="p">(</span>
+    <span class="n">base_folder</span><span class="o">=</span><span class="n">base</span><span class="p">,</span>
+    <span class="n">site_code</span><span class="o">=</span><span class="s2">&quot;NIWO&quot;</span><span class="p">,</span>
+    <span class="n">year_month</span><span class="o">=</span><span class="s2">&quot;2023-08&quot;</span><span class="p">,</span>
+    <span class="n">product_code</span><span class="o">=</span><span class="s2">&quot;DP1.30006.001&quot;</span><span class="p">,</span>
+    <span class="n">flight_lines</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span><span class="p">],</span>
+    <span class="n">max_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">engine</span><span class="o">=</span><span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<h3 id="preview-the-merged-parquet-table">Preview the merged Parquet table<a class="headerlink" href="#preview-the-merged-parquet-table" title="Permanent link">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">duckdb</span><span class="o">,</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="n">fl</span> <span class="o">=</span> <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">fl</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">fl</span><span class="si">}</span><span class="s2">_merged_pixel_extraction.parquet&quot;</span><span class="p">)</span>
+
+<span class="n">duckdb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SELECT * FROM &#39;</span><span class="si">{</span><span class="n">merged</span><span class="si">}</span><span class="s2">&#39; LIMIT 5&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">df</span><span class="p">()</span>
+</code></pre></div>
+
+<p>For a more complete notebook-style walkthrough, see:<br />
+<strong>Usage → Jupyter notebook example</strong></p>
+<hr />
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../concepts/why-calibration/">Why cross-sensor calibration?</a>  </li>
+<li><a href="../tutorials/neon-to-envi/">Tutorials</a>  </li>
+<li><a href="../pipeline/stages/">Pipeline overview &amp; stages</a>  </li>
+<li><a href="../usage/parquet/">Working with Parquet outputs</a></li>
+</ul>
+<hr />
+<p>END OF INSTRUCTIONS.</p>
 
 
 
