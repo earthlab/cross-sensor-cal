@@ -1118,6 +1118,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1134,6 +1152,97 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#base-folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        base-folder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#max-workers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        max-workers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-at-and-end-at" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        start-at and end-at
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1487,8 +1596,65 @@
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page for configuration options.</p>
-<p>It will be replaced with explanations of configuration files, environment variables, and pipeline settings that users can tune.</p>
+<p>Most users can rely on default configuration, but the pipeline allows fine-grained control over processing stages, performance, and file handling.</p>
+<p>This page documents the available configuration parameters and how they affect pipeline behavior.</p>
+<hr />
+<h2 id="configuration-sources">Configuration sources<a class="headerlink" href="#configuration-sources" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Command-line options (highest priority)  </li>
+<li>Environment variables  </li>
+<li>Default internal settings  </li>
+</ol>
+<hr />
+<h2 id="common-settings">Common settings<a class="headerlink" href="#common-settings" title="Permanent link">&para;</a></h2>
+<h3 id="base-folder"><code>base-folder</code><a class="headerlink" href="#base-folder" title="Permanent link">&para;</a></h3>
+<p>Directory where:</p>
+<ul>
+<li>downloaded HDF5 tiles  </li>
+<li>ENVI exports  </li>
+<li>Parquet tables  </li>
+<li>QA artifacts  </li>
+</ul>
+<p>are written.</p>
+<hr />
+<h3 id="engine"><code>engine</code><a class="headerlink" href="#engine" title="Permanent link">&para;</a></h3>
+<p>Execution backend:</p>
+<ul>
+<li><code>thread</code> (default)  </li>
+<li><code>ray</code> (distributed/hyperparallel workflows)</li>
+</ul>
+<hr />
+<h3 id="max-workers"><code>max-workers</code><a class="headerlink" href="#max-workers" title="Permanent link">&para;</a></h3>
+<p>Controls concurrency in:</p>
+<ul>
+<li>ENVI export  </li>
+<li>BRDF and topo correction  </li>
+<li>Parquet extraction  </li>
+</ul>
+<p>Use cautiously when memory is limited.</p>
+<hr />
+<h3 id="start-at-and-end-at"><code>start-at</code> and <code>end-at</code><a class="headerlink" href="#start-at-and-end-at" title="Permanent link">&para;</a></h3>
+<p>Define subsets of the pipeline to run.</p>
+<p>Example:</p>
+<p>```bash
+--start-at brdf --end-at convolution
+Environment variables
+VariableMeaning
+CSCAL_TMPDIROverride temporary directory
+CSCAL_LOGLEVELSet logging verbosity
+CSCAL_RAY_ADDRESSUse an existing Ray cluster
+Advanced configuration
+These settings primarily matter for large-scale workflows:
+chunk sizes for Parquet extraction
+memory thresholds for Ray worker processes
+default CRS assignments
+sensor SRF paths
+Details of internal architecture appear in the Developer section.
+Next steps
+JSON schemas
+Validation metrics
+Pipeline stages</p>
+<hr />
 
 
 

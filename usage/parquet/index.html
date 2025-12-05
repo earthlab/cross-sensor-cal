@@ -1031,6 +1031,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with Parquet outputs
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1047,6 +1065,58 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-parquet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Parquet?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-preview-using-duckdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick preview using DuckDB
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1556,63 @@
   
 
 
-<h1 id="working-with-parquet-outputs">Working with Parquet outputs<a class="headerlink" href="#working-with-parquet-outputs" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page describing how to work with Parquet outputs in tools like DuckDB, pandas, and xarray.</p>
-<p>It will be replaced with examples of streaming large tables and inspecting schemas.</p>
+<h1 id="working-with-parquet-outputs">Working with Parquet Outputs<a class="headerlink" href="#working-with-parquet-outputs" title="Permanent link">&para;</a></h1>
+<p>The cross-sensor-cal pipeline writes Parquet files for each ENVI product it generates. These tables contain one row per pixel and are optimized for high-performance analytics with DuckDB, pandas, or xarray.</p>
+<hr />
+<h2 id="why-parquet">Why Parquet?<a class="headerlink" href="#why-parquet" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Supports efficient columnar reads  </li>
+<li>Compresses well for large datasets  </li>
+<li>Easily queryable using SQL (DuckDB)  </li>
+<li>Allows out-of-core or streaming access  </li>
+</ul>
+<hr />
+<h2 id="file-structure">File structure<a class="headerlink" href="#file-structure" title="Permanent link">&para;</a></h2>
+<p>Typical Parquet file naming:</p>
+<p><em>_brdfandtopo_corrected.parquet
+</em>_landsat_convolved.parquet
+*_merged_pixel_extraction.parquet</p>
+<p>Each file contains columns for:</p>
+<ul>
+<li>reflectance values  </li>
+<li>band metadata  </li>
+<li>masks  </li>
+<li>pixel coordinates  </li>
+<li>optional ancillary variables  </li>
+</ul>
+<hr />
+<h2 id="quick-preview-using-duckdb">Quick preview using DuckDB<a class="headerlink" href="#quick-preview-using-duckdb" title="Permanent link">&para;</a></h2>
+<p>```python
+import duckdb</p>
+<p>duckdb.query("""
+    SELECT *
+    FROM '..._brdfandtopo_corrected.parquet'
+    LIMIT 5
+""").df()
+DuckDB provides efficient SQL queries without needing to load the entire dataset into memory.
+Checking dimensions
+duckdb.query("""
+    SELECT COUNT(*) AS nrows
+    FROM '..._landsat_convolved.parquet'
+""").df()
+Loading with pandas
+import pandas as pd
+df = pd.read_parquet("..._merged_pixel_extraction.parquet")
+df.head()
+Use with caution for large flight lines.
+Loading with xarray
+Parquet → xarray workflows work best after pivoting or aggregating data. For full spatial cubes, ENVI files remain easier to load.
+Streaming large files
+DuckDB can scan files lazily:
+duckdb.query("""
+    SELECT AVG(NIR), AVG(Red)
+    FROM '..._landsat_convolved.parquet'
+""").df()
+This avoids loading the full table.
+Next steps
+CLI usage
+Pipeline outputs</p>
+<hr />
 
 
 

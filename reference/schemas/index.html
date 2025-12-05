@@ -1146,6 +1146,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON schemas
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1162,6 +1180,102 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-envi-export-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. ENVI export metadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-topographic-correction-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Topographic correction metadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-brdf-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. BRDF metadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-convolution-metadata-sensor-harmonization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Convolution metadata (sensor harmonization)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-qa-metrics-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. QA metrics schema
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-schemas-in-downstream-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using schemas in downstream workflows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1600,77 @@
   
 
 
-<h1 id="json-schemas">JSON schemas<a class="headerlink" href="#json-schemas" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page for JSON schemas used by cross-sensor-cal.</p>
-<p>It will be replaced with an overview of the main schemas for sidecar files, QA metrics, and other structured outputs.</p>
+<h1 id="json-schemas">JSON Schemas<a class="headerlink" href="#json-schemas" title="Permanent link">&para;</a></h1>
+<p>The pipeline emits several JSON files containing structured metadata and QA metrics. These files allow downstream tools to audit processing decisions and validate outputs.</p>
+<p>This page summarizes the purpose and structure of each schema.</p>
+<hr />
+<h2 id="1-envi-export-metadata">1. ENVI export metadata<a class="headerlink" href="#1-envi-export-metadata" title="Permanent link">&para;</a></h2>
+<p>Recorded in:</p>
+<p>*_export_metadata.json</p>
+<p>Contains:</p>
+<ul>
+<li>wavelength array  </li>
+<li>band names  </li>
+<li>reflectance scaling (NEON conventions)  </li>
+<li>mask types and bit fields  </li>
+<li>CRS and affine transform  </li>
+</ul>
+<hr />
+<h2 id="2-topographic-correction-metadata">2. Topographic correction metadata<a class="headerlink" href="#2-topographic-correction-metadata" title="Permanent link">&para;</a></h2>
+<p>*_topo_metadata.json</p>
+<p>Includes:</p>
+<ul>
+<li>slope and aspect statistics  </li>
+<li>solar geometry used  </li>
+<li>mask adjustments  </li>
+<li>correction parameters  </li>
+</ul>
+<hr />
+<h2 id="3-brdf-metadata">3. BRDF metadata<a class="headerlink" href="#3-brdf-metadata" title="Permanent link">&para;</a></h2>
+<p>*_brdf_metadata.json</p>
+<p>Includes:</p>
+<ul>
+<li>BRDF coefficients per wavelength  </li>
+<li>RMSE of BRDF fits  </li>
+<li>flags for unstable fits  </li>
+<li>view/sun geometry summaries  </li>
+</ul>
+<hr />
+<h2 id="4-convolution-metadata-sensor-harmonization">4. Convolution metadata (sensor harmonization)<a class="headerlink" href="#4-convolution-metadata-sensor-harmonization" title="Permanent link">&para;</a></h2>
+<p>*_convolution_metadata.json</p>
+<p>Contains:</p>
+<ul>
+<li>SRF files used  </li>
+<li>wavelength alignment checks  </li>
+<li>brightness correction coefficients  </li>
+<li>bandpass integration statistics  </li>
+</ul>
+<hr />
+<h2 id="5-qa-metrics-schema">5. QA metrics schema<a class="headerlink" href="#5-qa-metrics-schema" title="Permanent link">&para;</a></h2>
+<p>The QA JSON file contains:</p>
+<ul>
+<li>reflectance summary statistics  </li>
+<li>mask percentages  </li>
+<li>wavelength metadata  </li>
+<li>BRDF/brightness coefficients  </li>
+<li>geometry metadata  </li>
+</ul>
+<p>Exact fields are defined in the validation section.</p>
+<hr />
+<h2 id="using-schemas-in-downstream-workflows">Using schemas in downstream workflows<a class="headerlink" href="#using-schemas-in-downstream-workflows" title="Permanent link">&para;</a></h2>
+<p>These JSON files support:</p>
+<ul>
+<li>reproducibility  </li>
+<li>debugging  </li>
+<li>statistical evaluation of harmonization quality  </li>
+<li>provenance tracking for scientific analyses  </li>
+</ul>
+<hr />
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../validation/">Validation metrics</a>  </li>
+<li><a href="../../pipeline/outputs/">Pipeline outputs</a></li>
+</ul>
 
 
 

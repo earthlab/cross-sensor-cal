@@ -1003,6 +1003,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-line interface (CLI)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -1019,6 +1037,53 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#primary-command-cscal-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Primary command: cscal-pipeline
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Primary command: cscal-pipeline">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1486,9 +1551,73 @@
   
 
 
-<h1 id="command-line-interface-cli">Command-line interface (CLI)<a class="headerlink" href="#command-line-interface-cli" title="Permanent link">&para;</a></h1>
-<p>This is a placeholder page documenting cross-sensor-cal command-line usage.</p>
-<p>It will be replaced with examples of single-tile and batch runs, key flags, and common patterns.</p>
+<h1 id="command-line-interface-cli">Command-Line Interface (CLI)<a class="headerlink" href="#command-line-interface-cli" title="Permanent link">&para;</a></h1>
+<p>The cross-sensor-cal CLI provides a unified, restart-safe workflow for processing NEON flight lines from raw HDF5 to corrected and sensor-harmonized ENVI/Parquet outputs. This page documents the primary commands, flags, and usage patterns.</p>
+<hr />
+<h2 id="primary-command-cscal-pipeline">Primary command: <code>cscal-pipeline</code><a class="headerlink" href="#primary-command-cscal-pipeline" title="Permanent link">&para;</a></h2>
+<p>This is the recommended entry point for processing NEON hyperspectral data.</p>
+<h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
+<p>```bash
+cscal-pipeline \
+  --base-folder output \
+  --site-code NIWO \
+  --year-month 2023-08 \
+  --product-code DP1.30006.001 \
+  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
+  --engine thread \
+  --max-workers 4
+Required arguments
+FlagDescription
+--base-folderRoot directory for all outputs
+--site-codeNEON site code (e.g., NIWO, KONZ)
+--year-monthAcquisition month in YYYY-MM format
+--product-codeNEON product code (usually DP1.30006.001)
+--flight-linesOne or more NEON flight line identifiers
+Optional arguments
+FlagDescription
+--engine {thread,ray}Execution engine
+--max-workersNumber of parallel workers
+--start-atStage to begin the pipeline
+--end-atStage to stop the pipeline
+--cleanRemove intermediate files
+--dry-runPrint what would be run without executing
+Pipeline stages
+You may specify partial workflows:
+cscal-pipeline \
+  --start-at brdf \
+  --end-at convolution
+Valid stages:
+download
+export-envi
+topo
+brdf
+convolution
+parquet
+qa
+Engine selection
+Thread engine (default)
+Suitable for local machines and moderate-sized flight lines.
+Ray engine
+Install:
+pip install cross-sensor-cal[ray]
+Run:
+cscal-pipeline --engine ray ...
+Use Ray for:
+batch processing of many flight lines
+distributed cloud/HPC environments
+large-scale Parquet extraction
+Inspecting available options
+cscal-pipeline --help
+This prints detailed descriptions for every flag.
+Other CLI tools
+Brief mention (documented elsewhere)
+cscal-micasense-to-landsat
+debugging utilities (internal / experimental)
+These experimental tools may change as the package evolves.
+Next steps
+Working with Parquet outputs
+Pipeline stages</p>
+<hr />
 
 
 
