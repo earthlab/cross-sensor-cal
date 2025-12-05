@@ -502,10 +502,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-minimal-example-run-one-neon-flight-line" class="md-nav__link">
+  <a href="#a-minimal-example-run-one-neon-flight-line-cli" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A minimal example: run one NEON flight line
+        A minimal example: run one NEON flight line (CLI)
       
     </span>
   </a>
@@ -1116,6 +1116,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="usage/notebook-example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Jupyter notebook example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1563,9 +1591,9 @@
 <h2 id="why-this-package-exists">Why this package exists<a class="headerlink" href="#why-this-package-exists" title="Permanent link">&para;</a></h2>
 <p>Ecologists increasingly need to align data from different platforms:</p>
 <ul>
-<li><strong>NEON hyperspectral imaging</strong>  </li>
-<li><strong>Drone multispectral cameras (e.g., MicaSense)</strong>  </li>
-<li><strong>Moderate-resolution satellites (e.g., Landsat OLI/OLI-2, Sentinel-2)</strong>  </li>
+<li>NEON hyperspectral imaging  </li>
+<li>drone multispectral cameras (e.g., MicaSense)  </li>
+<li>moderate-resolution satellites (e.g., Landsat OLI/OLI-2, Sentinel-2)  </li>
 </ul>
 <p>These sensors differ in band definitions, viewing and illumination geometry, radiometric assumptions, and file formats. Without harmonization, differences between sensors can overwhelm differences in vegetation or ecosystem state.</p>
 <p>cross-sensor-cal provides a <strong>transparent, auditable, restart-safe</strong> workflow that implements:</p>
@@ -1578,17 +1606,21 @@
 <h2 id="what-problems-does-cross-sensor-cal-solve">What problems does cross-sensor-cal solve?<a class="headerlink" href="#what-problems-does-cross-sensor-cal-solve" title="Permanent link">&para;</a></h2>
 <p>Use this package when you need to:</p>
 <ul>
-<li>Compare NEON hyperspectral reflectance to satellite reflectance  </li>
-<li>Translate drone-scale multispectral data into Landsat-equivalent bands  </li>
-<li>Build cross-scale ecological models (plot → drone → NEON → satellite)  </li>
-<li>Process multiple NEON flight lines reproducibly in the cloud  </li>
-<li>Generate standardized QA artifacts for calibration decisions  </li>
+<li>compare NEON hyperspectral reflectance to satellite reflectance  </li>
+<li>translate drone-scale multispectral data into Landsat-equivalent bands  </li>
+<li>build cross-scale ecological models (plot → drone → NEON → satellite)  </li>
+<li>process multiple NEON flight lines reproducibly in the cloud  </li>
+<li>generate standardized QA artifacts for calibration decisions  </li>
 </ul>
-<p>If you only need to open a single NEON HDF5 file in a viewer, this package is more than you need. But if you need <strong>many flight lines</strong> and <strong>scientifically interpretable harmonization</strong>, this pipeline is designed for that workflow.</p>
+<p>If you only need to open a single NEON HDF5 file in a viewer, this package is more than you need. If you need <strong>many flight lines</strong> and <strong>scientifically interpretable harmonization</strong>, this pipeline is designed for that workflow.</p>
 <hr />
-<h2 id="a-minimal-example-run-one-neon-flight-line">A minimal example: run one NEON flight line<a class="headerlink" href="#a-minimal-example-run-one-neon-flight-line" title="Permanent link">&para;</a></h2>
-<p>```bash
-BASE=output_demo &amp;&amp; mkdir -p "$BASE"</p>
+<h2 id="a-minimal-example-run-one-neon-flight-line-cli">A minimal example: run one NEON flight line (CLI)<a class="headerlink" href="#a-minimal-example-run-one-neon-flight-line-cli" title="Permanent link">&para;</a></h2>
+<p>The fastest way to see the pipeline working is via the command-line interface.</p>
+<p>```bash</p>
+<h1 id="1-choose-an-output-base">1. Choose an output base<a class="headerlink" href="#1-choose-an-output-base" title="Permanent link">&para;</a></h1>
+<p>BASE=output_demo
+mkdir -p "$BASE"</p>
+<h1 id="2-run-the-pipeline-on-one-neon-flight-line">2. Run the pipeline on one NEON flight line<a class="headerlink" href="#2-run-the-pipeline-on-one-neon-flight-line" title="Permanent link">&para;</a></h1>
 <p>cscal-pipeline \
   --base-folder "$BASE" \
   --site-code NIWO \
@@ -1596,11 +1628,11 @@ BASE=output_demo &amp;&amp; mkdir -p "$BASE"</p>
   --product-code DP1.30006.001 \
   --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
   --max-workers 2 \
-  --engine thread
-Inspect QA outputs:
-open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png"
-open "$BASE/..._qa.pdf"
-See the Quickstart for a more guided introduction.
+  --engine thread</p>
+<h1 id="3-inspect-qa-outputs-macos-example">3. Inspect QA outputs (macOS example)<a class="headerlink" href="#3-inspect-qa-outputs-macos-example" title="Permanent link">&para;</a></h1>
+<p>open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.png"
+open "$BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance_qa.pdf"
+For a Python/Jupyter version of this example, see the Jupyter notebook example.
 How the pipeline works (conceptual view)
 HDF5 → ENVI export
 Convert directional reflectance into ENVI .img/.hdr with clean metadata.
@@ -1612,7 +1644,7 @@ Parquet generation &amp; merging
 Produce analysis-ready tables with wavelengths, masks, and derived indices.
 Quality assurance
 Emit a QA panel, multi-page PDF, and JSON metrics for each flight line.
-Detailed descriptions are in the Pipeline section.
+Detailed descriptions are in the Pipeline overview &amp; stages page.
 What you get out
 Each processed flight line produces:
 corrected ENVI cubes
@@ -1628,9 +1660,11 @@ GoalWhere to go
 Run your first full workflowQuickstart
 Understand scientific contextWhy calibration?
 Work through examplesTutorials
-Inspect and validate resultsQA metrics
 Use outputs in analysisWorking with Parquet
-Tune or extend the pipelineReference</p>
+Try it in a notebooks/Jupyter notebook example
+Inspect and validate resultsQA panels &amp; metrics
+Tune or extend the pipelineReference
+Something looks offTroubleshooting guide</p>
 <hr />
 
 

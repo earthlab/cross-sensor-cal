@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/concepts/why-calibration/">
+        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/usage/notebook-example/">
       
       
-        <link rel="prev" href="../../quickstart/">
+        <link rel="prev" href="../parquet/">
       
       
-        <link rel="next" href="../../tutorials/neon-to-envi/">
+        <link rel="next" href="../../reference/configuration/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Why cross-sensor calibration? - cross-sensor-cal</title>
+        <title>Jupyter notebook example - cross-sensor-cal</title>
       
     
     
@@ -72,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#why-cross-sensor-calibration" class="md-skip">
+        <a href="#jupyter-notebook-example" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Why cross-sensor calibration?
+              Jupyter notebook example
             
           </span>
         </div>
@@ -230,13 +230,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../concepts/why-calibration/" class="md-tabs__link">
           
   
   
@@ -292,11 +290,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../usage/cli/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../cli/" class="md-tabs__link">
           
   
   
@@ -533,31 +533,26 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
             
   
   
@@ -575,7 +570,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -590,37 +585,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Why cross-sensor calibration?
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../concepts/why-calibration/" class="md-nav__link">
         
   
   
@@ -636,109 +604,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#the-problem-apples-and-oranges-reflectance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The problem: apples and oranges reflectance
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#correcting-vs-harmonizing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Correcting vs. harmonizing
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Correcting vs. harmonizing">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-physical-corrections" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1. Physical corrections
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-sensor-harmonization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Sensor harmonization
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-neon-as-the-foundation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why NEON as the foundation?
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-still-requires-care" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What still requires care
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-to-go-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where to go next
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1069,26 +934,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
             
   
   
@@ -1106,7 +976,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1124,7 +994,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -1152,7 +1022,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/parquet/" class="md-nav__link">
+      <a href="../parquet/" class="md-nav__link">
         
   
   
@@ -1177,10 +1047,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../usage/notebook-example/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Jupyter notebook example
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1196,6 +1093,37 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-imports-and-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Imports and configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1626,7 +1554,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/concepts/why-calibration.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/usage/notebook-example.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1634,89 +1562,88 @@
   
 
 
-<h1 id="why-cross-sensor-calibration">Why cross-sensor calibration?<a class="headerlink" href="#why-cross-sensor-calibration" title="Permanent link">&para;</a></h1>
-<p>Understanding vegetation, disturbance, and ecosystem structure often requires integrating information from <strong>multiple sensors</strong> operating at different spatial, temporal, and spectral scales. These include:</p>
-<ul>
-<li>NEON airborne imaging spectroscopy  </li>
-<li>drone multispectral systems (e.g., MicaSense)  </li>
-<li>moderate-resolution satellites like Landsat and Sentinel  </li>
-</ul>
-<p>Each sensor “sees” the landscape differently, and these differences can obscure the ecological signals we care about unless we account for them.</p>
-<hr />
-<h2 id="the-problem-apples-and-oranges-reflectance">The problem: apples and oranges reflectance<a class="headerlink" href="#the-problem-apples-and-oranges-reflectance" title="Permanent link">&para;</a></h2>
-<p>Sensors differ in:</p>
-<ul>
-<li><strong>spectral response</strong> (band centers, widths, shapes)  </li>
-<li><strong>illumination geometry</strong> (solar zenith, azimuth, atmospheric path)  </li>
-<li><strong>viewing geometry</strong> (sensor zenith, azimuth)  </li>
-<li><strong>radiometric scaling and masking conventions</strong>  </li>
-<li><strong>ground sampling distance and spatial aggregation</strong>  </li>
-</ul>
-<p>Even when they image the same location on the same day, their raw reflectance values are <em>not</em> directly comparable.</p>
-<p>This creates challenges when trying to:</p>
-<ul>
-<li>validate satellite products using NEON  </li>
-<li>relate drone measurements to NEON or Landsat  </li>
-<li>build cross-scale ecological models  </li>
-<li>interpret changes in reflectance through time or across terrain  </li>
-</ul>
-<hr />
-<h2 id="correcting-vs-harmonizing">Correcting vs. harmonizing<a class="headerlink" href="#correcting-vs-harmonizing" title="Permanent link">&para;</a></h2>
-<p>cross-sensor-cal performs two distinct operations:</p>
-<h3 id="1-physical-corrections">1. Physical corrections<a class="headerlink" href="#1-physical-corrections" title="Permanent link">&para;</a></h3>
-<p>These aim to reduce variation caused by <strong>illumination and terrain</strong>:</p>
-<ul>
-<li>topographic correction (slope and aspect effects)  </li>
-<li>BRDF correction (view/sun geometry effects)  </li>
-</ul>
-<p>The result is a reflectance product that is more comparable across acquisition conditions.</p>
-<h3 id="2-sensor-harmonization">2. Sensor harmonization<a class="headerlink" href="#2-sensor-harmonization" title="Permanent link">&para;</a></h3>
-<p>This converts corrected hyperspectral data into another sensor’s bandspace by integrating spectra against <strong>published spectral response functions</strong> (e.g., Landsat OLI, MicaSense RedEdge).</p>
-<p>Optional brightness adjustments are documented in the QA outputs.</p>
-<hr />
-<h2 id="why-neon-as-the-foundation">Why NEON as the foundation?<a class="headerlink" href="#why-neon-as-the-foundation" title="Permanent link">&para;</a></h2>
-<p>NEON AOP data provide:</p>
-<ul>
-<li>high spectral resolution  </li>
-<li>per-pixel geometry information  </li>
-<li>consistent radiometric processing  </li>
-<li>spatial coverage aligned with ecological research sites  </li>
-</ul>
-<p>These properties make NEON a powerful intermediary between plot-scale measurements and satellite observations.</p>
-<p>cross-sensor-cal implements a <em>reproducible stepwise process</em> to:</p>
+<h1 id="jupyter-notebook-example">Jupyter Notebook Example<a class="headerlink" href="#jupyter-notebook-example" title="Permanent link">&para;</a></h1>
+<p>This page shows a complete Jupyter-style workflow using cross-sensor-cal:</p>
 <ol>
-<li>extract NEON reflectance into ENVI  </li>
-<li>correct it physically  </li>
-<li>harmonize it to satellite/drone sensors  </li>
-<li>output analysis-ready tables and QA documentation  </li>
+<li>Run the pipeline from Python  </li>
+<li>Preview the merged Parquet table  </li>
+<li>Compute a simple NDVI diagnostic  </li>
 </ol>
+<p>You can copy these cells directly into a notebook.</p>
 <hr />
-<h2 id="what-still-requires-care">What still requires care<a class="headerlink" href="#what-still-requires-care" title="Permanent link">&para;</a></h2>
-<p>Even after calibration and harmonization:</p>
-<ul>
-<li>residual BRDF effects can remain  </li>
-<li>atmospheric differences between sensors matter  </li>
-<li>snow, smoke, water, and shadows require attention  </li>
-<li>scale mismatch affects interpretation  </li>
-<li>masks and quality flags differ across platforms  </li>
-</ul>
-<p>The pipeline aims to make all assumptions explicit—every major processing step writes a JSON sidecar describing inputs, parameters, and results.</p>
+<h2 id="1-imports-and-configuration">1. Imports and configuration<a class="headerlink" href="#1-imports-and-configuration" title="Permanent link">&para;</a></h2>
+<p>```python
+import os
+import duckdb
+import pandas as pd</p>
+<p>from cross_sensor_cal import go_forth_and_multiply</p>
+<p>base_folder = "output_notebook_demo"
+site_code = "NIWO"
+year_month = "2023-08"
+product_code = "DP1.30006.001"
+flight_lines = ["NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"]
+2. Run the pipeline from Python
+go_forth_and_multiply(
+    base_folder=base_folder,
+    site_code=site_code,
+    year_month=year_month,
+    product_code=product_code,
+    flight_lines=flight_lines,
+    max_workers=2,
+    engine="thread",  # start with thread; switch to "ray" if configured
+)
+This cell will:
+download NEON HDF5 tiles if needed
+export ENVI cubes
+apply topographic + BRDF correction
+convolve to Landsat (if configured)
+write Parquet tables
+generate QA PNG, PDF, and JSON
+3. Locate the merged Parquet file
+fl_prefix = flight_lines[0]
+fl_dir = os.path.join(base_folder, fl_prefix)</p>
+<p>merged = os.path.join(
+    fl_dir,
+    f"{fl_prefix}_merged_pixel_extraction.parquet",
+)
+merged
+4. Preview the merged table with DuckDB
+con = duckdb.connect()</p>
+<p>head_df = con.execute(
+    f"SELECT * FROM read_parquet('{merged}') LIMIT 5"
+).df()
+head_df
+5. Compute a quick NDVI diagnostic
+This example assumes Landsat-style band names Red and NIR are present in the merged table.
+ndvi_df = con.execute(
+    """
+    SELECT
+      Red,
+      NIR,
+      (NIR - Red) / NULLIF(NIR + Red, 0) AS ndvi
+    FROM read_parquet($merged)
+    LIMIT 5000
+    """,
+    {"merged": merged},
+).df()</p>
+<p>ndvi_df["ndvi"].describe()
+You can extend this pattern to:
+filter by masks
+aggregate by plot or polygon
+export subsets for modeling
+6. Visualize NDVI distribution (optional)
+If you have matplotlib installed:
+import matplotlib.pyplot as plt</p>
+<p>ndvi_df["ndvi"].plot.hist(bins=50)
+plt.xlabel("NDVI")
+plt.ylabel("Count")
+plt.title("NDVI distribution (sample)")
+plt.show()
+Next steps
+Quickstart
+Working with Parquet outputs
+Pipeline overview &amp; stages</p>
 <hr />
-<h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
-<ul>
-<li>
-<p>Learn how each pipeline stage works:<br />
-<a href="../../pipeline/stages/">Pipeline overview &amp; stages</a></p>
-</li>
-<li>
-<p>Follow a practical workflow:<br />
-<a href="../../tutorials/neon-to-envi/">NEON → corrected ENVI</a></p>
-</li>
-<li>
-<p>Explore validation and metrics:<br />
-<a href="../../pipeline/qa/">QA panels &amp; metrics</a></p>
-</li>
-</ul>
 
 
 
