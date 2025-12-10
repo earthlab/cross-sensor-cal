@@ -377,7 +377,6 @@ def apply_topo_correct(
         cos_i_valid = cos_i[valid_mask]
         cos_solar_valid = cos_solar[valid_mask]
         cos_beta_valid = cos_beta[valid_mask]
-        ratios = np.ones_like(cos_i, dtype=np.float32)
         for band in range(data_unitless.shape[-1]):
             rho_band = data_unitless[..., band]
             y = rho_band[valid_mask].astype(np.float64, copy=False)
