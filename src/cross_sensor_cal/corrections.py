@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, TYPE_CHECKING
 
@@ -33,6 +34,67 @@ if TYPE_CHECKING:  # pragma: no cover - only for type hints
 
 _BRDF_COEFF_CACHE: dict[Path, dict[str, np.ndarray | str]] = {}
 MAX_UNITLESS_REFLECTANCE = 1.2
+MIN_SCS_C_DENOM = 1e-3
+
+
+@dataclass
+class NDVIBinningConfig:
+    """Configuration for NDVI binning used during BRDF fitting and application."""
+
+    ndvi_min: float = 0.05
+    ndvi_max: float = 1.0
+    n_bins: int = 25
+    perc_min: float | None = 10.0
+    perc_max: float | None = 95.0
+
+
+@dataclass
+class ReferenceGeometry:
+    """Reference geometry (degrees) for BRDF normalization."""
+
+    solar_zenith_deg: float = 45.0
+    view_zenith_deg: float = 0.0
+    relative_azimuth_deg: float = 0.0
+
+
+def log_stats(name: str, arr: np.ndarray, mask: np.ndarray | None = None) -> None:
+    """Log min/max and validity fractions for quick debugging."""
+
+    if mask is None:
+        mask = np.ones_like(arr, dtype=bool)
+    finite = np.isfinite(arr) & mask
+    if finite.size == 0:
+        logging.debug("%s: empty array", name)
+        return
+    fraction_valid = np.count_nonzero(finite) / finite.size
+    if np.count_nonzero(finite) == 0:
+        logging.debug("%s: all non-finite (mask fraction=%.5f)", name, fraction_valid)
+        return
+    subset = arr[finite]
+    logging.debug(
+        "%s: min=%.6f max=%.6f valid_fraction=%.5f",
+        name,
+        float(np.nanmin(subset)),
+        float(np.nanmax(subset)),
+        fraction_valid,
+    )
+
+
+def _scs_c_ratio(
+    numerator: np.ndarray,
+    denominator: np.ndarray,
+    min_denom: float = MIN_SCS_C_DENOM,
+) -> np.ndarray:
+    """Internal helper applying the SCS+C denominator guard.
+
+    Denominators below ``min_denom`` are forced to a neutral ratio of 1.0 to
+    avoid exploding corrections. Caller is responsible for any logging.
+    """
+
+    ratio = np.ones_like(numerator, dtype=np.float32)
+    valid = denominator > min_denom
+    ratio[valid] = (numerator[valid] / denominator[valid]).astype(np.float32)
+    return ratio
 
 
 def load_brdf_model(flightline_dir: Path) -> dict:
@@ -67,6 +129,48 @@ def _validate_angles(*arrays: np.ndarray) -> Tuple[np.ndarray, ...]:
             )
         cast_arrays.append(array.astype(np.float32, copy=False))
     return tuple(cast_arrays)  # type: ignore[return-value]
+
+
+def _select_band_for_wavelength(cube: "NeonCube", target_nm: float) -> int:
+    """Return the band index closest to ``target_nm``."""
+
+    diffs = np.abs(np.asarray(cube.wavelengths, dtype=np.float32) - np.float32(target_nm))
+    return int(np.argmin(diffs))
+
+
+def compute_ndvi(
+    cube: "NeonCube",
+    data_unitless: np.ndarray,
+    red_target_nm: float = 665.0,
+    nir_target_nm: float = 865.0,
+) -> np.ndarray:
+    """Compute NDVI from unitless reflectance data."""
+
+    red_idx = _select_band_for_wavelength(cube, red_target_nm)
+    nir_idx = _select_band_for_wavelength(cube, nir_target_nm)
+    red = data_unitless[..., red_idx]
+    nir = data_unitless[..., nir_idx]
+    denom = nir + red
+    ndvi = (nir - red) / np.where(np.abs(denom) > 1e-6, denom, np.nan)
+    return ndvi.astype(np.float32)
+
+
+def compute_ndvi_bins(ndvi: np.ndarray, config: NDVIBinningConfig) -> tuple[np.ndarray, np.ndarray]:
+    """Return NDVI bin edges and bin indices."""
+
+    ndvi_clean = ndvi[np.isfinite(ndvi)]
+    ndvi_min = config.ndvi_min
+    ndvi_max = config.ndvi_max
+    if ndvi_clean.size > 0:
+        if config.perc_min is not None:
+            ndvi_min = max(ndvi_min, float(np.nanpercentile(ndvi_clean, config.perc_min)))
+        if config.perc_max is not None:
+            ndvi_max = min(ndvi_max, float(np.nanpercentile(ndvi_clean, config.perc_max)))
+    edges = np.linspace(ndvi_min, ndvi_max, config.n_bins + 1, dtype=np.float32)
+    bins = np.digitize(ndvi, edges, right=False) - 1
+    bins = np.clip(bins, 0, config.n_bins - 1)
+    bins[(ndvi < ndvi_min) | (ndvi > ndvi_max)] = -1
+    return edges, bins.astype(np.int32)
 
 
 def calc_cosine_i(
@@ -240,12 +344,9 @@ def apply_topo_correct(
     ye: int,
     xs: int,
     xe: int,
+    use_scs_c: bool = True,
 ) -> np.ndarray:
-    """Adapted from hytools.topo.apply_topo_correct (GPLv3; HyTools Authors:
-    Adam Chlus, Zhiwei Ye, Philip Townsend). Simplified for NEON use.
-
-    Perform topographic (illumination) correction on a hyperspectral chunk.
-    """
+    """Topographic (illumination) correction on a hyperspectral chunk."""
 
     if chunk_array.dtype != np.float32:
         raise ValueError("Chunks passed to apply_topo_correct must be float32 arrays.")
@@ -257,19 +358,77 @@ def apply_topo_correct(
 
     cos_i = calc_cosine_i(solar_zn, solar_az, aspect, slope)
     cos_solar = np.cos(solar_zn)
+    cos_beta = np.cos(slope)
 
-    normalization = np.ones_like(cos_i, dtype=np.float32)
-    valid = cos_i > 0
-    normalization[valid] = cos_solar[valid] / cos_i[valid]
-
-    corrected = chunk_array * normalization[..., np.newaxis]
+    scale_factor = float(getattr(cube, "scale_factor", 1.0)) or 1.0
+    data_unitless = chunk_array.astype(np.float32, copy=False) * np.float32(scale_factor)
 
     if hasattr(cube, "mask_no_data"):
-        mask = cube.mask_no_data[ys:ye, xs:xe]
-        no_data_value = np.float32(getattr(cube, "no_data", np.nan))
-        corrected = np.where(mask[..., np.newaxis], corrected, no_data_value)
+        valid_mask = cube.mask_no_data[ys:ye, xs:xe].astype(bool)
+    else:
+        valid_mask = np.ones_like(cos_i, dtype=bool)
 
-    return corrected.astype(np.float32, copy=False)
+    valid_mask &= np.isfinite(data_unitless).all(axis=-1)
+    valid_mask &= np.isfinite(cos_i)
+
+    corrected_unitless = data_unitless.copy()
+
+    if use_scs_c:
+        cos_i_valid = cos_i[valid_mask]
+        cos_solar_valid = cos_solar[valid_mask]
+        cos_beta_valid = cos_beta[valid_mask]
+        ratios = np.ones_like(cos_i, dtype=np.float32)
+        for band in range(data_unitless.shape[-1]):
+            rho_band = data_unitless[..., band]
+            y = rho_band[valid_mask].astype(np.float64, copy=False)
+            x = cos_i_valid.astype(np.float64, copy=False)
+            finite = np.isfinite(y) & np.isfinite(x)
+            if np.count_nonzero(finite) < 2:
+                logging.debug("Band %d: insufficient samples for SCS+C; using neutral", band)
+                continue
+            X = np.stack([x[finite], np.ones_like(x[finite])], axis=1)
+            try:
+                coeffs, *_ = np.linalg.lstsq(X, y[finite], rcond=None)
+                a, b = coeffs
+            except np.linalg.LinAlgError:
+                logging.debug("Band %d: regression failed; using neutral", band)
+                continue
+            if np.isclose(a, 0.0):
+                C_val = 0.0
+                logging.debug("Band %d: regression slope near zero; C set to 0", band)
+            else:
+                C_val = float(b / a)
+            num = cos_solar_valid * cos_beta_valid + C_val
+            den = cos_i_valid + C_val
+            min_denom = MIN_SCS_C_DENOM
+            tiny = den > 0
+            ratio_valid = _scs_c_ratio(num, den, min_denom=min_denom)
+            if np.any(tiny & (den <= min_denom)):
+                logging.debug(
+                    "Band %d: %.5f fraction of pixels hit denom<=%.1e guard",
+                    band,
+                    np.count_nonzero(tiny & (den <= min_denom)) / tiny.size,
+                    min_denom,
+                )
+            ratios_band = np.ones_like(cos_i, dtype=np.float32)
+            ratios_band[valid_mask] = ratio_valid.astype(np.float32)
+            log_stats(
+                f"topo_ratio_band{band}",
+                ratios_band,
+                mask=valid_mask,
+            )
+            corrected_unitless[..., band] = rho_band * ratios_band
+    else:
+        normalization = np.ones_like(cos_i, dtype=np.float32)
+        valid_cos = cos_i > 0
+        normalization[valid_cos] = cos_solar[valid_cos] / cos_i[valid_cos]
+        corrected_unitless = data_unitless * normalization[..., np.newaxis]
+
+    no_data_value = np.float32(getattr(cube, "no_data", np.nan))
+    corrected_scaled = corrected_unitless / np.float32(scale_factor)
+    corrected_scaled = np.where(valid_mask[..., np.newaxis], corrected_scaled, no_data_value)
+
+    return corrected_scaled.astype(np.float32, copy=False)
 
 
 def apply_brdf_correct(
@@ -280,27 +439,16 @@ def apply_brdf_correct(
     xs: int,
     xe: int,
     coeff_path: Path | None = None,
+    ndvi_config: NDVIBinningConfig | None = None,
+    reference_geometry: ReferenceGeometry | None = None,
 ) -> np.ndarray:
-    """Perform BRDF normalization on a hyperspectral chunk.
-
-    Parameters
-    ----------
-    cube : NeonCube
-        The NEON cube providing ancillary angle rasters.
-    chunk_array : np.ndarray
-        Reflectance chunk (float32) to normalise.
-    ys, ye, xs, xe : int
-        Chunk boundaries within the full cube.
-    coeff_path : Path | None, optional
-        Path to a persisted BRDF coefficient JSON (as produced by
-        :func:`fit_and_save_brdf_model`).  When provided, the file is loaded
-        once and cached for subsequent calls.  If ``None`` or unavailable,
-        fall back to any coefficients already attached to ``cube``; otherwise
-        revert to neutral coefficients with a warning.
-    """
+    """Perform BRDF normalization on a hyperspectral chunk using FlexBRDF ratio."""
 
     if chunk_array.dtype != np.float32:
         raise ValueError("Chunks passed to apply_brdf_correct must be float32 arrays.")
+
+    ndvi_config = ndvi_config or NDVIBinningConfig()
+    reference_geometry = reference_geometry or ReferenceGeometry()
 
     scale_factor = float(getattr(cube, "scale_factor", 1.0)) or 1.0
 
@@ -379,22 +527,59 @@ def apply_brdf_correct(
             "geom_kernel": "LiSparseReciprocal",
         }
 
+    chunk_unitless = chunk_array * np.float32(scale_factor)
+    ndvi = compute_ndvi(cube, chunk_unitless)
+    ndvi_edges_raw = coeffs_dict.get("ndvi_edges")
+    edges = (
+        np.asarray(ndvi_edges_raw, dtype=np.float32)
+        if ndvi_edges_raw is not None
+        else np.array([], dtype=np.float32)
+    )
+    if edges.size < 2:
+        edges, bin_idx = compute_ndvi_bins(ndvi, ndvi_config)
+    else:
+        bin_idx = np.digitize(ndvi, edges, right=False) - 1
+        bin_idx[(ndvi < edges[0]) | (ndvi > edges[-1])] = -1
+
+    n_bins = edges.size - 1 if edges.size >= 2 else ndvi_config.n_bins
+    bin_idx_safe = bin_idx.copy()
+    if np.any(bin_idx_safe < 0):
+        logging.debug(
+            "NDVI binning: %d pixels outside [%0.3f,%0.3f]; assigning to bin 0",
+            np.count_nonzero(bin_idx_safe < 0),
+            edges[0] if edges.size else ndvi_config.ndvi_min,
+            edges[-1] if edges.size else ndvi_config.ndvi_max,
+        )
+        bin_idx_safe[bin_idx_safe < 0] = 0
+
     iso = np.asarray(coeffs_dict["iso"], dtype=np.float32)
     vol = np.asarray(coeffs_dict["vol"], dtype=np.float32)
     geo = np.asarray(coeffs_dict["geo"], dtype=np.float32)
 
-    if iso.ndim != 1 or vol.shape != iso.shape or geo.shape != iso.shape:
-        raise ValueError("BRDF coefficient arrays must be one-dimensional with matching shapes.")
+    if iso.ndim == 1:
+        iso = iso[np.newaxis, :]
+        vol = vol[np.newaxis, :]
+        geo = geo[np.newaxis, :]
 
-    if iso.size != expected_bands:
+    if iso.shape[1] != expected_bands:
         logging.warning(
             "⚠️  BRDF coefficient size mismatch (%d vs %d); falling back to neutral coefficients.",
-            iso.size,
+            iso.shape[1],
             expected_bands,
         )
-        iso = np.ones(expected_bands, dtype=np.float32)
-        vol = np.zeros(expected_bands, dtype=np.float32)
-        geo = np.zeros(expected_bands, dtype=np.float32)
+        iso = np.ones((1, expected_bands), dtype=np.float32)
+        vol = np.zeros_like(iso)
+        geo = np.zeros_like(iso)
+
+    if iso.shape[0] != n_bins:
+        logging.warning(
+            "⚠️  BRDF coefficient NDVI bin mismatch (%d vs %d); broadcasting neutral coefficients across bins.",
+            iso.shape[0],
+            n_bins,
+        )
+        iso = np.ones((n_bins, expected_bands), dtype=np.float32)
+        vol = np.zeros_like(iso)
+        geo = np.zeros_like(iso)
 
     kernel_type_vol = str(coeffs_dict.get("volume_kernel", "RossThick"))
     kernel_type_geo = str(coeffs_dict.get("geom_kernel", "LiSparseReciprocal"))
@@ -419,33 +604,62 @@ def apply_brdf_correct(
         kernel_type=kernel_type_geo,
     )
 
-    denominator = (
-        iso[np.newaxis, np.newaxis, :]
-        + vol[np.newaxis, np.newaxis, :] * volume_kernel[..., np.newaxis]
-        + geo[np.newaxis, np.newaxis, :] * geom_kernel[..., np.newaxis]
+    ref_solar = np.deg2rad(reference_geometry.solar_zenith_deg)
+    ref_view = np.deg2rad(reference_geometry.view_zenith_deg)
+    ref_rel = np.deg2rad(reference_geometry.relative_azimuth_deg)
+    ref_solar_az = np.zeros_like(solar_az) + ref_rel
+    ref_sensor_az = np.zeros_like(solar_az)
+    ref_volume = calc_volume_kernel(
+        ref_solar_az,
+        np.full_like(solar_zn, ref_solar),
+        ref_sensor_az,
+        np.full_like(sensor_zn, ref_view),
+        kernel_type=kernel_type_vol,
+    )
+    ref_geom = calc_geom_kernel(
+        ref_solar_az,
+        np.full_like(solar_zn, ref_solar),
+        ref_sensor_az,
+        np.full_like(sensor_zn, ref_view),
+        kernel_type=kernel_type_geo,
     )
 
-    denominator = np.where(np.abs(denominator) < 1e-6, np.nan, denominator)
-
-    chunk_unitless = chunk_array * np.float32(scale_factor)
-
     valid_mask = np.isfinite(chunk_unitless)
-    valid_mask &= chunk_unitless >= 0.0
-    valid_mask &= chunk_unitless <= MAX_UNITLESS_REFLECTANCE
-    valid_mask &= np.isfinite(denominator)
-
-    corrected_unitless = chunk_unitless / denominator
-    corrected_unitless = np.where(np.isfinite(corrected_unitless), corrected_unitless, np.nan)
-
     if hasattr(cube, "mask_no_data"):
-        mask = cube.mask_no_data[ys:ye, xs:xe]
-        valid_mask &= mask[..., np.newaxis]
+        valid_mask &= cube.mask_no_data[ys:ye, xs:xe][..., np.newaxis]
+
+    corrected_unitless = np.full_like(chunk_unitless, np.nan, dtype=np.float32)
+    for b in range(expected_bands):
+        iso_band = iso[:, b]
+        vol_band = vol[:, b]
+        geo_band = geo[:, b]
+        for bin_id in range(iso.shape[0]):
+            mask_bin = bin_idx_safe == bin_id
+            if not np.any(mask_bin):
+                continue
+            R_pix = (
+                iso_band[bin_id]
+                + vol_band[bin_id] * volume_kernel
+                + geo_band[bin_id] * geom_kernel
+            )
+            R_ref = (
+                iso_band[bin_id]
+                + vol_band[bin_id] * ref_volume
+                + geo_band[bin_id] * ref_geom
+            )
+            cf = np.where((R_pix > 0) & (R_ref > 0), R_ref / R_pix, np.nan)
+            if bin_id == 0 and b == 0:
+                log_stats("cf_bin0_band0", cf, mask_bin)
+            target_mask = mask_bin & valid_mask[..., b]
+            corrected_unitless[..., b] = np.where(
+                target_mask,
+                chunk_unitless[..., b] * cf,
+                corrected_unitless[..., b],
+            )
 
     no_data_value = np.float32(getattr(cube, "no_data", np.nan))
-    corrected_unitless = np.where(valid_mask, corrected_unitless, np.nan)
-
     corrected_scaled = corrected_unitless / np.float32(scale_factor)
-    corrected_scaled = np.where(valid_mask, corrected_scaled, no_data_value)
+    corrected_scaled = np.where(np.isfinite(corrected_scaled), corrected_scaled, no_data_value)
 
     return corrected_scaled.astype(np.float32, copy=False)
 
@@ -460,7 +674,13 @@ def apply_glint_correct(*args, **kwargs):
     raise NotImplementedError("Glint correction is not implemented in cross-sensor-cal.")
 
 
-def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
+def fit_and_save_brdf_model(
+    cube: "NeonCube",
+    out_dir: Path,
+    ndvi_config: NDVIBinningConfig | None = None,
+    rho_min: float = 0.0,
+    rho_max: float | None = 2.0,
+) -> Path:
     """Estimate and persist BRDF coefficients for a NEON flightline.
 
     Parameters
@@ -485,6 +705,8 @@ def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
     coeff_path = normalized if normalized is not None else preferred
     if coeff_path.exists():
         return coeff_path
+
+    ndvi_config = ndvi_config or NDVIBinningConfig()
 
     solar_zn = cube.get_ancillary("solar_zn", radians=True)
     solar_az = cube.get_ancillary("solar_az", radians=True)
@@ -512,49 +734,48 @@ def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
         np.asarray(cube.data, dtype=np.float32) * np.float32(getattr(cube, "scale_factor", 1.0) or 1.0)
     )
 
+    ndvi = compute_ndvi(cube, reflectance_unitless)
+    edges, ndvi_bins = compute_ndvi_bins(ndvi, ndvi_config)
+
     flat_valid = valid.reshape(-1)
-    if np.count_nonzero(flat_valid) < 3:
-        logging.warning(
-            "⚠️  Not enough valid pixels to fit BRDF model for %s; using neutral coefficients.",
-            getattr(cube, "base_key", "unknown"),
-        )
-        iso = np.ones(cube.bands, dtype=np.float32)
-        vol = np.zeros(cube.bands, dtype=np.float32)
-        geo = np.zeros(cube.bands, dtype=np.float32)
-    else:
-        design_stack = np.stack(
-            [
-                np.ones_like(volume_kernel, dtype=np.float32),
-                volume_kernel,
-                geom_kernel,
-            ],
-            axis=-1,
-        )
-        design_flat = design_stack.reshape(-1, 3)
-        design_valid = design_flat[flat_valid]
+    design_stack = np.stack(
+        [
+            np.ones_like(volume_kernel, dtype=np.float32),
+            volume_kernel,
+            geom_kernel,
+        ],
+        axis=-1,
+    )
+    design_flat = design_stack.reshape(-1, 3)
+    reflectance_flat = reflectance_unitless.reshape(-1, cube.bands)
+    ndvi_flat = ndvi_bins.reshape(-1)
 
-        reflectance_flat = reflectance_unitless.reshape(-1, cube.bands)
+    n_bins = ndvi_config.n_bins
+    iso = np.ones((n_bins, cube.bands), dtype=np.float32)
+    vol = np.zeros_like(iso)
+    geo = np.zeros_like(iso)
 
-        iso = np.ones(cube.bands, dtype=np.float32)
-        vol = np.zeros(cube.bands, dtype=np.float32)
-        geo = np.zeros(cube.bands, dtype=np.float32)
-
-        for band_idx in range(cube.bands):
-            y = reflectance_flat[flat_valid, band_idx].astype(np.float64, copy=False)
+    for band_idx in range(cube.bands):
+        y_all = reflectance_flat[:, band_idx].astype(np.float64, copy=False)
+        for bin_id in range(n_bins):
+            bin_mask = flat_valid & (ndvi_flat == bin_id)
+            if np.count_nonzero(bin_mask) < 3:
+                continue
+            y = y_all[bin_mask]
+            X = design_flat[bin_mask].astype(np.float64, copy=False)
             finite_mask = np.isfinite(y)
-            finite_mask &= y >= 0.0
-            finite_mask &= y <= MAX_UNITLESS_REFLECTANCE
+            if rho_max is not None:
+                finite_mask &= y <= rho_max
+            finite_mask &= y >= rho_min
             if np.count_nonzero(finite_mask) < 3:
                 continue
-            X = design_valid[finite_mask].astype(np.float64, copy=False)
-            y_valid = y[finite_mask]
             try:
-                solution, *_ = np.linalg.lstsq(X, y_valid, rcond=None)
+                solution, *_ = np.linalg.lstsq(X[finite_mask], y[finite_mask], rcond=None)
             except np.linalg.LinAlgError:
                 continue
-            iso[band_idx] = np.float32(solution[0])
-            vol[band_idx] = np.float32(solution[1])
-            geo[band_idx] = np.float32(solution[2])
+            iso[bin_id, band_idx] = np.float32(solution[0])
+            vol[bin_id, band_idx] = np.float32(solution[1])
+            geo[bin_id, band_idx] = np.float32(solution[2])
 
     coeff_payload = {
         "iso": iso.astype(float).tolist(),
@@ -562,6 +783,7 @@ def fit_and_save_brdf_model(cube: "NeonCube", out_dir: Path) -> Path:
         "geo": geo.astype(float).tolist(),
         "volume_kernel": "RossThick",
         "geom_kernel": "LiSparseReciprocal",
+        "ndvi_edges": edges.astype(float).tolist(),
     }
 
     with coeff_path.open("w", encoding="utf-8") as coeff_file:
