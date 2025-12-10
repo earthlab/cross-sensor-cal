@@ -11,6 +11,7 @@
 ### Changed
 - ENVI export and pipeline logs now use affirmative, progress-oriented wording (e.g., “creating new ENVI export” instead of “not found or invalid”).
 - CI simplified to four main checks on PRs: `CI / lite`, `CI / unit`, `Docs Drift Check / audit`, and `QA quick check / qa`.
+- Topographic correction now defaults to SCS+C (`use_scs_c=True`) for HyTools/FlexBRDF consistency. To restore legacy cosine-ratio behaviour, call `apply_topo_correct(..., use_scs_c=False)` or use the corresponding CLI flag.
 
 ### Fixed
 - Duplicate QA/pytest workflows removed; QA quick check now runs once per PR (and optionally once per push to `main`).

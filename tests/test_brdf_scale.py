@@ -4,7 +4,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cross_sensor_cal.corrections import apply_brdf_correct, fit_and_save_brdf_model
+from cross_sensor_cal.corrections import (
+    apply_brdf_correct,
+    fit_and_save_brdf_model,
+    NDVIBinningConfig,
+)
 
 
 class _FakeCube:
@@ -12,6 +16,8 @@ class _FakeCube:
         self.data = np.asarray(data, dtype=np.float32)
         self.scale_factor = float(scale_factor)
         self.lines, self.columns, self.bands = self.data.shape
+        # Provide plausible wavelengths so NDVI band selection works during tests.
+        self.wavelengths = np.linspace(600, 900, self.bands, dtype=np.float32)
         self.mask_no_data = np.ones((self.lines, self.columns), dtype=bool)
         self.no_data = -9999.0
         self.base_key = "fake"
@@ -93,16 +99,21 @@ def test_correction_preserves_shape_and_dtype(tmp_path: Path) -> None:
 
 
 def test_outliers_masked_from_fit(tmp_path: Path) -> None:
-    unitless = np.full((3, 3, 1), 0.2, dtype=np.float32)
+    unitless = np.full((3, 3, 2), 0.2, dtype=np.float32)
+    unitless[..., 1] = 0.35  # ensure NDVI falls inside bins
     unitless[0, 0, 0] = 1.5  # beyond valid range and should be excluded
     scaled = unitless / 1e-4
     cube = _FakeCube(scaled, scale_factor=1e-4)
 
-    coeff_path = fit_and_save_brdf_model(cube, tmp_path / "outlier")
+    coeff_path = fit_and_save_brdf_model(
+        cube,
+        tmp_path / "outlier",
+        ndvi_config=NDVIBinningConfig(n_bins=1, ndvi_min=-1.0, perc_min=None, perc_max=None),
+    )
     model = json.loads(coeff_path.read_text())
 
-    valid_mean = float(np.mean(unitless[unitless < 1.0]))
-    assert model["iso"][0] == pytest.approx(valid_mean, rel=0.6)
-    assert model["iso"][0] < 0.5
-    assert abs(model["vol"][0]) < 0.2
-    assert abs(model["geo"][0]) < 0.2
+    valid_mean = float(np.mean(unitless[..., 0][unitless[..., 0] < 1.0]))
+    assert model["iso"][0][0] == pytest.approx(valid_mean, rel=0.6)
+    assert model["iso"][0][0] < 0.5
+    assert abs(model["vol"][0][0]) < 0.2
+    assert abs(model["geo"][0][0]) < 0.2
