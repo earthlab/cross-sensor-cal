@@ -2,210 +2,214 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/benchmarks/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
+    </url>
+    <url>
+         <loc>https://earthlab.github.io/cross-sensor-cal/brdf_topo_algorithm/</loc>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/configuration/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/cyverse-irods/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/dev-notes/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/documentation-overview/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/documentation_style_guide/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/env-setup/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/env/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/extending/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/faq/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/glossary/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/naming-conventions/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/overview/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/qa/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/quickstart/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/refactor_notes/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/references/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/schemas/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/stage-03-pixel-extraction/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/stage-04-spectral-library/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/stage-05-mesma/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/troubleshooting/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/validation/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/_build/doc_drift_report/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/api/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/api/merge_duckdb/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/api/qa_plots/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/concepts/why-calibration/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/dev/architecture/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/dev/codex-guidelines/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/dev/contributing/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/dev/doc_drift/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/dev/doc_drift_report/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/outputs/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/polygons/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/qa/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/qa_panel/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/stages/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/reference/configuration/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/reference/extending/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/reference/schemas/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/reference/validation/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/cloud-workflow/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/micasense-to-landsat/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/neon-to-envi/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/neon-to-landsat/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/usage/cli/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/usage/notebook-example/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/usage/parquet/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/cross-sensor-cal/usage/parquet_preview/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <lastmod>2025-12-10</lastmod>
     </url>
 </urlset>
