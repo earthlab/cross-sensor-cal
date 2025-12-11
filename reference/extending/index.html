@@ -1485,7 +1485,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/reference/extending.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/main/docs/reference/extending.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1498,7 +1498,7 @@
 <p><strong>When do I need this?</strong> When adding a new target sensor or swapping readers/writers; follow the extension points listed here.</p>
 </blockquote>
 <h2 id="purpose">Purpose<a class="headerlink" href="#purpose" title="Permanent link">&para;</a></h2>
-<p>Guide contributions that add sensors to Stage 4 or new exporters feeding <a href="../../pipeline/outputs/">Outputs</a>.</p>
+<p>Guide contributions that add sensors to Stage 5 or new exporters feeding <a href="../../pipeline/outputs/">Outputs</a>.</p>
 <h2 id="inputs">Inputs<a class="headerlink" href="#inputs" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Bandpass definitions (CSV/JSON) for the new sensor</li>
@@ -1506,7 +1506,7 @@
 <li>Tests covering the new workflow</li>
 </ul>
 <h2 id="outputs">Outputs<a class="headerlink" href="#outputs" title="Permanent link">&para;</a></h2>
-<p>Updated convolution products and schemas consumed by <a href="../../pipeline/stages/#5-parquet-export">Parquet export</a> and <a href="../../pipeline/stages/#6-duckdb-merge">Merge</a>.</p>
+<p>Updated convolution products and schemas consumed by <a href="../../pipeline/stages/#parquet-extraction-merging">Parquet export &amp; merge</a>.</p>
 <h2 id="run-it">Run it<a class="headerlink" href="#run-it" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>pytest<span class="w"> </span>tests/convolution/test_new_sensor.py
 </code></pre></div>
@@ -1518,7 +1518,7 @@
 <ul>
 <li>Forgetting to update schemas will break Stage 6 merges.</li>
 <li>Ship lightbox-friendly QA thumbnails when adding new visualization layers.</li>
-<li>Document new sensors in <a href="../../pipeline/stages/#4-cross-sensor-convolution">Pipeline Stages</a> and <a href="../../troubleshooting/">Troubleshooting</a>.</li>
+<li>Document new sensors in <a href="../../pipeline/stages/#5-sensor-harmonization-spectral-convolution">Pipeline Stages</a> and <a href="../../troubleshooting/">Troubleshooting</a>.</li>
 </ul>
 
 

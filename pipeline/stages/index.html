@@ -1009,6 +1009,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1642,7 +1653,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/pipeline/stages.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/main/docs/pipeline/stages.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1656,118 +1667,127 @@
 <hr />
 <h2 id="pipeline-summary">Pipeline summary<a class="headerlink" href="#pipeline-summary" title="Permanent link">&para;</a></h2>
 <ol>
-<li><strong>Data acquisition</strong> (download NEON HDF5 tiles)  </li>
-<li><strong>HDF5 → ENVI export</strong>  </li>
-<li><strong>Topographic correction</strong>  </li>
-<li><strong>BRDF correction</strong>  </li>
-<li><strong>Sensor harmonization (convolution)</strong>  </li>
-<li><strong>Parquet extraction + merging</strong>  </li>
-<li><strong>Quality assurance (QA PNG, PDF, JSON)</strong>  </li>
+<li><strong>Data acquisition</strong> (download NEON HDF5 tiles)</li>
+<li><strong>HDF5 → ENVI export</strong></li>
+<li><strong>Topographic correction</strong></li>
+<li><strong>BRDF correction</strong></li>
+<li><strong>Sensor harmonization (spectral convolution)</strong></li>
+<li><strong>Parquet extraction + merging</strong></li>
+<li><strong>Quality assurance (QA PNG, PDF, JSON)</strong></li>
 </ol>
 <p>Each stage can be run independently using the <code>--start-at</code> and <code>--end-at</code> flags.</p>
 <hr />
+<p><a id="data-acquisition"></a></p>
 <h2 id="1-data-acquisition">1. Data acquisition<a class="headerlink" href="#1-data-acquisition" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong><br />
-- NEON API paths or local HDF5 files  </p>
-<p><strong>Outputs:</strong><br />
+<p><strong>Inputs:</strong>
+- NEON API paths or local HDF5 files</p>
+<p><strong>Outputs:</strong>
 - cached HDF5 tiles stored under the selected <code>--base-folder</code></p>
 <p>The pipeline fetches <em>only</em> the tiles required for the selected flight line.</p>
-<p><strong>Common issues:</strong><br />
-- missing HDF5 files in NEON storage<br />
-- interrupted downloads in cloud environments<br />
-- insufficient space in temporary directories  </p>
+<p><strong>Common issues:</strong>
+- missing HDF5 files in NEON storage
+- interrupted downloads in cloud environments
+- insufficient space in temporary directories</p>
 <hr />
+<p><a id="hdf5-to-envi"></a></p>
 <h2 id="2-hdf5-envi-export">2. HDF5 → ENVI export<a class="headerlink" href="#2-hdf5-envi-export" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong><br />
-- <code>*_directional_reflectance.h5</code><br />
-- per-pixel geometry and metadata  </p>
-<p><strong>Outputs:</strong><br />
-- <code>*_directional_reflectance_envi.img/.hdr</code><br />
-- sidecar JSON documenting extracted wavelengths, masks, and scaling  </p>
+<p><strong>Inputs:</strong>
+- <code>*_directional_reflectance.h5</code>
+- per-pixel geometry and metadata</p>
+<p><strong>Outputs:</strong>
+- <code>*_directional_reflectance_envi.img/.hdr</code>
+- sidecar JSON documenting extracted wavelengths, masks, and scaling</p>
 <p>This stage produces an ENVI image that mirrors the HDF5 directional reflectance dataset.</p>
-<p><strong>What the ENVI file contains:</strong><br />
-- reflectance (scaled NEON values)<br />
-- wavelength metadata<br />
-- per-pixel masks (cloud, cloud shadow, water, snow, invalid)  </p>
-<p><strong>Common issues:</strong><br />
-- mismatch between HDF5 metadata and ENVI header<br />
-- extremely large tile sizes causing I/O delays<br />
-- NaN bands due to malformed HDF5 datasets  </p>
+<p><strong>What the ENVI file contains:</strong>
+- reflectance (scaled NEON values)
+- wavelength metadata
+- per-pixel masks (cloud, cloud shadow, water, snow, invalid)</p>
+<p><strong>Common issues:</strong>
+- mismatch between HDF5 metadata and ENVI header
+- extremely large tile sizes causing I/O delays
+- NaN bands due to malformed HDF5 datasets</p>
 <hr />
+<p><a id="topographic-correction"></a></p>
 <h2 id="3-topographic-correction">3. Topographic correction<a class="headerlink" href="#3-topographic-correction" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong><br />
-- directional reflectance ENVI<br />
-- DEM-derived slope and aspect<br />
-- solar geometry  </p>
-<p><strong>Outputs:</strong><br />
-- <code>*_topocorrected_envi.img</code>  </p>
-<p>Topographic correction reduces slope- and aspect-driven variation in illumination.  </p>
+<p><strong>Inputs:</strong>
+- directional reflectance ENVI
+- DEM-derived slope and aspect
+- solar geometry</p>
+<p><strong>Outputs:</strong>
+- <code>*_topocorrected_envi.img</code></p>
+<p>Topographic correction reduces slope- and aspect-driven variation in illumination.</p>
 <p>The method assumes surface reflectance behaves consistently with simple terrain-adjustment models.</p>
-<p><strong>Common issues:</strong><br />
-- DEM resolution mismatch<br />
-- strong terrain shadows that remain after correction<br />
-- negative reflectance in deep shadows (masked)  </p>
+<p><strong>Common issues:</strong>
+- DEM resolution mismatch
+- strong terrain shadows that remain after correction
+- negative reflectance in deep shadows (masked)</p>
 <hr />
+<p><a id="brdf-correction"></a></p>
 <h2 id="4-brdf-correction">4. BRDF correction<a class="headerlink" href="#4-brdf-correction" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong><br />
-- topographically corrected ENVI reflectance<br />
-- view geometry (sensor zenith / azimuth)<br />
-- solar geometry  </p>
-<p><strong>Outputs:</strong><br />
-- <code>*_brdfandtopo_corrected_envi.img</code><br />
-- BRDF coefficient tables in the QA JSON  </p>
+<p><strong>Inputs:</strong>
+- topographically corrected ENVI reflectance
+- view geometry (sensor zenith / azimuth)
+- solar geometry</p>
+<p><strong>Outputs:</strong>
+- <code>*_brdfandtopo_corrected_envi.img</code>
+- BRDF coefficient tables in the QA JSON</p>
 <p>BRDF correction adjusts reflectance to a consistent view/illumination angle, making spectra across the flight line more comparable.</p>
-<p><strong>Common issues:</strong><br />
-- instabilities in BRDF coefficient fitting<br />
-- extreme reflectance values that must be masked<br />
-- spatial artifacts in low-SNR bands  </p>
+<p><strong>Common issues:</strong>
+- instabilities in BRDF coefficient fitting
+- extreme reflectance values that must be masked
+- spatial artifacts in low-SNR bands</p>
 <hr />
+<p><a id="sensor-harmonization"></a></p>
 <h2 id="5-sensor-harmonization-spectral-convolution">5. Sensor harmonization (spectral convolution)<a class="headerlink" href="#5-sensor-harmonization-spectral-convolution" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong><br />
-- BRDF+topo corrected ENVI<br />
-- sensor spectral response functions (SRFs)  </p>
-<p><strong>Outputs:</strong><br />
-- <code>*_landsat_convolved_envi.img</code> or other sensor-equivalent ENVI products<br />
-- bandpass-harmonized Parquet files  </p>
-<p>This stage integrates the corrected spectrum against the target sensor's SRFs.<br />
+<p><strong>Inputs:</strong>
+- BRDF+topo corrected ENVI
+- sensor spectral response functions (SRFs)</p>
+<p><strong>Outputs:</strong>
+- <code>*_landsat_convolved_envi.img</code> or other sensor-equivalent ENVI products
+- bandpass-harmonized Parquet files</p>
+<p>This stage integrates the corrected spectrum against the target sensor's SRFs.
 Supported sensors include Landsat OLI/OLI-2; others can be added.</p>
-<p><strong>Common issues:</strong><br />
-- wavelength misalignment<br />
-- missing SRF tables<br />
-- sensor bands with near-zero response across NEON wavelengths  </p>
+<p><strong>Common issues:</strong>
+- wavelength misalignment
+- missing SRF tables
+- sensor bands with near-zero response across NEON wavelengths</p>
 <hr />
+<p><a id="parquet-extraction-merging"></a></p>
 <h2 id="6-parquet-extraction-merging">6. Parquet extraction &amp; merging<a class="headerlink" href="#6-parquet-extraction-merging" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong><br />
-- any ENVI cube produced by earlier stages  </p>
-<p><strong>Outputs:</strong><br />
-- a Parquet file per cube (one row per pixel)<br />
-- a merged pixel extraction table for the whole flight line  </p>
+<p><strong>Inputs:</strong>
+- any ENVI cube produced by earlier stages</p>
+<p><strong>Outputs:</strong>
+- a Parquet file per cube (one row per pixel)
+- a merged pixel extraction table for the whole flight line</p>
 <p>This step makes downstream analysis easy in Python, R, or DuckDB.</p>
-<p><strong>Common issues:</strong><br />
-- extremely large tables (billions of rows)<br />
-- insufficient memory for merges<br />
-- incorrect CRS metadata in ENVI headers  </p>
+<p><strong>Common issues:</strong>
+- extremely large tables (billions of rows)
+- insufficient memory for merges
+- incorrect CRS metadata in ENVI headers</p>
 <hr />
+<p><a id="quality-assurance"></a></p>
 <h2 id="7-quality-assurance-qa">7. Quality assurance (QA)<a class="headerlink" href="#7-quality-assurance-qa" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong><br />
-- all previous outputs  </p>
-<p><strong>Outputs:</strong><br />
-- <code>*_qa.png</code><br />
-- <code>*_qa.pdf</code><br />
-- <code>*_qa.json</code>  </p>
-<p>QA artifacts summarize reflectance distributions, masks, wavelength metadata, and BRDF/brightness statistics.<br />
+<p><strong>Inputs:</strong>
+- all previous outputs</p>
+<p><strong>Outputs:</strong>
+- <code>*_qa.png</code>
+- <code>*_qa.pdf</code>
+- <code>*_qa.json</code></p>
+<p>QA artifacts summarize reflectance distributions, masks, wavelength metadata, and BRDF/brightness statistics.
 See the <a href="../qa/">QA page</a> for details.</p>
 <hr />
 <h2 id="running-a-partial-pipeline">Running a partial pipeline<a class="headerlink" href="#running-a-partial-pipeline" title="Permanent link">&para;</a></h2>
 <p>You can run only part of the pipeline:</p>
-<p>```bash
-cscal-pipeline \
-  --start-at brdf \
-  --end-at convolution
-Or run a single stage manually if needed.
-Next steps
-Outputs &amp; file structure
-QA panels &amp; metrics</p>
+<div class="highlight"><pre><span></span><code>cscal-pipeline<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--start-at<span class="w"> </span>brdf<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--end-at<span class="w"> </span>convolution
+</code></pre></div>
+<p>Or run a single stage manually if needed.</p>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../outputs/">Outputs &amp; file structure</a></li>
+<li><a href="../qa/">QA panels &amp; metrics</a></li>
+</ul>
 <hr />
 
 

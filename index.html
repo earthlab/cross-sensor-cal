@@ -490,6 +490,28 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#how-the-pipeline-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the pipeline works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1547,7 +1569,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/master/docs/index.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/main/docs/index.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1559,42 +1581,50 @@
 <p>Earth Lab’s <strong>cross-sensor-cal</strong> is a Python package for producing physically corrected and sensor-harmonized reflectance from NEON hyperspectral data and other fine-resolution imagery.</p>
 <p>It provides a reproducible workflow that:</p>
 <ul>
-<li>exports NEON HDF5 to ENVI  </li>
-<li>applies topographic and BRDF correction  </li>
-<li>harmonizes reflectance to Landsat / MicaSense bandspaces  </li>
-<li>writes Parquet tables  </li>
-<li>emits QA PNG, PDF, and JSON summaries  </li>
+<li>exports NEON HDF5 to ENVI</li>
+<li>applies topographic and BRDF correction</li>
+<li>harmonizes reflectance to Landsat / MicaSense bandspaces</li>
+<li>writes Parquet tables</li>
+<li>emits QA PNG, PDF, and JSON summaries</li>
 </ul>
 <hr />
 <h2 id="minimal-example-cli">Minimal example (CLI)<a class="headerlink" href="#minimal-example-cli" title="Permanent link">&para;</a></h2>
-<p>```bash
-BASE=output_demo
-mkdir -p "$BASE"</p>
-<p>cscal-pipeline \
-  --base-folder "$BASE" \
-  --site-code NIWO \
-  --year-month 2023-08 \
-  --product-code DP1.30006.001 \
-  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
-  --max-workers 2 \
-  --engine thread
-Inspect QA outputs:
-open $BASE/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/*_qa.png
-For a Python/Jupyter version, see:
-Usage → Jupyter notebook example
-How the pipeline works
-HDF5 → ENVI export
-Topographic correction
-BRDF correction
-Sensor harmonization (bandpass convolution)
-Parquet extraction + merging
-QA reporting
-See the Pipeline overview for details.
-Next steps
-Quickstart
-Jupyter notebook example
-Tutorials
-Reference</p>
+<div class="highlight"><pre><span></span><code><span class="nv">BASE</span><span class="o">=</span>output_demo
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span>
+
+cscal-pipeline<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--base-folder<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--flight-lines<span class="w"> </span>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--engine<span class="w"> </span>thread
+</code></pre></div>
+<p>Inspect QA outputs:</p>
+<div class="highlight"><pre><span></span><code>open<span class="w"> </span><span class="nv">$BASE</span>/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/*_qa.png
+</code></pre></div>
+<p>For a Python/Jupyter version, see:</p>
+<ul>
+<li>Usage → <a href="usage/notebook-example/">Jupyter notebook example</a></li>
+</ul>
+<h2 id="how-the-pipeline-works">How the pipeline works<a class="headerlink" href="#how-the-pipeline-works" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="pipeline/stages/#hdf5-to-envi">HDF5 → ENVI export</a></li>
+<li><a href="pipeline/stages/#topographic-correction">Topographic correction</a></li>
+<li><a href="pipeline/stages/#brdf-correction">BRDF correction</a></li>
+<li><a href="pipeline/stages/#sensor-harmonization">Sensor harmonization (bandpass convolution)</a></li>
+<li><a href="pipeline/stages/#parquet-extraction-merging">Parquet extraction + merging</a></li>
+<li><a href="pipeline/stages/#quality-assurance">QA reporting</a></li>
+</ol>
+<p>See the <a href="pipeline/stages/">Pipeline overview</a> for details.</p>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="quickstart/">Quickstart</a></li>
+<li><a href="usage/notebook-example/">Jupyter notebook example</a></li>
+<li><a href="tutorials/neon-to-envi/">Tutorials</a></li>
+<li><a href="reference/configuration/">Reference</a></li>
+</ul>
 <hr />
 
 
