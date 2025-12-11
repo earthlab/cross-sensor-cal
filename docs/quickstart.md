@@ -100,10 +100,8 @@ For a more complete notebook-style walkthrough, see:
 ## Next steps
 
 - [Why cross-sensor calibration?](concepts/why-calibration.md)  
-- [Tutorials](tutorials/neon-to-envi.md)  
-- [Pipeline overview & stages](pipeline/stages.md)  
+- [Tutorials](tutorials/neon-to-envi.md)
+- [Pipeline overview & stages](pipeline/stages.md)
 - [Working with Parquet outputs](usage/parquet.md)
 
 ---
-
-END OF INSTRUCTIONS.

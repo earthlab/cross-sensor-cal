@@ -4,6 +4,7 @@ site_description: >-
   AOP hyperspectral flightlines into analysis-ready products.
 site_url: https://earthlab.github.io/cross-sensor-cal
 repo_url: https://github.com/earthlab/cross-sensor-cal
+edit_uri: edit/main/docs/
 
 theme:
   name: material
