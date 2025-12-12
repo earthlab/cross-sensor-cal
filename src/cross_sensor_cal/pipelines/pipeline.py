@@ -848,6 +848,26 @@ def _sensor_requires_landsat_adjustment(sensor_name: str | None) -> bool:
     return "landsat" in lowered
 
 
+# band_index is wavelength-aligned Landsat-like order; do not assume native Landsat numbering
+# or OLI band index equivalence when selecting brightness coefficients.
+_DEFAULT_LANDSAT_SYSTEM_PAIR = "landsat_to_micasense"
+
+
+def _resolve_landsat_brightness_pair(
+    sensor_name: str | None, brightness_system_pair: str | None
+) -> str:
+    if brightness_system_pair:
+        return brightness_system_pair
+    if not sensor_name:
+        return _DEFAULT_LANDSAT_SYSTEM_PAIR
+
+    lowered = sensor_name.lower()
+    if "landsat" in lowered and ("tm" in lowered or "etm" in lowered):
+        return "landsat_tm_etm_to_micasense"
+
+    return _DEFAULT_LANDSAT_SYSTEM_PAIR
+
+
 def _apply_landsat_brightness_adjustment(
     cube: np.ndarray,
     system_pair: str = "landsat_to_micasense",
@@ -868,12 +888,16 @@ def _apply_landsat_brightness_adjustment(
     bands = cube.shape[0]
     applied: dict[int, float] = {}
 
-    for band_idx, coeff_pct in coeffs_pct.items():
+    for band_idx in range(1, bands + 1):
+        coeff_pct = float(coeffs_pct.get(band_idx, 0.0))
         zero_based = band_idx - 1
-        if 0 <= zero_based < bands:
-            frac = coeff_pct / 100.0
-            cube[zero_based] = cube[zero_based] * (1.0 + frac)
-            applied[band_idx] = coeff_pct
+        applied[band_idx] = coeff_pct
+        if coeff_pct == 0.0:
+            continue
+
+        # gain = 1 + (delta_percent / 100.0); negative deltas darken (scale down)
+        gain = 1.0 + (coeff_pct / 100.0)
+        cube[zero_based] = cube[zero_based] * gain
 
     return applied
 
@@ -1030,7 +1054,7 @@ def convolve_resample_product(
     )
 
     if _sensor_requires_landsat_adjustment(sensor_name):
-        system_pair = brightness_system_pair or "landsat_to_micasense"
+        system_pair = _resolve_landsat_brightness_pair(sensor_name, brightness_system_pair)
         applied_coeffs = _apply_landsat_brightness_adjustment(mm_out, system_pair=system_pair)
         if applied_coeffs:
             brightness_map[system_pair] = applied_coeffs

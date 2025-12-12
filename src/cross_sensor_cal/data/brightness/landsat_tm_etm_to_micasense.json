@@ -1,0 +1,14 @@
+{
+  "system_pair": "landsat_tm_etm_to_micasense",
+  "description": "Brightness coefficients to adjust Landsat 5 TM and Landsat 7 ETM+ convolutions relative to MicaSense (subtracting NEON->Landsat median percent differences by band).",
+  "note": "band_index is wavelength-aligned Landsat-like order; do not assume native Landsat numbering or OLI band index equivalence.",
+  "unit": "percent",
+  "bands": {
+    "1": -2.75,
+    "2": -6.94,
+    "3": -10.12,
+    "4": -6.65,
+    "5": -2.74,
+    "6": -1.11
+  }
+}
