@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
       
 
@@ -911,10 +911,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pipeline-summary" class="md-nav__link">
+  <a href="#pipeline-stages-and-idempotence" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pipeline summary
+        Pipeline stages and idempotence
       
     </span>
   </a>
@@ -944,10 +944,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-topographic-correction" class="md-nav__link">
+  <a href="#3-topographic-brdf-correction" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Topographic correction
+        3. Topographic + BRDF correction
       
     </span>
   </a>
@@ -955,10 +955,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-brdf-correction" class="md-nav__link">
+  <a href="#4-sensor-harmonization-spectral-convolution" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. BRDF correction
+        4. Sensor harmonization (spectral convolution)
       
     </span>
   </a>
@@ -966,10 +966,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-sensor-harmonization-spectral-convolution" class="md-nav__link">
+  <a href="#5-parquet-extraction-merging" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Sensor harmonization (spectral convolution)
+        5. Parquet extraction &amp; merging
       
     </span>
   </a>
@@ -977,32 +977,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#6-parquet-extraction-merging" class="md-nav__link">
+  <a href="#6-quality-assurance-qa" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6. Parquet extraction &amp; merging
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#7-quality-assurance-qa" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        7. Quality assurance (QA)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#running-a-partial-pipeline" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running a partial pipeline
+        6. Quality assurance (QA)
       
     </span>
   </a>
@@ -1665,17 +1643,19 @@
 <p>The cross-sensor-cal pipeline transforms NEON HDF5 directional reflectance into physically corrected and sensor-harmonized reflectance products. Each stage is restart-safe and produces structured, auditable outputs.</p>
 <p>This page describes every stage of the pipeline, what it consumes, what it produces, and what can go wrong.</p>
 <hr />
-<h2 id="pipeline-summary">Pipeline summary<a class="headerlink" href="#pipeline-summary" title="Permanent link">&para;</a></h2>
+<h2 id="pipeline-stages-and-idempotence">Pipeline stages and idempotence<a class="headerlink" href="#pipeline-stages-and-idempotence" title="Permanent link">&para;</a></h2>
+<p>The orchestrators <code>process_one_flightline</code> and <code>go_forth_and_multiply</code> enforce the following order:</p>
 <ol>
-<li><strong>Data acquisition</strong> (download NEON HDF5 tiles)</li>
-<li><strong>HDF5 → ENVI export</strong></li>
-<li><strong>Topographic correction</strong></li>
-<li><strong>BRDF correction</strong></li>
-<li><strong>Sensor harmonization (spectral convolution)</strong></li>
-<li><strong>Parquet extraction + merging</strong></li>
-<li><strong>Quality assurance (QA PNG, PDF, JSON)</strong></li>
+<li>Download HDF5 (via <code>stage_download_h5</code>).</li>
+<li>Export ENVI.</li>
+<li>Build correction JSON.</li>
+<li>Apply BRDF + topo correction.</li>
+<li>Resample/convolve all sensors.</li>
+<li>Export Parquet sidecars.</li>
+<li>DuckDB merge to merged parquet.</li>
+<li>Render QA panel + metrics.</li>
 </ol>
-<p>Each stage can be run independently using the <code>--start-at</code> and <code>--end-at</code> flags.</p>
+<p>Each stage checks whether its expected outputs already exist and are valid, logs a skip message when they do, and recomputes missing or corrupted artefacts. Recovery mode exists for raw ENVI exports when corrected outputs are present (<code>stage_export_envi_from_h5</code> supports <code>recover_missing_raw</code>, used by <code>cscal-recover-raw</code>).</p>
 <hr />
 <p><a id="data-acquisition"></a></p>
 <h2 id="1-data-acquisition">1. Data acquisition<a class="headerlink" href="#1-data-acquisition" title="Permanent link">&para;</a></h2>
@@ -1683,11 +1663,7 @@
 - NEON API paths or local HDF5 files</p>
 <p><strong>Outputs:</strong>
 - cached HDF5 tiles stored under the selected <code>--base-folder</code></p>
-<p>The pipeline fetches <em>only</em> the tiles required for the selected flight line.</p>
-<p><strong>Common issues:</strong>
-- missing HDF5 files in NEON storage
-- interrupted downloads in cloud environments
-- insufficient space in temporary directories</p>
+<p>Downloads are handled by <code>stage_download_h5</code> and are triggered automatically by <code>go_forth_and_multiply</code>.</p>
 <hr />
 <p><a id="hdf5-to-envi"></a></p>
 <h2 id="2-hdf5-envi-export">2. HDF5 → ENVI export<a class="headerlink" href="#2-hdf5-envi-export" title="Permanent link">&para;</a></h2>
@@ -1695,94 +1671,47 @@
 - <code>*_directional_reflectance.h5</code>
 - per-pixel geometry and metadata</p>
 <p><strong>Outputs:</strong>
-- <code>*_directional_reflectance_envi.img/.hdr</code>
-- sidecar JSON documenting extracted wavelengths, masks, and scaling</p>
-<p>This stage produces an ENVI image that mirrors the HDF5 directional reflectance dataset.</p>
-<p><strong>What the ENVI file contains:</strong>
-- reflectance (scaled NEON values)
-- wavelength metadata
-- per-pixel masks (cloud, cloud shadow, water, snow, invalid)</p>
-<p><strong>Common issues:</strong>
-- mismatch between HDF5 metadata and ENVI header
-- extremely large tile sizes causing I/O delays
-- NaN bands due to malformed HDF5 datasets</p>
+- <code>*_envi.img/.hdr</code> (see <a href="../outputs/">Outputs</a>)</p>
+<p><code>stage_export_envi_from_h5</code> creates the ENVI pair using the canonical naming in <code>FlightlinePaths</code>, with optional brightness offsets.</p>
 <hr />
 <p><a id="topographic-correction"></a></p>
-<h2 id="3-topographic-correction">3. Topographic correction<a class="headerlink" href="#3-topographic-correction" title="Permanent link">&para;</a></h2>
+<h2 id="3-topographic-brdf-correction">3. Topographic + BRDF correction<a class="headerlink" href="#3-topographic-brdf-correction" title="Permanent link">&para;</a></h2>
 <p><strong>Inputs:</strong>
-- directional reflectance ENVI
+- directional or raw ENVI exports
 - DEM-derived slope and aspect
-- solar geometry</p>
+- solar/view geometry</p>
 <p><strong>Outputs:</strong>
-- <code>*_topocorrected_envi.img</code></p>
-<p>Topographic correction reduces slope- and aspect-driven variation in illumination.</p>
-<p>The method assumes surface reflectance behaves consistently with simple terrain-adjustment models.</p>
-<p><strong>Common issues:</strong>
-- DEM resolution mismatch
-- strong terrain shadows that remain after correction
-- negative reflectance in deep shadows (masked)</p>
-<hr />
-<p><a id="brdf-correction"></a></p>
-<h2 id="4-brdf-correction">4. BRDF correction<a class="headerlink" href="#4-brdf-correction" title="Permanent link">&para;</a></h2>
-<p><strong>Inputs:</strong>
-- topographically corrected ENVI reflectance
-- view geometry (sensor zenith / azimuth)
-- solar geometry</p>
-<p><strong>Outputs:</strong>
-- <code>*_brdfandtopo_corrected_envi.img</code>
-- BRDF coefficient tables in the QA JSON</p>
-<p>BRDF correction adjusts reflectance to a consistent view/illumination angle, making spectra across the flight line more comparable.</p>
-<p><strong>Common issues:</strong>
-- instabilities in BRDF coefficient fitting
-- extreme reflectance values that must be masked
-- spatial artifacts in low-SNR bands</p>
+- <code>&lt;flight_id&gt;_brdfandtopo_corrected_envi.(img|hdr|json)</code></p>
+<p><code>stage_build_and_write_correction_json</code> writes the parameter JSON, and <code>stage_apply_brdf_and_topo</code> applies the combined correction before downstream resampling.</p>
 <hr />
 <p><a id="sensor-harmonization"></a></p>
-<h2 id="5-sensor-harmonization-spectral-convolution">5. Sensor harmonization (spectral convolution)<a class="headerlink" href="#5-sensor-harmonization-spectral-convolution" title="Permanent link">&para;</a></h2>
+<h2 id="4-sensor-harmonization-spectral-convolution">4. Sensor harmonization (spectral convolution)<a class="headerlink" href="#4-sensor-harmonization-spectral-convolution" title="Permanent link">&para;</a></h2>
 <p><strong>Inputs:</strong>
 - BRDF+topo corrected ENVI
 - sensor spectral response functions (SRFs)</p>
 <p><strong>Outputs:</strong>
-- <code>*_landsat_convolved_envi.img</code> or other sensor-equivalent ENVI products
-- bandpass-harmonized Parquet files</p>
-<p>This stage integrates the corrected spectrum against the target sensor's SRFs.
-Supported sensors include Landsat OLI/OLI-2; others can be added.</p>
-<p><strong>Common issues:</strong>
-- wavelength misalignment
-- missing SRF tables
-- sensor bands with near-zero response across NEON wavelengths</p>
+- <code>&lt;flight_id&gt;_&lt;sensor&gt;_envi.(img|hdr|parquet)</code></p>
+<p><code>stage_convolve_all_sensors</code> delegates to the configured resample method (convolution, legacy, or resample) and iterates through <code>FlightlinePaths.sensor_products</code>.</p>
 <hr />
 <p><a id="parquet-extraction-merging"></a></p>
-<h2 id="6-parquet-extraction-merging">6. Parquet extraction &amp; merging<a class="headerlink" href="#6-parquet-extraction-merging" title="Permanent link">&para;</a></h2>
+<h2 id="5-parquet-extraction-merging">5. Parquet extraction &amp; merging<a class="headerlink" href="#5-parquet-extraction-merging" title="Permanent link">&para;</a></h2>
 <p><strong>Inputs:</strong>
 - any ENVI cube produced by earlier stages</p>
 <p><strong>Outputs:</strong>
-- a Parquet file per cube (one row per pixel)
-- a merged pixel extraction table for the whole flight line</p>
-<p>This step makes downstream analysis easy in Python, R, or DuckDB.</p>
-<p><strong>Common issues:</strong>
-- extremely large tables (billions of rows)
-- insufficient memory for merges
-- incorrect CRS metadata in ENVI headers</p>
+- Parquet files for raw, corrected, and resampled cubes
+- <code>&lt;flight_id&gt;_merged_pixel_extraction.parquet</code></p>
+<p><code>_export_parquet_stage</code> builds the per-product Parquet sidecars, and <code>merge_flightline</code> (DuckDB) consolidates them with schema validation before optional QA rendering.</p>
 <hr />
 <p><a id="quality-assurance"></a></p>
-<h2 id="7-quality-assurance-qa">7. Quality assurance (QA)<a class="headerlink" href="#7-quality-assurance-qa" title="Permanent link">&para;</a></h2>
+<h2 id="6-quality-assurance-qa">6. Quality assurance (QA)<a class="headerlink" href="#6-quality-assurance-qa" title="Permanent link">&para;</a></h2>
 <p><strong>Inputs:</strong>
-- all previous outputs</p>
+- merged parquet and supporting ENVI files</p>
 <p><strong>Outputs:</strong>
-- <code>*_qa.png</code>
-- <code>*_qa.pdf</code>
-- <code>*_qa.json</code></p>
-<p>QA artifacts summarize reflectance distributions, masks, wavelength metadata, and BRDF/brightness statistics.
-See the <a href="../qa/">QA page</a> for details.</p>
+- <code>&lt;flight_id&gt;_qa.png</code>
+- <code>&lt;flight_id&gt;_qa.json</code>
+- <code>&lt;flight_id&gt;_qa.pdf</code> (when rendered)</p>
+<p>QA artefacts come from <code>render_flightline_panel</code> and mirror the canonical stems listed in <a href="../outputs/">Outputs</a>.</p>
 <hr />
-<h2 id="running-a-partial-pipeline">Running a partial pipeline<a class="headerlink" href="#running-a-partial-pipeline" title="Permanent link">&para;</a></h2>
-<p>You can run only part of the pipeline:</p>
-<div class="highlight"><pre><span></span><code>cscal-pipeline<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--start-at<span class="w"> </span>brdf<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--end-at<span class="w"> </span>convolution
-</code></pre></div>
-<p>Or run a single stage manually if needed.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../outputs/">Outputs &amp; file structure</a></li>
@@ -1856,10 +1785,10 @@ See the <a href="../qa/">QA page</a> for details.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
       

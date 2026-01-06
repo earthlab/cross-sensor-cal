@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
       
 
@@ -1253,10 +1253,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#start-at-and-end-at" class="md-nav__link">
+  <a href="#pipeline-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
-        start-at and end-at
+        Pipeline scope
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment variables
       
     </span>
   </a>
@@ -1265,6 +1276,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sensor-support-configuration-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sensor support &amp; configuration sources
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1661,23 +1683,59 @@
 </ul>
 <p>Use cautiously when memory is limited.</p>
 <hr />
-<h3 id="start-at-and-end-at"><code>start-at</code> and <code>end-at</code><a class="headerlink" href="#start-at-and-end-at" title="Permanent link">&para;</a></h3>
-<p>Define subsets of the pipeline to run.</p>
-<p>Example:</p>
-<p>```bash
---start-at brdf --end-at convolution
-Environment variables
-VariableMeaning
-CSCAL_TMPDIROverride temporary directory
-CSCAL_LOGLEVELSet logging verbosity
-CSCAL_RAY_ADDRESSUse an existing Ray cluster
-Advanced configuration
-These settings primarily matter for large-scale workflows:
-chunk sizes for Parquet extraction
-memory thresholds for Ray worker processes
-default CRS assignments
-sensor SRF paths
-Details of internal architecture appear in the Developer section.
+<h3 id="pipeline-scope">Pipeline scope<a class="headerlink" href="#pipeline-scope" title="Permanent link">&para;</a></h3>
+<p>The CLI currently runs the full stage sequence; idempotent checks in <code>process_one_flightline</code> skip work when outputs already exist.</p>
+<h3 id="environment-variables">Environment variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CSCAL_TMPDIR</code></td>
+<td>Override temporary directory</td>
+</tr>
+<tr>
+<td><code>CSCAL_LOGLEVEL</code></td>
+<td>Set logging verbosity</td>
+</tr>
+<tr>
+<td><code>CSCAL_RAY_ADDRESS</code></td>
+<td>Use an existing Ray cluster</td>
+</tr>
+</tbody>
+</table>
+<p>Advanced configuration
+These settings primarily matter for large-scale workflows:</p>
+<ul>
+<li>chunk sizes for Parquet extraction</li>
+<li>memory thresholds for Ray worker processes</li>
+<li>default CRS assignments</li>
+<li>sensor SRF paths</li>
+</ul>
+<p>Details of internal architecture appear in the Developer section.</p>
+<hr />
+<h2 id="sensor-support-configuration-sources">Sensor support &amp; configuration sources<a class="headerlink" href="#sensor-support-configuration-sources" title="Permanent link">&para;</a></h2>
+<p>Supported sensor outputs (from <code>FlightlinePaths.sensor_products</code>):</p>
+<ul>
+<li><code>landsat_tm</code></li>
+<li><code>landsat_etm+</code></li>
+<li><code>landsat_oli</code></li>
+<li><code>landsat_oli2</code></li>
+<li><code>micasense</code></li>
+<li><code>micasense_to_match_tm_etm+</code></li>
+<li><code>micasense_to_match_oli_oli2</code></li>
+</ul>
+<p>Spectral configuration comes from:</p>
+<ul>
+<li><code>cross_sensor_cal/data/landsat_band_parameters.json</code></li>
+<li><code>cross_sensor_cal/data/hyperspectral_bands.json</code></li>
+<li>brightness coefficients loaded via <code>load_brightness_coefficients(system_pair)</code> in <code>cross_sensor_cal/brightness_config.py</code> with tables stored under <code>cross_sensor_cal/data/brightness/*.json</code></li>
+</ul>
+<p>If you update brightness coefficients, refresh the JSON tables accordingly. Provenance/citation for brightness regression tables: (needs project decision).
 Next steps
 JSON schemas
 Validation metrics
@@ -1750,10 +1808,10 @@ Pipeline stages</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
       

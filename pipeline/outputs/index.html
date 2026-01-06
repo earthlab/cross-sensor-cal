@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
       
 
@@ -939,10 +939,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#flight-line-directory-layout" class="md-nav__link">
+  <a href="#per-flightline-outputs-canonical-names" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Flight line directory layout
+        Per-flightline outputs (canonical names)
       
     </span>
   </a>
@@ -950,93 +950,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#key-outputs" class="md-nav__link">
+  <a href="#where-outputs-come-from" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Key outputs
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Key outputs">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-corrected-envi-products" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1. Corrected ENVI products
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-sensor-harmonized-envi-cubes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Sensor-harmonized ENVI cubes
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-per-product-parquet-tables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Per-product Parquet tables
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-merged-pixel-extraction-table" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Merged pixel extraction table
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#5-qa-artifacts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5. QA artifacts
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#naming-conventions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Naming conventions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#using-outputs-in-analysis" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using outputs in analysis
+        Where outputs come from
       
     </span>
   </a>
@@ -1657,90 +1574,48 @@
 
 
 <h1 id="outputs-file-structure">Outputs &amp; File Structure<a class="headerlink" href="#outputs-file-structure" title="Permanent link">&para;</a></h1>
-<p>The cross-sensor-cal pipeline produces a consistent directory structure for each flight line. This page describes every artifact, what it contains, and how to use it.</p>
-<hr />
-<h2 id="flight-line-directory-layout">Flight line directory layout<a class="headerlink" href="#flight-line-directory-layout" title="Permanent link">&para;</a></h2>
-<p>A typical directory looks like:</p>
-<p>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/
-directional/
-topo/
-brdf/
-convolved/
-parquet/
-qa/</p>
-<p>Within each folder, ENVI images, Parquet tables, and sidecar JSON files share common prefixes.</p>
-<hr />
-<h2 id="key-outputs">Key outputs<a class="headerlink" href="#key-outputs" title="Permanent link">&para;</a></h2>
-<h3 id="1-corrected-envi-products">1. Corrected ENVI products<a class="headerlink" href="#1-corrected-envi-products" title="Permanent link">&para;</a></h3>
-<p><strong>Files:</strong></p>
-<p><em>_directional_reflectance_envi.img
-</em>_topocorrected_envi.img
-*_brdfandtopo_corrected_envi.img</p>
-<p><strong>Contents:</strong></p>
+<p>The pipeline writes every artefact into a per-flightline folder using naming rules shared by <code>FlightlinePaths</code> and <code>cross_sensor_cal.utils.naming</code>. All patterns below come directly from <code>src/cross_sensor_cal/paths.py</code> and are reused by the CLI and QA tools.</p>
+<h2 id="per-flightline-outputs-canonical-names">Per-flightline outputs (canonical names)<a class="headerlink" href="#per-flightline-outputs-canonical-names" title="Permanent link">&para;</a></h2>
+<p>Naming is centralized in <code>cross_sensor_cal.paths.FlightlinePaths</code> and <code>cross_sensor_cal.utils.naming.get_flightline_products</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Output</th>
+<th>Pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Raw ENVI</td>
+<td><code>&lt;flight_id&gt;_envi.(img|hdr)</code> with optional <code>&lt;flight_id&gt;_envi.parquet</code></td>
+</tr>
+<tr>
+<td>Corrected ENVI</td>
+<td><code>&lt;flight_id&gt;_brdfandtopo_corrected_envi.(img|hdr|json|parquet)</code></td>
+</tr>
+<tr>
+<td>Sensor outputs</td>
+<td><code>&lt;flight_id&gt;_&lt;sensor&gt;_envi.(img|hdr|parquet)</code> where <code>sensor</code> is one of <code>landsat_tm</code>, <code>landsat_etm+</code>, <code>landsat_oli</code>, <code>landsat_oli2</code>, <code>micasense</code>, <code>micasense_to_match_tm_etm+</code>, <code>micasense_to_match_oli_oli2</code></td>
+</tr>
+<tr>
+<td>Merged Parquet</td>
+<td><code>&lt;flight_id&gt;_merged_pixel_extraction.parquet</code></td>
+</tr>
+<tr>
+<td>QA</td>
+<td><code>&lt;flight_id&gt;_qa.png</code>, <code>&lt;flight_id&gt;_qa.json</code>, <code>&lt;flight_id&gt;_qa.pdf</code> (when rendered)</td>
+</tr>
+</tbody>
+</table>
+<p>Docs drift CI expects <code>_merged_pixel_extraction.parquet</code> and <code>_qa.png</code> to be mentioned; see <code>tools/doc_drift_audit.py</code>.</p>
+<h2 id="where-outputs-come-from">Where outputs come from<a class="headerlink" href="#where-outputs-come-from" title="Permanent link">&para;</a></h2>
 <ul>
-<li>reflectance bands  </li>
-<li>wavelength metadata  </li>
-<li>masks (cloud, shadow, water, snow, invalid)  </li>
-<li>CRS and pixel geometry  </li>
+<li>ENVI exports are produced in <code>stage_export_envi_from_h5</code> and validated in <code>process_one_flightline</code>.</li>
+<li>BRDF/topo correction plus the correction JSON are written by <code>stage_build_and_write_correction_json</code> and <code>stage_apply_brdf_and_topo</code>.</li>
+<li>Sensor-specific cubes follow the resample method passed to <code>process_one_flightline</code> and use the sensor list from <code>FlightlinePaths.sensor_products</code>.</li>
+<li>Parquet sidecars for raw, corrected, and resampled cubes are emitted by <code>_export_parquet_stage</code> and merged by <code>merge_flightline</code> into the canonical merged parquet.</li>
+<li>QA panels and metrics (<code>render_flightline_panel</code>) align with the same naming stems, including <code>_qa.png</code> and <code>_qa.json</code>.</li>
 </ul>
-<hr />
-<h3 id="2-sensor-harmonized-envi-cubes">2. Sensor-harmonized ENVI cubes<a class="headerlink" href="#2-sensor-harmonized-envi-cubes" title="Permanent link">&para;</a></h3>
-<p><strong>Files:</strong></p>
-<p>*_landsat_convolved_envi.img</p>
-<p>One file is produced for each requested sensor type.</p>
-<p><strong>Contents:</strong></p>
-<ul>
-<li>band-averaged reflectance values for the sensor  </li>
-<li>metadata documenting SRFs used  </li>
-<li>brightness adjustment coefficients (if applicable)  </li>
-</ul>
-<hr />
-<h3 id="3-per-product-parquet-tables">3. Per-product Parquet tables<a class="headerlink" href="#3-per-product-parquet-tables" title="Permanent link">&para;</a></h3>
-<p>Every ENVI file has a corresponding Parquet table:</p>
-<p><em>_brdfandtopo_corrected.parquet
-</em>_landsat_convolved.parquet</p>
-<p>Each row = one pixel.<br />
-Columns include:</p>
-<ul>
-<li>reflectance values  </li>
-<li>masks  </li>
-<li>wavelengths  </li>
-<li>pixel coordinates  </li>
-</ul>
-<p>These tables are ideal for large-scale analysis using DuckDB, pandas, or xarray.</p>
-<hr />
-<h3 id="4-merged-pixel-extraction-table">4. Merged pixel extraction table<a class="headerlink" href="#4-merged-pixel-extraction-table" title="Permanent link">&para;</a></h3>
-<p>*_merged_pixel_extraction.parquet</p>
-<p>This contains all extracted pixel-level data for the flight line, merged across products.</p>
-<hr />
-<h3 id="5-qa-artifacts">5. QA artifacts<a class="headerlink" href="#5-qa-artifacts" title="Permanent link">&para;</a></h3>
-<p><em>_qa.png
-</em>_qa.pdf
-*_qa.json</p>
-<p>See the <a href="../qa/">QA page</a> for details.</p>
-<hr />
-<h2 id="naming-conventions">Naming conventions<a class="headerlink" href="#naming-conventions" title="Permanent link">&para;</a></h2>
-<p>Files follow a consistent pattern:</p>
-<p><NEON ID><date><stage><sensor?><format>.{img|hdr|parquet}</p>
-<p>Examples:</p>
-<ul>
-<li><code>NEON_D13_NIWO_DP1_L020-1_20230815_brdfandtopo_corrected_envi.img</code>  </li>
-<li><code>NEON_D13_NIWO_DP1_L020-1_20230815_landsat_convolved_parquet</code>  </li>
-</ul>
-<p>The prefixes and suffixes are designed for predictable sorting and automation.</p>
-<hr />
-<h2 id="using-outputs-in-analysis">Using outputs in analysis<a class="headerlink" href="#using-outputs-in-analysis" title="Permanent link">&para;</a></h2>
-<p>Example with DuckDB:</p>
-<p>```python
-import duckdb
-duckdb.query("SELECT NIR, Red FROM '..._landsat_convolved.parquet' LIMIT 10").df()
-Example with rioxarray:
-import rioxarray as rxr
-cube = rxr.open_rasterio("..._brdfandtopo_corrected_envi.img")
-Next steps
-Pipeline stages
-QA panels &amp; metrics</p>
-<hr />
 
 
 
@@ -1808,10 +1683,10 @@ QA panels &amp; metrics</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
       

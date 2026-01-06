@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
       
 
@@ -1054,30 +1054,68 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#primary-command-cscal-pipeline" class="md-nav__link">
+  <a href="#cscal-download" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Primary command: cscal-pipeline
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Primary command: cscal-pipeline">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example
+        cscal-download
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#cscal-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cscal-pipeline
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cscal-qa" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cscal-qa
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cscal-recover-raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cscal-recover-raw
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cscal-qa-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cscal-qa-dashboard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#csc-merge-duckdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        csc-merge-duckdb
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1580,71 +1618,79 @@
 
 
 <h1 id="command-line-interface-cli">Command-Line Interface (CLI)<a class="headerlink" href="#command-line-interface-cli" title="Permanent link">&para;</a></h1>
-<p>The cross-sensor-cal CLI provides a unified, restart-safe workflow for processing NEON flight lines from raw HDF5 to corrected and sensor-harmonized ENVI/Parquet outputs. This page documents the primary commands, flags, and usage patterns.</p>
+<p>The CLI provides restart-safe entry points for downloading NEON flightlines, running the full pipeline, generating QA outputs, and merging Parquet artefacts.</p>
 <hr />
-<h2 id="primary-command-cscal-pipeline">Primary command: <code>cscal-pipeline</code><a class="headerlink" href="#primary-command-cscal-pipeline" title="Permanent link">&para;</a></h2>
-<p>This is the recommended entry point for processing NEON hyperspectral data.</p>
-<h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
-<p>```bash
-cscal-pipeline \
-  --base-folder output \
-  --site-code NIWO \
-  --year-month 2023-08 \
-  --product-code DP1.30006.001 \
-  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
-  --engine thread \
-  --max-workers 4
-Required arguments
-FlagDescription
---base-folderRoot directory for all outputs
---site-codeNEON site code (e.g., NIWO, KONZ)
---year-monthAcquisition month in YYYY-MM format
---product-codeNEON product code (usually DP1.30006.001)
---flight-linesOne or more NEON flight line identifiers
-Optional arguments
-FlagDescription
---engine {thread,ray}Execution engine
---max-workersNumber of parallel workers
---start-atStage to begin the pipeline
---end-atStage to stop the pipeline
---cleanRemove intermediate files
---dry-runPrint what would be run without executing
-Pipeline stages
-You may specify partial workflows:
-cscal-pipeline \
-  --start-at brdf \
-  --end-at convolution
-Valid stages:
-download
-export-envi
-topo
-brdf
-convolution
-parquet
-qa
-Engine selection
-Thread engine (default)
-Suitable for local machines and moderate-sized flight lines.
-Ray engine
-Install:
-pip install cross-sensor-cal[ray]
-Run:
-cscal-pipeline --engine ray ...
-Use Ray for:
-batch processing of many flight lines
-distributed cloud/HPC environments
-large-scale Parquet extraction
-Inspecting available options
-cscal-pipeline --help
-This prints detailed descriptions for every flag.
-Other CLI tools
-Brief mention (documented elsewhere)
-cscal-micasense-to-landsat
-debugging utilities (internal / experimental)
-These experimental tools may change as the package evolves.
-Next steps
-Working with Parquet outputs
-Pipeline stages</p>
+<h2 id="cscal-download"><code>cscal-download</code><a class="headerlink" href="#cscal-download" title="Permanent link">&para;</a></h2>
+<p>Purpose: Download NEON HDF5 flightlines into a workspace (<code>cross_sensor_cal.cli:download_main</code>).</p>
+<p><strong>Usage:</strong></p>
+<div class="highlight"><pre><span></span><code>cscal-download
+</code></pre></div>
+<p><strong>Key options:</strong>
+- <code>site</code> (positional) and <code>--year-month</code> (required) identify the NEON flightlines.
+- <code>--flight</code> (repeatable) lists flightline IDs.
+- <code>--product</code> sets the NEON product code (default <code>DP1.30006.001</code>).
+- <code>--output</code> controls the destination directory (default <code>data</code>).</p>
+<p><strong>Outputs:</strong> HDF5 files saved under <code>&lt;output&gt;/&lt;site&gt;/</code> for later <code>cscal-pipeline</code> runs.</p>
+<hr />
+<h2 id="cscal-pipeline"><code>cscal-pipeline</code><a class="headerlink" href="#cscal-pipeline" title="Permanent link">&para;</a></h2>
+<p>Purpose: Run the full cross-sensor pipeline (<code>cross_sensor_cal.cli.pipeline_cli:main</code>).</p>
+<p><strong>Usage:</strong></p>
+<div class="highlight"><pre><span></span><code>cscal-pipeline
+</code></pre></div>
+<p><strong>Key options:</strong>
+- Required: <code>--base-folder</code>, <code>--site-code</code>, <code>--year-month</code>, <code>--product-code</code>, <code>--flight-lines</code>.
+- Resampling: <code>--resample-method</code> (<code>convolution</code>, <code>legacy</code>, or <code>resample</code>).
+- Performance: <code>--engine</code> (<code>thread</code>, <code>process</code>, <code>ray</code>), <code>--max-workers</code> (defaults to 8), <code>--parquet-chunk-size</code>.
+- Merge tuning: <code>--merge-memory-limit</code>, <code>--merge-threads</code>, <code>--merge-row-group-size</code>, <code>--merge-temp-directory</code>.
+- Radiometry: <code>--brightness-offset</code> for ENVI export.</p>
+<p><strong>Outputs:</strong> Everything listed in <a href="../../pipeline/outputs/">Outputs</a>, including <code>_merged_pixel_extraction.parquet</code> and <code>_qa.png</code>.</p>
+<hr />
+<h2 id="cscal-qa"><code>cscal-qa</code><a class="headerlink" href="#cscal-qa" title="Permanent link">&para;</a></h2>
+<p>Purpose: Re-render QA panels/metrics for existing flightline folders (<code>cross_sensor_cal.cli.qa_cli:main</code>).</p>
+<p><strong>Usage:</strong></p>
+<div class="highlight"><pre><span></span><code>cscal-qa
+</code></pre></div>
+<p><strong>Key options:</strong>
+- <code>--base-folder</code> (required) points to the workspace containing flightline directories.
+- Sampling: <code>--quick</code> (25k deterministic sample) vs <code>--full</code> (use configured size), <code>--n-sample</code> to override pixel count.
+- <code>--rgb-bands</code> to override RGB band selection.
+- <code>--save-json</code> to toggle writing <code>&lt;flight_id&gt;_qa.json</code>.
+- <code>--out-dir</code> to copy PNG/JSON outputs elsewhere after generation.</p>
+<p><strong>Outputs:</strong> QA PNG/JSON (and PDF if rendered) following the naming in <a href="../../pipeline/outputs/">Outputs</a>.</p>
+<hr />
+<h2 id="cscal-recover-raw"><code>cscal-recover-raw</code><a class="headerlink" href="#cscal-recover-raw" title="Permanent link">&para;</a></h2>
+<p>Purpose: Backfill raw ENVI exports when corrected products already exist (<code>cross_sensor_cal.cli.recover_cli:main</code>).</p>
+<p><strong>Usage:</strong></p>
+<div class="highlight"><pre><span></span><code>cscal-recover-raw
+</code></pre></div>
+<p><strong>Key options:</strong>
+- <code>--base-folder</code> (required) where HDF5 and flightline folders live.
+- <code>--brightness-offset</code> to pass through to <code>stage_export_envi_from_h5</code>.</p>
+<p><strong>Outputs:</strong> Restores <code>&lt;flight_id&gt;_envi.(img|hdr)</code> so later stages can proceed or be revalidated.</p>
+<hr />
+<h2 id="cscal-qa-dashboard"><code>cscal-qa-dashboard</code><a class="headerlink" href="#cscal-qa-dashboard" title="Permanent link">&para;</a></h2>
+<p>Purpose: Aggregate QA metrics across flightlines and build an overview plot (<code>cross_sensor_cal.qa_dashboard:main</code>).</p>
+<p><strong>Usage:</strong></p>
+<div class="highlight"><pre><span></span><code>cscal-qa-dashboard
+</code></pre></div>
+<p><strong>Key options:</strong>
+- <code>--base-folder</code> (required) root containing flightline outputs.
+- <code>--out-parquet</code> to choose the aggregated summary parquet path.
+- <code>--out-png</code> to choose the dashboard PNG path.</p>
+<p><strong>Outputs:</strong> <code>qa_dashboard_summary.parquet</code> and <code>qa_dashboard_summary.png</code> (default locations inside the base folder) summarizing <code>&lt;flight_id&gt;_qa_metrics.parquet</code> tables.</p>
+<hr />
+<h2 id="csc-merge-duckdb"><code>csc-merge-duckdb</code><a class="headerlink" href="#csc-merge-duckdb" title="Permanent link">&para;</a></h2>
+<p>Purpose: Merge per-product Parquet tables into a master parquet and optional QA panel (<code>cross_sensor_cal.merge_duckdb:main</code>).</p>
+<p><strong>Usage:</strong></p>
+<div class="highlight"><pre><span></span><code>csc-merge-duckdb
+</code></pre></div>
+<p><strong>Key options:</strong>
+- <code>--data-root</code> (required) and <code>--flightline-glob</code> to locate flightline folders.
+- <code>--out-name</code> to override the default <code>&lt;prefix&gt;_merged_pixel_extraction.parquet</code>.
+- Input globs: <code>--original-glob</code>, <code>--corrected-glob</code>, <code>--resampled-glob</code>.
+- QA and format controls: <code>--no-qa</code> to skip PNG, <code>--write-feather</code> to emit Feather alongside Parquet.
+- Merge tuning: <code>--merge-memory-limit</code>, <code>--merge-threads</code>, <code>--merge-row-group-size</code>, <code>--merge-temp-directory</code>.</p>
+<p><strong>Outputs:</strong> Merged parquet (and optional QA PNG/JSON) matching the naming patterns in <a href="../../pipeline/outputs/">Outputs</a>.</p>
 <hr />
 
 
@@ -1713,10 +1759,10 @@ Pipeline stages</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "toc.integrate", "content.action.edit", "content.code.copy", "content.tabs.link", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
       
