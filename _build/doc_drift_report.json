@@ -136,12 +136,18 @@
     "\ud83e\uddf1 Using Parquet row group size of %s rows"
   ],
   "entry_points": {
-    "cscal-download": "cross_sensor_cal.cli:download_main",
-    "cscal-pipeline": "cross_sensor_cal.cli.pipeline_cli:main",
-    "cscal-qa": "cross_sensor_cal.cli.qa_cli:main",
-    "cscal-recover-raw": "cross_sensor_cal.cli.recover_cli:main",
-    "cscal-qa-dashboard": "cross_sensor_cal.qa_dashboard:main",
-    "csc-merge-duckdb": "cross_sensor_cal.merge_duckdb:main"
+    "spectralbridge-download": "spectralbridge.cli:download_main",
+    "spectralbridge-pipeline": "spectralbridge.cli.pipeline_cli:main",
+    "spectralbridge-qa": "spectralbridge.cli.qa_cli:main",
+    "spectralbridge-recover-raw": "spectralbridge.cli.recover_cli:main",
+    "spectralbridge-qa-dashboard": "spectralbridge.qa_dashboard:main",
+    "spectralbridge-merge-duckdb": "spectralbridge.merge_duckdb:main",
+    "cscal-download": "spectralbridge.cli:download_main",
+    "cscal-pipeline": "spectralbridge.cli.pipeline_cli:main",
+    "cscal-qa": "spectralbridge.cli.qa_cli:main",
+    "cscal-recover-raw": "spectralbridge.cli.recover_cli:main",
+    "cscal-qa-dashboard": "spectralbridge.qa_dashboard:main",
+    "csc-merge-duckdb": "spectralbridge.merge_duckdb:main"
   },
   "cli_flags": {
     "topo_and_brdf_correction.py": [

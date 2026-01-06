@@ -1,219 +1,219 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/benchmarks/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/benchmarks/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/brdf_topo_algorithm/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/brdf_topo_algorithm/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/configuration/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/configuration/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/cyverse-irods/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/cyverse-irods/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/dev-notes/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/dev-notes/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/documentation-overview/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/documentation-overview/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/documentation_style_guide/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/documentation_style_guide/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/env-setup/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/env-setup/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/env/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/env/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/extending/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/extending/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/faq/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/faq/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/glossary/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/glossary/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/naming-conventions/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/naming-conventions/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/overview/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/overview/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/pipeline/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/qa/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/qa/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/quickstart/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/quickstart/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/refactor_notes/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/refactor_notes/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/references/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/references/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/schemas/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/schemas/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/stage-03-pixel-extraction/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/stage-03-pixel-extraction/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/stage-04-spectral-library/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/stage-04-spectral-library/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/stage-05-mesma/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/stage-05-mesma/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/troubleshooting/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/troubleshooting/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/validation/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/validation/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/_build/doc_drift_report/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/_build/doc_drift_report/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/api/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/api/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/api/merge_duckdb/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/api/merge_duckdb/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/api/qa_plots/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/api/qa_plots/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/concepts/why-calibration/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/concepts/why-calibration/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/dev/architecture/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/dev/architecture/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/dev/codex-guidelines/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/dev/codex-guidelines/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/dev/contributing/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/dev/contributing/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/dev/doc_drift/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/dev/doc_drift/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/dev/doc_drift_report/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/dev/doc_drift_report/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/outputs/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/pipeline/outputs/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/polygons/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/pipeline/polygons/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/qa/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/pipeline/qa/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/qa_panel/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/pipeline/qa_panel/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/pipeline/stages/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/pipeline/stages/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/reference/configuration/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/reference/configuration/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/reference/extending/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/reference/extending/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/reference/schemas/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/reference/schemas/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/reference/validation/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/reference/validation/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/cloud-workflow/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/tutorials/cloud-workflow/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/micasense-to-landsat/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/tutorials/micasense-to-landsat/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/neon-to-envi/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/tutorials/neon-to-envi/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/tutorials/neon-to-landsat/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/tutorials/neon-to-landsat/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/usage/cli/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/usage/cli/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/usage/notebook-example/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/usage/notebook-example/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/usage/parquet/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/usage/parquet/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/usage/parquet_preview/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/usage/parquet_preview/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
     <url>
-         <loc>https://earthlab.github.io/cross-sensor-cal/usage/recipes/</loc>
+         <loc>https://earthlab.github.io/spectralbridge/usage/recipes/</loc>
          <lastmod>2026-01-06</lastmod>
     </url>
 </urlset>
