@@ -9,6 +9,10 @@ edit_uri: edit/main/docs/
 theme:
   name: material
   logo: asset/img/spectralbridge_logo.png
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
   features:
     - navigation.instant
     - navigation.tracking
@@ -76,6 +80,7 @@ plugins:
   - macros
 
 extra_css:
+  - stylesheets/spectralbridge.css
   - https://cdn.jsdelivr.net/npm/glightbox/dist/css/glightbox.min.css
 
 extra_javascript:

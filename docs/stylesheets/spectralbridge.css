@@ -1,0 +1,24 @@
+:root {
+  --md-primary-fg-color: #0B4F8A;
+  --md-primary-bg-color: #FFFFFF;
+  --md-accent-fg-color: #F2B705;
+  --md-typeset-a-color: #0B4F8A;
+
+  --md-code-bg-color: #F5F7F9;
+  --md-code-fg-color: #1F2937;
+
+  --sb-green: #2E8B57;
+}
+
+/* Subtle Canopy Green accent for note admonitions */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: var(--sb-green);
+  border-left-width: 0.3rem;
+  background-color: inherit;
+}
+
+.md-typeset .admonition.note > .admonition-title,
+.md-typeset details.note > summary {
+  color: var(--sb-green);
+}
