@@ -116,7 +116,7 @@ The PDF version includes multi-page diagnostics and expanded panels.
 Proceed to:
 
 - [NEON → Landsat reflectance](neon-to-landsat.md)
-- [Pipeline stages](../pipeline/README.md) for in-depth explanations
-- [Working with Parquet](../concepts/working-with-parquet.md) to extract and analyze pixel spectra
+- [Pipeline stages](../pipeline/stages.md) for in-depth explanations
+- [Working with Parquet](../usage/parquet.md) to extract and analyze pixel spectra
 
 ---
