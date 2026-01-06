@@ -783,6 +783,61 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#2-run-the-pipeline-for-one-flight-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Run the pipeline for one flight line
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-what-the-corrected-envi-product-contains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. What the corrected ENVI product contains
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-inspect-the-corrected-envi-cube" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Inspect the corrected ENVI cube
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-inspect-qa-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Inspect QA outputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1601,72 +1656,89 @@
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <p>You will learn how to:</p>
 <ol>
-<li>download NEON directional reflectance tiles  </li>
-<li>export them to ENVI format  </li>
-<li>apply topographic correction  </li>
-<li>apply BRDF correction  </li>
-<li>inspect corrected outputs and QA artifacts  </li>
+<li>download NEON directional reflectance tiles</li>
+<li>export them to ENVI format</li>
+<li>apply topographic correction</li>
+<li>apply BRDF correction</li>
+<li>inspect corrected outputs and QA artifacts</li>
 </ol>
 <p>This tutorial assumes you have installed SpectralBridge and have run through the <a href="../../quickstart/">Quickstart</a>.</p>
 <hr />
 <h2 id="1-set-up-a-working-directory">1. Set up a working directory<a class="headerlink" href="#1-set-up-a-working-directory" title="Permanent link">&para;</a></h2>
-<p>```bash
-BASE=output_neon_to_envi
-mkdir -p "$BASE"
-2. Run the pipeline for one flight line
-Here we process a single NEON hyperspectral flight line at NIWO.
-spectralbridge-pipeline \
-  --base-folder "$BASE" \
-  --site-code NIWO \
-  --year-month 2023-08 \
-  --product-code DP1.30006.001 \
-  --flight-lines NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
-  --engine thread \
-  --max-workers 2
-The command will:
-fetch the necessary HDF5 files
-export directional reflectance to ENVI (<em>_envi.img/.hdr)
-apply topographic correction
-apply BRDF correction
-write corrected ENVI reflectance (</em>_brdfandtopo_corrected_envi.img)
-generate QA PNG, PDF, and JSON files
-Re-running the command will skip completed stages.
-3. What the corrected ENVI product contains
-A corrected flight line directory contains files such as:
-<em>_directional_reflectance_envi.img
-</em>_topocorrected_envi.img
-<em>_brdfandtopo_corrected_envi.img
-</em>_qa.png
-<em>_qa.pdf
-</em>_qa.json
-The key output is:
-*_brdfandtopo_corrected_envi.img
-This file contains physically corrected reflectance values suitable for sensor harmonization or modeling.
-4. Inspect the corrected ENVI cube
-You can view the ENVI product using:
-ENVI/IDL
-QGIS (with raster bands exposed)
-Python libraries such as rioxarray or spectral
-Example in Python:
-import rioxarray as rxr</p>
-<p>cube = rxr.open_rasterio("path/to/..._brdfandtopo_corrected_envi.img")
-cube
-This loads the corrected reflectance cube into an xarray DataArray.
-5. Inspect QA outputs
-Open the QA PNG:
-open "$BASE/..._qa.png"
-The QA panel includes:
-reflectance range checks
-brightness differences across correction stages
-mask summary statistics
-wavelength and band metadata
-BRDF / topographic coefficient summaries
-The PDF version includes multi-page diagnostics and expanded panels.
-6. Next steps
-Proceed to:
-NEON → Landsat reflectance
-Pipeline stages for in-depth explanations
-Working with Parquet to extract and analyze pixel spectra</p>
+<div class="highlight"><pre><span></span><code><span class="nv">BASE</span><span class="o">=</span>output_neon_to_envi
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="2-run-the-pipeline-for-one-flight-line">2. Run the pipeline for one flight line<a class="headerlink" href="#2-run-the-pipeline-for-one-flight-line" title="Permanent link">&para;</a></h2>
+<p>Here we process a single NEON hyperspectral flight line at NIWO.</p>
+<div class="highlight"><pre><span></span><code>spectralbridge-pipeline<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--base-folder<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--flight-lines<span class="w"> </span>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--engine<span class="w"> </span>thread<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span>
+</code></pre></div>
+<p>The command will:</p>
+<ul>
+<li>fetch the necessary HDF5 files</li>
+<li>export directional reflectance to ENVI (<code>*_envi.img/.hdr</code>)</li>
+<li>apply topographic correction</li>
+<li>apply BRDF correction</li>
+<li>write corrected ENVI reflectance (<code>*_brdfandtopo_corrected_envi.img</code>)</li>
+<li>generate QA PNG, PDF, and JSON files</li>
+</ul>
+<p>Re-running the command will skip completed stages.</p>
+<hr />
+<h2 id="3-what-the-corrected-envi-product-contains">3. What the corrected ENVI product contains<a class="headerlink" href="#3-what-the-corrected-envi-product-contains" title="Permanent link">&para;</a></h2>
+<p>A corrected flight line directory contains files such as:</p>
+<ul>
+<li><code>*_directional_reflectance_envi.img</code></li>
+<li><code>*_topocorrected_envi.img</code></li>
+<li><code>*_brdfandtopo_corrected_envi.img</code></li>
+<li><code>*_qa.png</code></li>
+<li><code>*_qa.pdf</code></li>
+<li><code>*_qa.json</code></li>
+</ul>
+<p>The key output is <code>*_brdfandtopo_corrected_envi.img</code>, which contains physically corrected reflectance values suitable for sensor harmonization or modeling.</p>
+<hr />
+<h2 id="4-inspect-the-corrected-envi-cube">4. Inspect the corrected ENVI cube<a class="headerlink" href="#4-inspect-the-corrected-envi-cube" title="Permanent link">&para;</a></h2>
+<p>You can view the ENVI product using:</p>
+<ul>
+<li>ENVI/IDL</li>
+<li>QGIS (with raster bands exposed)</li>
+<li>Python libraries such as <code>rioxarray</code> or <code>spectral</code></li>
+</ul>
+<p>Example in Python:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">rioxarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rxr</span>
+
+<span class="n">cube</span> <span class="o">=</span> <span class="n">rxr</span><span class="o">.</span><span class="n">open_rasterio</span><span class="p">(</span><span class="s2">&quot;path/to/..._brdfandtopo_corrected_envi.img&quot;</span><span class="p">)</span>
+<span class="n">cube</span>
+</code></pre></div>
+<p>This loads the corrected reflectance cube into an <code>xarray.DataArray</code>.</p>
+<hr />
+<h2 id="5-inspect-qa-outputs">5. Inspect QA outputs<a class="headerlink" href="#5-inspect-qa-outputs" title="Permanent link">&para;</a></h2>
+<p>Open the QA PNG:</p>
+<div class="highlight"><pre><span></span><code>open<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">/..._qa.png&quot;</span>
+</code></pre></div>
+<p>The QA panel includes:</p>
+<ul>
+<li>reflectance range checks</li>
+<li>brightness differences across correction stages</li>
+<li>mask summary statistics</li>
+<li>wavelength and band metadata</li>
+<li>BRDF / topographic coefficient summaries</li>
+</ul>
+<p>The PDF version includes multi-page diagnostics and expanded panels.</p>
+<hr />
+<h2 id="6-next-steps">6. Next steps<a class="headerlink" href="#6-next-steps" title="Permanent link">&para;</a></h2>
+<p>Proceed to:</p>
+<ul>
+<li><a href="../neon-to-landsat/">NEON → Landsat reflectance</a></li>
+<li><a href="../../pipeline/stages/">Pipeline stages</a> for in-depth explanations</li>
+<li><a href="../../usage/parquet/">Working with Parquet</a> to extract and analyze pixel spectra</li>
+</ul>
 <hr />
 
 
