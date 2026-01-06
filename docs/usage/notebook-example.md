@@ -1,93 +1,97 @@
-# Jupyter Notebook Example
+# Start Here: Notebook Workflow
 
-This page shows a complete Jupyter-style workflow using cross-sensor-cal:
-
-1. Run the pipeline from Python  
-2. Preview the merged Parquet table  
-3. Compute a simple NDVI diagnostic  
-
-You can copy these cells directly into a notebook.
+This page is the canonical notebook-first path for running cross-sensor-cal. It walks through one successful flightline run that produces harmonized, Landsat-referenced outputs on disk—not return values—so you can bridge UAS and NEON observations to the long-term Landsat record without touching the CLI.
 
 ---
 
-## 1. Imports and configuration
+## 1) Minimal setup
 
 ```python
-import os
-import duckdb
-import pandas as pd
-
-from cross_sensor_cal import go_forth_and_multiply
-
-base_folder = "output_notebook_demo"
-site_code = "NIWO"
-year_month = "2023-08"
-product_code = "DP1.30006.001"
-flight_lines = ["NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"]
-2. Run the pipeline from Python
-go_forth_and_multiply(
-    base_folder=base_folder,
-    site_code=site_code,
-    year_month=year_month,
-    product_code=product_code,
-    flight_lines=flight_lines,
-    max_workers=2,
-    engine="thread",  # start with thread; switch to "ray" if configured
+import cross_sensor_cal
+from cross_sensor_cal.pipelines.pipeline import (
+    process_one_flightline,
+    go_forth_and_multiply,
 )
-This cell will:
-download NEON HDF5 tiles if needed
-export ENVI cubes
-apply topographic + BRDF correction
-convolve to Landsat (if configured)
-write Parquet tables
-generate QA PNG, PDF, and JSON
-3. Locate the merged Parquet file
-fl_prefix = flight_lines[0]
-fl_dir = os.path.join(base_folder, fl_prefix)
+```
 
-merged = os.path.join(
-    fl_dir,
-    f"{fl_prefix}_merged_pixel_extraction.parquet",
-)
-merged
-4. Preview the merged table with DuckDB
-con = duckdb.connect()
-
-head_df = con.execute(
-    f"SELECT * FROM read_parquet('{merged}') LIMIT 5"
-).df()
-head_df
-5. Compute a quick NDVI diagnostic
-This example assumes Landsat-style band names Red and NIR are present in the merged table.
-ndvi_df = con.execute(
-    """
-    SELECT
-      Red,
-      NIR,
-      (NIR - Red) / NULLIF(NIR + Red, 0) AS ndvi
-    FROM read_parquet($merged)
-    LIMIT 5000
-    """,
-    {"merged": merged},
-).df()
-
-ndvi_df["ndvi"].describe()
-You can extend this pattern to:
-filter by masks
-aggregate by plot or polygon
-export subsets for modeling
-6. Visualize NDVI distribution (optional)
-If you have matplotlib installed:
-import matplotlib.pyplot as plt
-
-ndvi_df["ndvi"].plot.hist(bins=50)
-plt.xlabel("NDVI")
-plt.ylabel("Count")
-plt.title("NDVI distribution (sample)")
-plt.show()
-Next steps
-Quickstart
-Working with Parquet outputs
-Pipeline overview & stages
+Use `process_one_flightline` when you are exploring or validating a single flightline. Use `go_forth_and_multiply` when you have a list of flightlines and want the same pipeline applied in batch.
 
 ---
+
+## 2) Canonical single-flightline example
+
+```python
+from pathlib import Path
+
+# Where all artifacts will be written
+base_folder = Path("csc_output")
+
+# Identify the NEON site and acquisition window for clarity
+site_code = "NIWO"
+year_month = "2023-08"
+flightline_id = "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"
+
+# Run the structured, skip-aware pipeline for one flightline
+process_one_flightline(
+    base_folder=base_folder,
+    product_code="DP1.30006.001",  # NEON hyperspectral product
+    flight_stem=flightline_id,
+)
+```
+
+The defaults handle topographic + BRDF correction, spectral convolution into the Landsat frame, brightness adjustment, Parquet export, and QA generation. Re-running the cell will skip stages that are already valid so interrupted sessions can resume safely.
+
+---
+
+## 3) What gets created
+
+A successful run produces a directory named after the flightline inside `base_folder` containing:
+
+- Corrected ENVI reflectance cubes.
+- Landsat-resampled ENVI cubes and Parquet sidecars.
+- `{flightline_id}_merged_pixel_extraction.parquet` (the master table that merges all Parquet sidecars).
+- `{flightline_id}_qa.png` and `{flightline_id}_qa.json` (visual + numeric QA summaries).
+
+Existing, validated outputs are reused on subsequent runs, so partial runs can be resumed without starting over. Seeing both the merged Parquet and QA artifacts is a good signal that the end-to-end pipeline completed.
+
+---
+
+## 4) Inspect results in the notebook
+
+Load the merged Parquet table to confirm the expected columns and a few rows:
+
+```python
+import pandas as pd
+
+flight_dir = base_folder / flightline_id
+merged_parquet = flight_dir / f"{flightline_id}_merged_pixel_extraction.parquet"
+
+merged_df = pd.read_parquet(merged_parquet)
+merged_df.head()
+```
+
+Check the available fields to guide downstream analysis:
+
+```python
+sorted(merged_df.columns)
+```
+
+Locate the QA outputs so you can open them in your notebook or file browser:
+
+```python
+qa_png = flight_dir / f"{flightline_id}_qa.png"
+qa_json = flight_dir / f"{flightline_id}_qa.json"
+
+qa_png, qa_json
+```
+
+Use your notebook environment to display the PNG or parse the JSON for validation details.
+
+---
+
+## 5) What to do next
+
+- Browse notebook [recipes](recipes.md) for batch runs, QA refreshes, and quick exploration patterns.
+- Review [Outputs & naming](../pipeline/outputs.md) to understand the file contract and where to find products.
+- Read the [Concepts](../concepts/why-calibration.md) section for the rationale behind the Landsat-referenced normalization.
+- If you prefer or need the command-line interface, see the [CLI reference](cli.md).

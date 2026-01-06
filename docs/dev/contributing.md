@@ -1,70 +1,71 @@
 # Contributing & Development Workflow
 
-We welcome contributions from the community. This page outlines the workflow for proposing changes, running tests, and maintaining documentation quality.
+We welcome contributions from the community. This page outlines expectations for maintaining scientific guarantees, the checks that enforce them, and where to change code safely.
 
 ---
 
-## Basic principles
+## Design philosophy and invariants
 
-- Keep all processing steps **transparent and auditable**  
-- Do not introduce new scientific claims without citation or review  
-- Maintain consistent naming and directory conventions  
-- Ensure any new feature is accompanied by documentation updates  
+- Preserve reproducibility: stages are idempotent and restart-safe; do not add side effects that bypass existing skip logic.
+- Respect ordering: `process_one_flightline` and `go_forth_and_multiply` must continue to run stages in the documented sequence.
+- Treat filenames as contracts: `FlightlinePaths` and naming utilities define how users and CI locate outputs.
+- Outputs over returns: ENVI/Parquet/QA artifacts are the primary interface and must remain stable.
+
+---
+
+## Continuous integration and guarantees
+
+CI workflows enforce the invariants above:
+
+- **Lint + smoke (`ci.yml`, lite job):** `ruff check src tests` and `pytest -q -m "lite"` with `CSCAL_TEST_MODE=lite` on Python 3.11.
+- **Full tests (`ci.yml`, unit job):** `pytest -q` with `CSCAL_TEST_MODE=unit` after lite completes.
+- **QA quick check (`qa-ci.yml`):** runs `pytest tests/test_qa -q` and renders a QA fixture image/JSON to ensure `_qa.*` outputs remain consistent.
+- **Docs build (`docs.yml`):** `python tools/site_prepare.py` then `mkdocs build --strict` plus a best-effort link check.
+- **Docs drift (`docs-drift.yml`):** `python tools/doc_drift_audit.py` flags missing mentions of critical artifacts; `_merged_pixel_extraction.parquet` and `_qa.png` are treated as required outputs in examples.
+
+Run the key checks locally before opening a PR:
+
+```bash
+ruff check src tests
+python -m pytest -m lite
+python -m pytest
+python tools/site_prepare.py && mkdocs build --strict
+```
+
+---
+
+## How to extend the system safely
+
+### Adding or modifying a target sensor
+- Update spectral parameters in `cross_sensor_cal/data/landsat_band_parameters.json` (or add an analogous entry) and ensure `standard_resample.py` can consume them.
+- Confirm `get_flightline_products`/`FlightlinePaths` emit filenames for the new sensor and that merged Parquet and QA outputs remain unchanged.
+- Add tests that validate resampled bands and naming; do not change stage ordering or skip logic.
+
+### Updating brightness or calibration coefficients
+- Coefficients live under `cross_sensor_cal/data/brightness/` and are loaded via `brightness_config`. Keep keys stable so regression lookups continue to work.
+- Re-run QA-focused tests and inspect QA outputs against Landsat-referenced expectations after changes.
+
+### Modifying QA outputs
+- QA artifacts (`<flight_id>_qa.png`, `<flight_id>_qa.json`) are consumed by docs, drift checks, and downstream users. Preserve these filenames even if adding metrics or plots.
+- Update `tests/test_qa` and any quick-mode fixtures if output contents change; ensure CI still passes without downloading large datasets.
+
+### Changing extraction or merge logic
+- Merged Parquet files (`<flight_id>_merged_pixel_extraction.parquet`) are the contract for downstream analysis. Maintain column consistency and schema ordering expected by users and tests.
+- If adding columns, keep existing ones intact and document the change in the outputs contract page.
+
+---
+
+## Relationship to scientific reproducibility
+
+- The repository implements the workflow described in the RSE manuscript, so code changes can affect published analyses.
+- Explicit artifacts (ENVI, Parquet, QA) plus drift and QA checks provide an audit trail; contributors are stewards of that record.
+- When altering calibration tables, QA logic, or stage ordering, consider how prior runs would be reproduced and update documentation accordingly.
 
 ---
 
 ## Development environment
 
-Install the package in editable mode:
-
-```bash
-pip install -e ".[dev]"
-Run tests:
-pytest
-Build documentation:
-mkdocs build
-Making code changes
-Open an issue describing the proposed change
-Create a feature branch
-Add or update unit tests
-Update relevant documentation pages
-Submit a pull request
-Modifying documentation
-Update Markdown files directly under docs/
-Ensure navigation in mkdocs.yml remains valid
-Keep sections coherent and avoid duplication
-Run mkdocs serve locally to preview
-Adding datasets or SRFs
-Place files under cross_sensor_cal/data/
-Update relevant stages to load the new assets
-Document usage in tutorials
-Coding standards
-Prefer pure functions and isolated dependencies
-Avoid large in-memory operations unless necessary
-Log processing decisions clearly
-Next steps
-Package architecture
-Codex edit guidelines
-
----
-
-## Continuous Integration (CI) and test markers
-
-What runs in CI (from `.github/workflows/*.yml`):
-
-- Ubuntu runners with Python 3.11 for all jobs.
-- Lint + smoke: `ruff check src tests` and `pytest -q -m "lite"` with `CSCAL_TEST_MODE=lite`.
-- Full tests: `pytest -q` with `CSCAL_TEST_MODE=unit`.
-- Docs: `python tools/site_prepare.py` then `mkdocs build --strict`, plus a best-effort `linkchecker` pass.
-- Docs drift: `python tools/doc_drift_audit.py` with a hard check that `_merged_pixel_extraction.parquet` and `_qa.png` are mentioned.
-- QA quick check: `pytest tests/test_qa -q` followed by generating a QA panel fixture image/JSON.
-
-Run locally with:
-
-```bash
-python -m pytest -m lite
-python -m pytest
-mkdocs build --strict
-```
-
----
+- Install in editable mode: `pip install -e ".[dev]"`
+- Prefer pure functions and clear logging; avoid needless in-memory copies.
+- Update documentation alongside code changes to keep drift checks green.
+- Open an issue, work on a feature branch, add tests, and submit a pull request once checks pass.
