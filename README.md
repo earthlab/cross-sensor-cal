@@ -1,4 +1,4 @@
-# SpectralBridge — Translating reflectance across sensors and scales
+# SpectralBridge — Translating surface reflectance across sensors and scales
 
 **SpectralBridge (formerly cross-sensor-cal)** is a modular Python-based tool that adjusts fine-resolution (few centimeters to ~ 5 meters) “pure” spectra from airborne imaging spectroscopy (IS) and uncrewed aerial system (UAS) multispectral imagery to match the spectral configurations of moderate-resolution satellite sensors (over 30 meters).
 
