@@ -26,7 +26,7 @@ def load_brightness_coefficients(
     - Values are stored in percent (e.g., -7.3959 means "reduce by 7.3959%").
     """
     filename = f"{system_pair}.json"
-    with resources.files("cross_sensor_cal.data.brightness").joinpath(filename).open(
+    with resources.files("spectralbridge.data.brightness").joinpath(filename).open(
         "r", encoding="utf-8"
     ) as f:
         cfg = json.load(f)

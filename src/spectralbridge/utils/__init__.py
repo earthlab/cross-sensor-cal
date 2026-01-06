@@ -1,4 +1,4 @@
-"""Utility helpers for :mod:`cross_sensor_cal`."""
+"""Utility helpers for :mod:`spectralbridge`."""
 
 from .paths import get_package_data_path
 

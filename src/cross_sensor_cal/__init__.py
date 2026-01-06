@@ -1,67 +1,34 @@
-"""Cross-Sensor Calibration public package surface."""
+"""Compatibility shim for the legacy ``cross_sensor_cal`` namespace.
+
+Importing this module re-exports :mod:`spectralbridge` while emitting a
+minimal deprecation warning.
+"""
+
 from __future__ import annotations
 
-from importlib import import_module
+import importlib
+import importlib.util
+import warnings
 
-from .brightness_config import load_brightness_coefficients
-try:  # pragma: no cover - exercised when optional plotting deps missing
-    from .sensor_panel_plots import (
-        make_micasense_vs_landsat_panels,
-        make_sensor_vs_neon_panels,
-    )
-except Exception:  # pragma: no cover - importing plotting is optional in lite envs
-    make_micasense_vs_landsat_panels = None  # type: ignore[assignment]
-    make_sensor_vs_neon_panels = None  # type: ignore[assignment]
-    _PLOT_EXPORTS: tuple[str, ...] = ()
-else:
-    _PLOT_EXPORTS = (
-        make_micasense_vs_landsat_panels.__name__,
-        make_sensor_vs_neon_panels.__name__,
-    )
-
-__version__ = "2.2.0"
-
-__all__ = ["__version__"]
-
-
-__all__ = sorted(
-    set(
-        __all__
-        + (
-            [
-                "apply_brightness_correction",
-                load_brightness_coefficients.__name__,
-            ]
-            + list(_PLOT_EXPORTS)
-        )
-    )
+warnings.warn(
+    "cross_sensor_cal is deprecated; use spectralbridge instead.",
+    DeprecationWarning,
+    stacklevel=2,
 )
 
-def __getattr__(name: str):  # pragma: no cover - thin lazy import helper
-    if name == "apply_brightness_correction":
-        from .brightness import apply_brightness_correction as _apply_brightness_correction
+_spectralbridge = importlib.import_module("spectralbridge")
 
-        globals()[name] = _apply_brightness_correction
-        return _apply_brightness_correction
-    if name == "pipeline":
-        module = import_module("cross_sensor_cal.pipelines.pipeline")
-        globals()[name] = module
-        __all__.append(name)
-        return module
-    if name == "pipelines":
-        module = import_module("cross_sensor_cal.pipelines")
-        if not hasattr(module, "pipeline"):
-            setattr(
-                module,
-                "pipeline",
-                import_module("cross_sensor_cal.pipelines.pipeline"),
-            )
-        globals()[name] = module
-        __all__.append(name)
-        return module
-    if name == "brdf_topo":
-        module = import_module("cross_sensor_cal.brdf_topo")
-        globals()[name] = module
-        __all__.append(name)
-        return module
-    raise AttributeError(f"module 'cross_sensor_cal' has no attribute '{name}'")
+__all__ = getattr(_spectralbridge, "__all__", [])
+__path__ = getattr(_spectralbridge, "__path__", [])
+__file__ = getattr(_spectralbridge, "__file__", None)
+__spec__ = importlib.util.spec_from_loader(__name__, loader=None, is_package=True)
+if __spec__ is not None and __path__:
+    __spec__.submodule_search_locations = list(__path__)
+
+
+def __getattr__(name: str):
+    return getattr(_spectralbridge, name)
+
+
+def __dir__():
+    return sorted(set(globals()) | set(dir(_spectralbridge)))

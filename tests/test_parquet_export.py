@@ -6,7 +6,7 @@ import sys
 import types
 
 import pytest
-from cross_sensor_cal.exports.schema_utils import sort_and_rename_spectral_columns
+from spectralbridge.exports.schema_utils import sort_and_rename_spectral_columns
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -161,31 +161,31 @@ def _stub_module(name: str, **attrs) -> None:
         sys.modules[name] = module
 
 
-_stub_module("cross_sensor_cal")
-sys.modules["cross_sensor_cal"].__path__ = [str(SRC_ROOT / "cross_sensor_cal")]  # type: ignore[attr-defined]
-_stub_module("cross_sensor_cal.pipelines")
-sys.modules["cross_sensor_cal.pipelines"].__path__ = []  # type: ignore[attr-defined]
-_stub_module("cross_sensor_cal.utils", get_package_data_path=lambda *a, **k: Path("data"))
-_stub_module("cross_sensor_cal.utils.memory", clean_memory=lambda *a, **k: None)
-sys.modules["cross_sensor_cal.utils"].__path__ = []  # type: ignore[attr-defined]
-_stub_module("cross_sensor_cal.utils.naming", get_flight_paths=lambda *a, **k: {}, get_flightline_products=lambda base, code, stem: {"work_dir": Path(base) / stem})
-_stub_module("cross_sensor_cal.brdf_topo", apply_brdf_topo_core=lambda *a, **k: None, build_correction_parameters_dict=lambda *a, **k: {})
-_stub_module("cross_sensor_cal.brightness_config", load_brightness_coefficients=lambda *a, **k: {})
-_stub_module("cross_sensor_cal.paths", normalize_brdf_model_path=lambda *a, **k: Path("model.json"))
-_stub_module("cross_sensor_cal.qa_plots", render_flightline_panel=lambda *a, **k: None)
-_stub_module("cross_sensor_cal.resample", resample_chunk_to_sensor=lambda *a, **k: None)
+_stub_module("spectralbridge")
+sys.modules["spectralbridge"].__path__ = [str(SRC_ROOT / "spectralbridge")]  # type: ignore[attr-defined]
+_stub_module("spectralbridge.pipelines")
+sys.modules["spectralbridge.pipelines"].__path__ = []  # type: ignore[attr-defined]
+_stub_module("spectralbridge.utils", get_package_data_path=lambda *a, **k: Path("data"))
+_stub_module("spectralbridge.utils.memory", clean_memory=lambda *a, **k: None)
+sys.modules["spectralbridge.utils"].__path__ = []  # type: ignore[attr-defined]
+_stub_module("spectralbridge.utils.naming", get_flight_paths=lambda *a, **k: {}, get_flightline_products=lambda base, code, stem: {"work_dir": Path(base) / stem})
+_stub_module("spectralbridge.brdf_topo", apply_brdf_topo_core=lambda *a, **k: None, build_correction_parameters_dict=lambda *a, **k: {})
+_stub_module("spectralbridge.brightness_config", load_brightness_coefficients=lambda *a, **k: {})
+_stub_module("spectralbridge.paths", normalize_brdf_model_path=lambda *a, **k: Path("model.json"))
+_stub_module("spectralbridge.qa_plots", render_flightline_panel=lambda *a, **k: None)
+_stub_module("spectralbridge.resample", resample_chunk_to_sensor=lambda *a, **k: None)
 _stub_module(
-    "cross_sensor_cal.sensor_panel_plots",
+    "spectralbridge.sensor_panel_plots",
     make_micasense_vs_landsat_panels=lambda *a, **k: None,
     make_sensor_vs_neon_panels=lambda *a, **k: None,
 )
-_stub_module("cross_sensor_cal.utils_checks", is_valid_json=lambda *_: True)
-_stub_module("cross_sensor_cal.envi_download", download_neon_file=lambda *a, **k: Path("dummy"))
-_stub_module("cross_sensor_cal.file_sort", generate_file_move_list=lambda *a, **k: [])
-_stub_module("cross_sensor_cal.mask_raster", mask_raster_with_polygons=lambda *a, **k: None)
-_stub_module("cross_sensor_cal.merge_duckdb", merge_flightline=lambda *a, **k: Path("merged.parquet"))
-_stub_module("cross_sensor_cal.neon_to_envi", neon_to_envi_no_hytools=lambda *a, **k: None)
-_stub_module("cross_sensor_cal.polygon_extraction", control_function_for_extraction=lambda *a, **k: None)
+_stub_module("spectralbridge.utils_checks", is_valid_json=lambda *_: True)
+_stub_module("spectralbridge.envi_download", download_neon_file=lambda *a, **k: Path("dummy"))
+_stub_module("spectralbridge.file_sort", generate_file_move_list=lambda *a, **k: [])
+_stub_module("spectralbridge.mask_raster", mask_raster_with_polygons=lambda *a, **k: None)
+_stub_module("spectralbridge.merge_duckdb", merge_flightline=lambda *a, **k: Path("merged.parquet"))
+_stub_module("spectralbridge.neon_to_envi", neon_to_envi_no_hytools=lambda *a, **k: None)
+_stub_module("spectralbridge.polygon_extraction", control_function_for_extraction=lambda *a, **k: None)
 
 
 class _FakeTileProgressReporter:
@@ -196,8 +196,8 @@ class _FakeTileProgressReporter:
         return None
 
 
-_stub_module("cross_sensor_cal.progress_utils", TileProgressReporter=_FakeTileProgressReporter)
-_stub_module("cross_sensor_cal.standard_resample", translate_to_other_sensors=lambda *a, **k: None)
+_stub_module("spectralbridge.progress_utils", TileProgressReporter=_FakeTileProgressReporter)
+_stub_module("spectralbridge.standard_resample", translate_to_other_sensors=lambda *a, **k: None)
 
 
 class _FakeFileType:
@@ -206,7 +206,7 @@ class _FakeFileType:
 
 
 _stub_module(
-    "cross_sensor_cal.file_types",
+    "spectralbridge.file_types",
     NEONReflectanceBRDFCorrectedENVIFile=_FakeFileType,
     NEONReflectanceENVIFile=_FakeFileType,
     NEONReflectanceResampledENVIFile=_FakeFileType,
@@ -215,31 +215,31 @@ _stub_module(
 pipeline_path = (
     Path(__file__).resolve().parents[1]
     / "src"
-    / "cross_sensor_cal"
+    / "spectralbridge"
     / "pipelines"
     / "pipeline.py"
 )
 pipeline_spec = importlib.util.spec_from_file_location(
-    "cross_sensor_cal.pipelines.pipeline", pipeline_path
+    "spectralbridge.pipelines.pipeline", pipeline_path
 )
 assert pipeline_spec and pipeline_spec.loader
 pipeline_module = importlib.util.module_from_spec(pipeline_spec)
 pipeline_spec.loader.exec_module(pipeline_module)
-sys.modules.setdefault("cross_sensor_cal.pipelines.pipeline", pipeline_module)
+sys.modules.setdefault("spectralbridge.pipelines.pipeline", pipeline_module)
 
 parquet_export_path = (
     Path(__file__).resolve().parents[1]
     / "src"
-    / "cross_sensor_cal"
+    / "spectralbridge"
     / "parquet_export.py"
 )
 parquet_export_spec = importlib.util.spec_from_file_location(
-    "cross_sensor_cal.parquet_export", parquet_export_path
+    "spectralbridge.parquet_export", parquet_export_path
 )
 assert parquet_export_spec and parquet_export_spec.loader
 parquet_export_module = importlib.util.module_from_spec(parquet_export_spec)
 parquet_export_spec.loader.exec_module(parquet_export_module)
-sys.modules.setdefault("cross_sensor_cal.parquet_export", parquet_export_module)
+sys.modules.setdefault("spectralbridge.parquet_export", parquet_export_module)
 
 _export_parquet_stage = pipeline_module._export_parquet_stage
 ensure_parquet_for_envi = parquet_export_module.ensure_parquet_for_envi
@@ -284,7 +284,7 @@ def test_export_parquet_stage_creates_sidecars_for_all_envi(tmp_path: Path, monk
         parquet_path.write_bytes(b"pq")
         calls.append(img_path.name)
 
-    import cross_sensor_cal.parquet_export as px
+    import spectralbridge.parquet_export as px
 
     monkeypatch.setattr(px, "ensure_parquet_for_envi", fake_ensure)
 
@@ -322,7 +322,7 @@ def test_ensure_parquet_for_envi_creates_and_skips_valid(tmp_path: Path, monkeyp
     img.write_bytes(b"xx")
     hdr.write_bytes(b"hdr")
 
-    import cross_sensor_cal.parquet_export as px
+    import spectralbridge.parquet_export as px
 
     build_calls = {"count": 0}
 
@@ -362,7 +362,7 @@ def test_ensure_parquet_for_envi_regenerates_invalid(tmp_path: Path, monkeypatch
     hdr.write_bytes(b"hdr")
     parquet_path.write_text("not a parquet", encoding="utf-8")
 
-    import cross_sensor_cal.parquet_export as px
+    import spectralbridge.parquet_export as px
 
     calls = {"count": 0}
 
@@ -390,7 +390,7 @@ def test_ensure_parquet_from_envi_handles_corrupt(tmp_path: Path, monkeypatch) -
     hdr.write_bytes(b"hdr")
     parquet_path.write_bytes(b"corrupt")
 
-    import cross_sensor_cal.parquet_export as px
+    import spectralbridge.parquet_export as px
 
     build_calls = {"count": 0}
 
@@ -423,7 +423,7 @@ def _write_minimal_parquet(path: Path) -> None:
 
 def test_build_parquet_from_envi_serial_when_disabled(monkeypatch, tmp_path: Path) -> None:
     import pandas as pd
-    import cross_sensor_cal.parquet_export as px
+    import spectralbridge.parquet_export as px
 
     parquet_path = tmp_path / "serial_original_envi.parquet"
 
@@ -497,7 +497,7 @@ def test_ensure_parquet_for_undarkened_envi(tmp_path: Path, monkeypatch) -> None
     np = pytest.importorskip("numpy")
     from rasterio.transform import from_origin
 
-    from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
+    from spectralbridge.exports.schema_utils import infer_stage_from_name
 
     img_path = tmp_path / "scene_landsat_tm_undarkened_envi.img"
     transform = from_origin(500000.0, 4100000.0, 1.0, 1.0)
@@ -528,7 +528,7 @@ def test_ensure_parquet_for_undarkened_envi(tmp_path: Path, monkeypatch) -> None
         hdr_path.write_text(header_text, encoding="utf-8")
 
     logger = DummyLogger()
-    parquet_module = importlib.import_module("cross_sensor_cal.parquet_export")
+    parquet_module = importlib.import_module("spectralbridge.parquet_export")
 
     def _fake_build(envi_img: Path, envi_hdr: Path, parquet_path: Path, **_kwargs):
         import pandas as pd

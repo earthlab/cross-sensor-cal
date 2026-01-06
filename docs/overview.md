@@ -5,7 +5,7 @@
 The Cross‑Sensor Calibration workflow runs every NEON flight line through an
 idempotent, restart-safe series of five stages. Each stage emits tqdm-style
 progress bars, prefixes logs with `[flight_stem]`, and writes artifacts using
-canonical paths from :func:`cross_sensor_cal.utils.naming.get_flight_paths`.
+canonical paths from :func:`spectralbridge.utils.naming.get_flight_paths`.
 
 ```mermaid
 flowchart LR

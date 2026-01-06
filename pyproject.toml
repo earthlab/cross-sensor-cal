@@ -3,9 +3,9 @@ requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cross_sensor_cal"
+name = "spectralbridge"
 version = "2.2.0"
-description = "Cross-sensor calibration pipeline."
+description = "Translating reflectance across sensors and scales."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Earth Lab" }]
@@ -52,24 +52,30 @@ docs = [
 ]
 
 [project.scripts]
-cscal-download = "cross_sensor_cal.cli:download_main"
-cscal-pipeline = "cross_sensor_cal.cli.pipeline_cli:main"
-cscal-qa = "cross_sensor_cal.cli.qa_cli:main"
-cscal-recover-raw = "cross_sensor_cal.cli.recover_cli:main"
-cscal-qa-dashboard = "cross_sensor_cal.qa_dashboard:main"
-csc-merge-duckdb = "cross_sensor_cal.merge_duckdb:main"
+spectralbridge-download = "spectralbridge.cli:download_main"
+spectralbridge-pipeline = "spectralbridge.cli.pipeline_cli:main"
+spectralbridge-qa = "spectralbridge.cli.qa_cli:main"
+spectralbridge-recover-raw = "spectralbridge.cli.recover_cli:main"
+spectralbridge-qa-dashboard = "spectralbridge.qa_dashboard:main"
+spectralbridge-merge-duckdb = "spectralbridge.merge_duckdb:main"
+cscal-download = "spectralbridge.cli:download_main"
+cscal-pipeline = "spectralbridge.cli.pipeline_cli:main"
+cscal-qa = "spectralbridge.cli.qa_cli:main"
+cscal-recover-raw = "spectralbridge.cli.recover_cli:main"
+cscal-qa-dashboard = "spectralbridge.qa_dashboard:main"
+csc-merge-duckdb = "spectralbridge.merge_duckdb:main"
 
 [project.urls]
-Homepage = "https://github.com/earthlab/cross-sensor-cal"
-Documentation = "https://earthlab.github.io/cross-sensor-cal/"
-Issues = "https://github.com/earthlab/cross-sensor-cal/issues"
+Homepage = "https://github.com/earthlab/spectralbridge"
+Documentation = "https://earthlab.github.io/spectralbridge/"
+Issues = "https://github.com/earthlab/spectralbridge/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 include-package-data = true
 
 [tool.setuptools.package-data]
-cross_sensor_cal = ["data/*.json", "data/brightness/*.json"]
+spectralbridge = ["data/*.json", "data/brightness/*.json"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

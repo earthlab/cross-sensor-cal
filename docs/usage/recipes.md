@@ -10,7 +10,7 @@ Use this when you want the canonical, restart-safe run for one flightline. See t
 
 ```python
 from pathlib import Path
-from cross_sensor_cal.pipelines.pipeline import process_one_flightline
+from spectralbridge.pipelines.pipeline import process_one_flightline
 
 base_folder = Path("csc_output")
 site_code = "NIWO"
@@ -34,7 +34,7 @@ Expect to see `{flightline_id}_merged_pixel_extraction.parquet` plus `{flightlin
 
 ```python
 from pathlib import Path
-from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+from spectralbridge.pipelines.pipeline import go_forth_and_multiply
 
 base_folder = Path("csc_output")
 flightline_ids = [
@@ -59,7 +59,7 @@ Generate fresh QA artefacts from completed flightlines without recomputing the p
 
 ```python
 from pathlib import Path
-from cross_sensor_cal.qa_plots import render_flightline_panel
+from spectralbridge.qa_plots import render_flightline_panel
 
 flight_dir = Path("csc_output") / "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"
 
@@ -72,7 +72,7 @@ print("QA PNG →", png_path)
 print("Issues:", metrics.get("issues", []))
 ```
 
-This operates on existing ENVI and Parquet products in `flight_dir` and rewrites `{flight_id}_qa.png` and `{flight_id}_qa.json` only. If you prefer the CLI, `cscal-qa` wraps the same logic for batch folders.
+This operates on existing ENVI and Parquet products in `flight_dir` and rewrites `{flight_id}_qa.png` and `{flight_id}_qa.json` only. If you prefer the CLI, `spectralbridge-qa` wraps the same logic for batch folders.
 
 ---
 
@@ -113,8 +113,8 @@ rel.limit(5).df()
 Link pixels to polygons using the optional polygon pipeline utilities built on top of the merged Parquet and ENVI outputs.
 
 ```python
-from cross_sensor_cal.paths import FlightlinePaths
-from cross_sensor_cal.polygons import run_polygon_pipeline_for_flightline
+from spectralbridge.paths import FlightlinePaths
+from spectralbridge.polygons import run_polygon_pipeline_for_flightline
 
 flight_paths = FlightlinePaths("csc_output", "NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance")
 polygons_path = "Datasets/niwot_aop_polygons_2023_12_8_23_analysis_ready_half_diam.gpkg"

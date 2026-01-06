@@ -1,6 +1,6 @@
 import numpy as np
 
-from cross_sensor_cal.corrections import (
+from spectralbridge.corrections import (
     NDVIBinningConfig,
     ReferenceGeometry,
     apply_brdf_correct,

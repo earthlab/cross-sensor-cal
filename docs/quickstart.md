@@ -2,7 +2,7 @@
 
 This Quickstart gives you two ways to run the pipeline end-to-end:
 
-1. **CLI path** – run `cscal-pipeline` from a terminal  
+1. **CLI path** – run `spectralbridge-pipeline` from a terminal  
 2. **Notebook path** – run the pipeline inside Jupyter
 
 Both produce the same ENVI, Parquet, and QA artifacts.
@@ -13,11 +13,15 @@ Both produce the same ENVI, Parquet, and QA artifacts.
 
 Install from PyPI:
 
-    pip install cross-sensor-cal
+    pip install spectralbridge
 
 For Ray support:
 
-    pip install "cross-sensor-cal[ray]"
+    pip install "spectralbridge[full]"
+
+> Upgrading from older versions? ``cross_sensor_cal`` imports and ``cscal-*``
+> commands still work, but new examples use ``spectralbridge`` imports and
+> ``spectralbridge-*`` entry points.
 
 ---
 
@@ -34,7 +38,7 @@ Choose an output directory:
 
 Run the pipeline:
 
-    cscal-pipeline \
+    spectralbridge-pipeline \
       --base-folder "$BASE" \
       --site-code NIWO \
       --year-month 2023-08 \
@@ -69,7 +73,7 @@ Use this if you want an interactive, reproducible workflow.
 
 In a notebook cell:
 
-    from cross_sensor_cal import go_forth_and_multiply
+    from spectralbridge import go_forth_and_multiply
 
     base = "output_quickstart_py"
 

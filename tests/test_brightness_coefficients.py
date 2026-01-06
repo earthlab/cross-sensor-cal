@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from cross_sensor_cal.brightness_config import load_brightness_coefficients
-from cross_sensor_cal.pipelines import pipeline
+from spectralbridge.brightness_config import load_brightness_coefficients
+from spectralbridge.pipelines import pipeline
 
 
 def test_tm_coefficients_use_wavelength_aligned_order() -> None:

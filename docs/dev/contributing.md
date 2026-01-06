@@ -37,12 +37,12 @@ python tools/site_prepare.py && mkdocs build --strict
 ## How to extend the system safely
 
 ### Adding or modifying a target sensor
-- Update spectral parameters in `cross_sensor_cal/data/landsat_band_parameters.json` (or add an analogous entry) and ensure `standard_resample.py` can consume them.
+- Update spectral parameters in `spectralbridge/data/landsat_band_parameters.json` (or add an analogous entry) and ensure `standard_resample.py` can consume them.
 - Confirm `get_flightline_products`/`FlightlinePaths` emit filenames for the new sensor and that merged Parquet and QA outputs remain unchanged.
 - Add tests that validate resampled bands and naming; do not change stage ordering or skip logic.
 
 ### Updating brightness or calibration coefficients
-- Coefficients live under `cross_sensor_cal/data/brightness/` and are loaded via `brightness_config`. Keep keys stable so regression lookups continue to work.
+- Coefficients live under `spectralbridge/data/brightness/` and are loaded via `brightness_config`. Keep keys stable so regression lookups continue to work.
 - Re-run QA-focused tests and inspect QA outputs against Landsat-referenced expectations after changes.
 
 ### Modifying QA outputs

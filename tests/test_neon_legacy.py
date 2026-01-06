@@ -1,6 +1,6 @@
 import h5py
 
-from cross_sensor_cal.io.neon_legacy import detect_legacy_neon_schema, resolve_neon_paths
+from spectralbridge.io.neon_legacy import detect_legacy_neon_schema, resolve_neon_paths
 
 
 def _mk_h5(struct):

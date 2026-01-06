@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+from spectralbridge.pipelines.pipeline import go_forth_and_multiply
 
 
 @pytest.fixture
@@ -35,9 +35,9 @@ def _stub_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
             self.envi_img = self.flight_dir / f"{flight_id}_envi.img"
             self.envi_hdr = self.flight_dir / f"{flight_id}_envi.hdr"
 
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.FlightlinePaths", _DummyPaths)
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.stage_download_h5", lambda **_: None)
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.process_one_flightline", lambda **_: None)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.FlightlinePaths", _DummyPaths)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.stage_download_h5", lambda **_: None)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.process_one_flightline", lambda **_: None)
 
 
 def test_thread_engine_operates_without_ray(
@@ -83,16 +83,16 @@ def test_ray_engine_uses_ray_map(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
         return []
 
     monkeypatch.setattr(
-        "cross_sensor_cal.pipelines.pipeline.ray_map",
+        "spectralbridge.pipelines.pipeline.ray_map",
         _fake_ray_map,
     )
 
     monkeypatch.setattr(
-        "cross_sensor_cal.pipelines.pipeline.process_one_flightline",
+        "spectralbridge.pipelines.pipeline.process_one_flightline",
         lambda **_: None,
     )
     monkeypatch.setattr(
-        "cross_sensor_cal.pipelines.pipeline.stage_download_h5",
+        "spectralbridge.pipelines.pipeline.stage_download_h5",
         lambda **_: None,
     )
 

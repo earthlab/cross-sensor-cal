@@ -18,7 +18,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from cross_sensor_cal.exports.schema_utils import ensure_coord_columns
+from spectralbridge.exports.schema_utils import ensure_coord_columns
 
 from ._optional import require_geopandas, require_rasterio
 from .paths import FlightlinePaths

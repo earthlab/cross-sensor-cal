@@ -4,7 +4,7 @@
 import pytest
 np = pytest.importorskip("numpy")
 
-from cross_sensor_cal.convolution_resample import (
+from spectralbridge.convolution_resample import (
     _apply_convolution_with_renorm,
     _build_W_from_gaussians,
     _ensure_nm_and_sort,

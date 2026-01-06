@@ -1,16 +1,16 @@
 # Quality Assurance (QA) panels
 
-The `cscal-qa` command now emits both a PNG panel and a machine-readable
+The `spectralbridge-qa` command now emits both a PNG panel and a machine-readable
 `*_qa.json` file for every flightline. The PNG highlights spectral checks while
 the JSON records the underlying metrics so you can track drift over time or feed
 it into dashboards.
 
 ```bash
 # Deterministic quick pass (≤25k sampled pixels per flightline)
-cscal-qa --base-folder output_demo --quick
+spectralbridge-qa --base-folder output_demo --quick
 
 # Exhaustive sampling with custom RGB mapping
-cscal-qa --base-folder output_demo --full --n-sample 150000 --rgb-bands 650,550,480
+spectralbridge-qa --base-folder output_demo --full --n-sample 150000 --rgb-bands 650,550,480
 ```
 
 Key sections on the panel:

@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cross_sensor_cal.parquet_export import repair_lonlat_in_place
+from spectralbridge.parquet_export import repair_lonlat_in_place
 
 
 def main(argv: list[str] | None = None) -> int:

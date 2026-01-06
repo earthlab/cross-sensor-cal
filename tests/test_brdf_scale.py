@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cross_sensor_cal.corrections import (
+from spectralbridge.corrections import (
     apply_brdf_correct,
     fit_and_save_brdf_model,
     NDVIBinningConfig,

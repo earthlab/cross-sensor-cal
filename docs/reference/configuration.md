@@ -88,9 +88,9 @@ Supported sensor outputs (from `FlightlinePaths.sensor_products`):
 
 Spectral configuration comes from:
 
-- `cross_sensor_cal/data/landsat_band_parameters.json`
-- `cross_sensor_cal/data/hyperspectral_bands.json`
-- brightness coefficients loaded via `load_brightness_coefficients(system_pair)` in `cross_sensor_cal/brightness_config.py` with tables stored under `cross_sensor_cal/data/brightness/*.json`
+- `spectralbridge/data/landsat_band_parameters.json`
+- `spectralbridge/data/hyperspectral_bands.json`
+- brightness coefficients loaded via `load_brightness_coefficients(system_pair)` in `spectralbridge/brightness_config.py` with tables stored under `spectralbridge/data/brightness/*.json`
 
 If you update brightness coefficients, refresh the JSON tables accordingly. Provenance/citation for brightness regression tables: (needs project decision).
 Next steps

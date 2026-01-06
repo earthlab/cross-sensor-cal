@@ -83,7 +83,7 @@ postprocess:
 
 ### CLI overrides
 
-The `cscal-pipeline` entry point automatically runs the download stage before
+The `spectralbridge-pipeline` entry point automatically runs the download stage before
 spinning up per-flightline workers. Use `--max-workers` to opt into parallel
 processing once the `.h5` files are present, and `--engine` to pick the backend.
 Command-line options override the

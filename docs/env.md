@@ -10,13 +10,13 @@
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -U pip
-pip install cross-sensor-cal
+pip install spectralbridge
 ```
 
 ## Setup (conda)
 ```bash
-conda create -n cscal python=3.11 -y
-conda activate cscal
+conda create -n spectralbridge python=3.11 -y
+conda activate spectralbridge
 pip install -U pip
-pip install cross-sensor-cal
+pip install spectralbridge
 ```

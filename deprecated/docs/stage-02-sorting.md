@@ -1,7 +1,7 @@
 # Stage 02 Sorting
 
 > **Deprecated:** Sorting is now handled by `generate_file_move_list()` and the
-> optional stage 8 helpers inside `src/cross_sensor_cal/pipelines/pipeline.py`.
+> optional stage 8 helpers inside `src/spectralbridge/pipelines/pipeline.py`.
 > This legacy write-up referenced missing CLI scripts and GeoTIFF outputs.
 
 > DO NOT EDIT OUTSIDE MARKERS
@@ -42,8 +42,8 @@ rerunning the command recreates the same layout without duplicating files.
    reruns skip unchanged files and resume incomplete transfers.
 
 ## Reference
- - [`src/file_sort.py`](https://github.com/earthlab/cross-sensor-cal/blob/main/src/file_sort.py) implements sorting and iRODS path rules
- - [`bin/jefe.py`](https://github.com/earthlab/cross-sensor-cal/blob/main/bin/jefe.py) provides the `sort_and_sync_files` entry point
+- [`src/file_sort.py`](https://github.com/earthlab/spectralbridge/blob/main/src/file_sort.py) implements sorting and iRODS path rules
+- [`bin/jefe.py`](https://github.com/earthlab/spectralbridge/blob/main/bin/jefe.py) provides the `sort_and_sync_files` entry point
  - [CyVerse iRODS](cyverse-irods.md) covers authentication and environment setup
 
 ## Next steps

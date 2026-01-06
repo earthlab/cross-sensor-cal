@@ -1,7 +1,7 @@
 # Refactor Notes: HyTools-Free Pipeline
 
 ## Purpose
-These notes document the current cross-sensor-cal processing pipeline after removing the runtime dependency on HyTools. The steps below describe what the code does today so collaborators can reproduce results and audit intermediate products.
+These notes document the current SpectralBridge processing pipeline after removing the runtime dependency on HyTools. The steps below describe what the code does today so collaborators can reproduce results and audit intermediate products.
 
 ## End-to-End Pipeline
 1. **Acquire NEON reflectance flightlines**  
@@ -22,7 +22,7 @@ These notes document the current cross-sensor-cal processing pipeline after remo
    The corrected output `<flightline>_brdfandtopo_corrected_envi.img/.hdr` carries full spatial metadata plus the wavelength list, FWHM list, and wavelength units required for spectral resampling.
 
 5. **Spectral convolution / sensor simulation**
-   `convolve_resample_product()` opens the corrected cube as a BSQ memmap, reads spatial tiles, transposes them to `(y, x, bands)`, and multiplies each tile by sensor-specific spectral response functions (SRFs). SRFs are loaded from JSON files under `cross_sensor_cal/data/` via package-relative paths. Each simulated sensor produces its own float32 BSQ ENVI product and header. Existing resampled outputs are validated with `is_valid_envi_pair()` and skipped when already complete.
+   `convolve_resample_product()` opens the corrected cube as a BSQ memmap, reads spatial tiles, transposes them to `(y, x, bands)`, and multiplies each tile by sensor-specific spectral response functions (SRFs). SRFs are loaded from JSON files under `spectralbridge/data/` via package-relative paths. Each simulated sensor produces its own float32 BSQ ENVI product and header. Existing resampled outputs are validated with `is_valid_envi_pair()` and skipped when already complete.
 
 6. **Downstream consumers (optional)**
    Additional tooling can derive pixel stacks, polygon summaries, or parquet tables from the corrected and resampled rasters. These consumers still function but are documented separately and are not detailed here.
@@ -37,27 +37,27 @@ Every step performs the same validation checks on reruns so the pipeline is safe
    - `<flightline>_resampled_<sensor>.img/.hdr`
 
 ## Module Structure
-- `cross_sensor_cal/neon_cube.py`
+- `spectralbridge/neon_cube.py`
   - `NeonCube` class
   - Opens NEON HDF5 reflectance, exposes dimensions, wavelengths, ancillary angles, etc.
   - Iterates spatial tiles without requiring HyTools.
-- `cross_sensor_cal/envi_writer.py`
+- `spectralbridge/envi_writer.py`
   - `EnviWriter` class
   - Writes BSQ float32 rasters (`.img/.hdr`).
   - Used for uncorrected export, corrected cubes, and resampled products.
-- `cross_sensor_cal/corrections.py`
+- `spectralbridge/corrections.py`
   - `fit_and_save_brdf_model()`
   - `apply_topo_correct()`
   - `apply_brdf_correct()`
   - Includes helpers to load and apply BRDF coefficients.
-- `cross_sensor_cal/resample.py`
+- `spectralbridge/resample.py`
   - `resample_chunk_to_sensor()`
   - SRF loading utilities
   - Convolution-friendly helpers for chunk-wise processing.
-- `cross_sensor_cal/pipelines/pipeline.py`
+- `spectralbridge/pipelines/pipeline.py`
   - `go_forth_and_multiply()`
   - Orchestrates downloads, H5→ENVI export (no HyTools), BRDF fitting, topographic+BRDF correction, and spectral convolution.
-- `cross_sensor_cal/data/`
+- `spectralbridge/data/`
   - SRF JSON files for Landsat, Sentinel, etc.
   - Accessed via package-relative paths at runtime.
 

@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-This page lists common problems encountered when running the cross-sensor-cal pipeline, along with likely causes and recommended solutions. It is organized by pipeline stage.
+This page lists common problems encountered when running the SpectralBridge pipeline, along with likely causes and recommended solutions. It is organized by pipeline stage.
 
 ---
 
@@ -45,7 +45,7 @@ Solutions:
 - re-run the export stage only:
 
 ```bash
-cscal-pipeline --start-at export-envi --end-at export-envi ...
+spectralbridge-pipeline --start-at export-envi --end-at export-envi ...
 ENVI export produces extremely large or slow files
 This stage is I/O intensive.
 Solutions:
@@ -106,7 +106,7 @@ Causes:
 pipeline interrupted before QA stage
 insufficient permissions in output directory
 Re-run:
-cscal-pipeline --start-at qa ...
+spectralbridge-pipeline --start-at qa ...
 When to reach out for help
 If the pipeline produces persistent artifacts, consider:
 sharing the QA PNG/PDF

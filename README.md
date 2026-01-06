@@ -1,8 +1,8 @@
-# Earth Lab Spectral Tool: An open, scalable tool for harmonizing spectra across UAS, airborne, and satellite sensors
+# SpectralBridge — Translating reflectance across sensors and scales
 
-Earth Lab Spectral Tool is a modular Python-based tool that adjusts fine-resolution (few centimeters to ~ 5 meters) “pure” spectra from airborne imaging spectroscopy (IS) and uncrewed aerial system (UAS) multispectral imagery to match the spectral configurations of moderate-resolution satellite sensors (over 30 meters). 
+**SpectralBridge (formerly cross-sensor-cal)** is a modular Python-based tool that adjusts fine-resolution (few centimeters to ~ 5 meters) “pure” spectra from airborne imaging spectroscopy (IS) and uncrewed aerial system (UAS) multispectral imagery to match the spectral configurations of moderate-resolution satellite sensors (over 30 meters).
 
-![[docs/img/pipeline.png](https://github.com/earthlab/cross-sensor-cal/blob/main/docs/EL_workflow_diagram.png)](https://github.com/earthlab/cross-sensor-cal/blob/main/docs/EL_workflow_diagram_updatedQA.png)
+![[docs/img/pipeline.png](https://github.com/earthlab/spectralbridge/blob/main/docs/EL_workflow_diagram.png)](https://github.com/earthlab/spectralbridge/blob/main/docs/EL_workflow_diagram_updatedQA.png)
 
 ## Environment setup
 
@@ -10,14 +10,14 @@ Option A (conda, recommended for GDAL/rasterio users):
 
 ```bash
 conda env create -f environment.yaml
-conda activate cross-sensor-cal
+conda activate spectralbridge
 ```
 
 Option B (pip, lightweight):
 
 ```bash
-python -m venv cscal-env
-source cscal-env/bin/activate  # or Windows equivalent
+python -m venv spectralbridge-env
+source spectralbridge-env/bin/activate  # or Windows equivalent
 pip install .
 ```
 
@@ -27,10 +27,10 @@ is the documented baseline.
 
 ## Quickstart (CLI)
 
-Run the full cross-sensor pipeline on one or more NEON flight lines:
+Run the full SpectralBridge pipeline on one or more NEON flight lines:
 
 ```bash
-cscal-pipeline \
+spectralbridge-pipeline \
   --base-folder output_demo \
   --site-code NIWO \
   --year-month 2023-08 \
@@ -39,6 +39,8 @@ cscal-pipeline \
                  NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance \
   --max-workers 2
 ```
+
+Legacy `cscal-*` commands remain available for now and forward to the same implementation.
 
 This will:
 
@@ -67,7 +69,7 @@ QA panels are emitted automatically at the end of the merge stage. You can
 re-generate them on demand with:
 
 ```bash
-cscal-qa --base-folder output_demo
+spectralbridge-qa --base-folder output_demo
 ```
 
 That command re-renders `<flight_stem>_qa.png` inside each per-flightline folder.
@@ -90,17 +92,20 @@ That command re-renders `<flight_stem>_qa.png` inside each per-flightline folder
 Install the base package (threads/process execution; Ray remains optional):
 
 ```bash
-pip install cross-sensor-cal
+pip install spectralbridge
 ```
 
 > Need Ray-backed execution? Install the optional extra instead:
-> `pip install "cross-sensor-cal[full]"`. The default engine uses threads so
+> `pip install "spectralbridge[full]"`. The default engine uses threads so
 > Ray is not required for typical workflows.
+
+> Upgrading from older versions? Imports under ``cross_sensor_cal`` continue to
+> work for now, but new examples use the ``spectralbridge`` namespace.
 
 ### Quickstart Example
 
 ```python
-from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+from spectralbridge.pipelines.pipeline import go_forth_and_multiply
 from pathlib import Path
 
 go_forth_and_multiply(
@@ -148,13 +153,13 @@ output_fresh/
   steps never guess paths.
 - **Checkpointing / idempotence:** Stages skip work if valid outputs already exist
   (`✅ ... already complete ... (skipping)`).
-- **Crash-safe restarts:** You can re-run `cscal-pipeline` on the same folder after an
+- **Crash-safe restarts:** You can re-run `spectralbridge-pipeline` on the same folder after an
   interruption; it will resume from what's missing.
 - **Per-flightline isolation:** Each flight line has its own subdirectory. This allows
   parallel execution and makes it clear which outputs belong together.
 - **Ephemeral HDF5:** The original NEON `.h5` stays at the top level and can be deleted
   later if you only want corrected/derived products.
-- **QA panels:** After processing, `cscal-qa` generates a multi-panel summary figure per
+- **QA panels:** After processing, `spectralbridge-qa` generates a multi-panel summary figure per
   flight line, to visually confirm that each step (export, correction, convolution,
   parquet) completed successfully. QA figures are re-generated on every run to reflect
   the current pipeline settings. The spectral panel uses unitless reflectance (0–1) and
@@ -252,7 +257,7 @@ filenames, and make the parallel logs readable.
 
 ```python
 from pathlib import Path
-from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+from spectralbridge.pipelines.pipeline import go_forth_and_multiply
 
 go_forth_and_multiply(
     base_folder=Path("output_tester"),
@@ -374,7 +379,7 @@ bin/validate_parquets --soft base_dir/NEON_D13_NIWO_DP1_L019-1_20230815_directio
 - **Panel E – Parquet summary:** Lists the Parquet sidecars and file sizes so you can
   confirm tabular exports are present and non-empty.
 
-Generate these summaries at any time with `cscal-qa --base-folder <output_dir>`.
+Generate these summaries at any time with `spectralbridge-qa --base-folder <output_dir>`.
 
 The `_brdfandtopo_corrected_envi` suffix remains the canonical "final"
 reflectance for analysis and downstream comparisons; all scientific semantics
@@ -385,7 +390,7 @@ are unchanged from previous releases.
 To review QA performance across many flightlines at once, run:
 
 ```bash
-cscal-qa-dashboard --base-folder output_fresh
+spectralbridge-qa-dashboard --base-folder output_fresh
 ```
 
 This aggregates every `*_qa_metrics.parquet` file, computes per-flightline
@@ -447,16 +452,16 @@ The recommended setup commands are documented in [Environment setup](#environmen
 For a quick pip-based installation use:
 
 ```bash
-pip install cross-sensor-cal
+pip install spectralbridge
 ```
 
-> `cross-sensor-cal[full]` remains available as an alias for teams with
+> `spectralbridge[full]` remains available as an alias for teams with
 > existing automation but currently resolves to the same dependency set.
 
 ## Documentation
 
 Browse the full documentation site at
-[earthlab.github.io/cross-sensor-cal](https://earthlab.github.io/cross-sensor-cal).
+[earthlab.github.io/SpectralBridge](https://earthlab.github.io/SpectralBridge).
 The site is built with MkDocs Material and automatically deployed to GitHub
 Pages.
 
@@ -481,7 +486,7 @@ Key entry points:
 
 If you use this software, please cite:
 
-> cross-sensor-cal (v2.2.0): NEON hyperspectral cross-sensor harmonization pipeline.  
+> SpectralBridge (v2.2.0): NEON hyperspectral cross-sensor harmonization pipeline.  
 > See `CITATION.cff` in this repository for full author list and metadata.
 
 ## License

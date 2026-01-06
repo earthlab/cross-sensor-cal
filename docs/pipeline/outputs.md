@@ -1,11 +1,11 @@
 # Outputs & File Structure
 
 ## Purpose of this page
-- Outputs on disk are the primary interface of cross-sensor-cal.
+- Outputs on disk are the primary interface of SpectralBridge.
 - Downstream analyses should rely on these artefacts, not return values from the Python API.
 
 ## Canonical per-flightline outputs
-Naming stems come from `cross_sensor_cal.paths.FlightlinePaths` and `cross_sensor_cal.utils.naming.get_flightline_products`; sensor-specific stems come from `SensorProductPaths`.
+Naming stems come from `spectralbridge.paths.FlightlinePaths` and `spectralbridge.utils.naming.get_flightline_products`; sensor-specific stems come from `SensorProductPaths`.
 
 | Output type | Canonical filename pattern | Description | Notes / guarantees |
 | --- | --- | --- | --- |

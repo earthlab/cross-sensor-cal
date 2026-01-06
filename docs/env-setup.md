@@ -9,7 +9,7 @@ shown below. Save it as `environment.yaml` and create the environment with
 `conda env create -f environment.yaml`.
 
 ```yaml
-name: cross-sensor-cal
+name: SpectralBridge
 channels:
   - conda-forge
 dependencies:

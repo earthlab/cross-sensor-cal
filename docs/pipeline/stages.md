@@ -1,6 +1,6 @@
 # Pipeline Overview & Stages
 
-The cross-sensor-cal pipeline transforms NEON HDF5 directional reflectance into physically corrected and sensor-harmonized reflectance products. Each stage is restart-safe and produces structured, auditable outputs.
+The SpectralBridge pipeline transforms NEON HDF5 directional reflectance into physically corrected and sensor-harmonized reflectance products. Each stage is restart-safe and produces structured, auditable outputs.
 
 This page describes every stage of the pipeline, what it consumes, what it produces, and what can go wrong.
 
@@ -19,7 +19,7 @@ The orchestrators `process_one_flightline` and `go_forth_and_multiply` enforce t
 7. DuckDB merge to merged parquet.
 8. Render QA panel + metrics.
 
-Each stage checks whether its expected outputs already exist and are valid, logs a skip message when they do, and recomputes missing or corrupted artefacts. Recovery mode exists for raw ENVI exports when corrected outputs are present (`stage_export_envi_from_h5` supports `recover_missing_raw`, used by `cscal-recover-raw`).
+Each stage checks whether its expected outputs already exist and are valid, logs a skip message when they do, and recomputes missing or corrupted artefacts. Recovery mode exists for raw ENVI exports when corrected outputs are present (`stage_export_envi_from_h5` supports `recover_missing_raw`, used by `spectralbridge-recover-raw`).
 
 ---
 

@@ -2,8 +2,8 @@ import h5py
 import numpy as np
 import pyarrow as pa
 
-from cross_sensor_cal.io.neon_schema import detect_legacy, resolve, canonical_vectors
-from cross_sensor_cal.pipelines.pipeline import _to_canonical_table
+from spectralbridge.io.neon_schema import detect_legacy, resolve, canonical_vectors
+from spectralbridge.pipelines.pipeline import _to_canonical_table
 
 
 def _mk_h5(struct):

@@ -5,7 +5,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from cross_sensor_cal.exports.geo_utils import (
+from spectralbridge.exports.geo_utils import (
     GeoContext,
     add_lonlat_inplace,
     write_parquet_with_lonlat,

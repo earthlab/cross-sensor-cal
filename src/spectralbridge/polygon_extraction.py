@@ -6,7 +6,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Callable, List, Optional, Set
 
-from cross_sensor_cal.exports.schema_utils import (
+from spectralbridge.exports.schema_utils import (
     SENSOR_WAVELENGTHS_NM,
     ensure_coord_columns,
     infer_stage_from_name,

@@ -1,8 +1,8 @@
 # DO NOT EDIT OUTSIDE MARKERS
 # FILLME:START
 cff-version: 1.2.0
-message: "If you use cross-sensor-cal in your research, please cite it as below."
-title: "cross-sensor-cal: NEON hyperspectral cross-sensor harmonization pipeline"
+message: "If you use SpectralBridge in your research, please cite it as below."
+title: "SpectralBridge: Translating reflectance across sensors and scales"
 version: "2.2.0"
 date-released: "2025-10-29"
 type: software
@@ -11,7 +11,7 @@ authors:
     given-names: "Data Innovation Team"
     affiliation: "University of Colorado Boulder"
     # TODO: Replace with individual author names and ORCIDs when available.
-repository-code: "https://github.com/earthlab/cross-sensor-cal"
+repository-code: "https://github.com/earthlab/spectralbridge"
 keywords:
   - "NEON"
   - "hyperspectral"

@@ -1,6 +1,6 @@
 # Working with Parquet Outputs
 
-The cross-sensor-cal pipeline writes Parquet files for each ENVI product it generates. These tables contain one row per pixel and are optimized for high-performance analytics with DuckDB, pandas, or xarray.
+The SpectralBridge pipeline writes Parquet files for each ENVI product it generates. These tables contain one row per pixel and are optimized for high-performance analytics with DuckDB, pandas, or xarray.
 
 ---
 

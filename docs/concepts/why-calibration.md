@@ -33,7 +33,7 @@ This creates challenges when trying to:
 
 ## Correcting vs. harmonizing
 
-cross-sensor-cal performs two distinct operations:
+SpectralBridge performs two distinct operations:
 
 ### 1. Physical corrections  
 These aim to reduce variation caused by **illumination and terrain**:
@@ -61,7 +61,7 @@ NEON AOP data provide:
 
 These properties make NEON a powerful intermediary between plot-scale measurements and satellite observations.
 
-cross-sensor-cal implements a *reproducible stepwise process* to:
+SpectralBridge implements a *reproducible stepwise process* to:
 
 1. extract NEON reflectance into ENVI  
 2. correct it physically  

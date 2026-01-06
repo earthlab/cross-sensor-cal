@@ -72,8 +72,8 @@ if "shapely" not in sys.modules:  # pragma: no cover - dependency shim for unit 
     sys.modules["shapely"] = fake_shapely
     sys.modules["shapely.geometry"] = fake_geometry
 
-from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
-from cross_sensor_cal.pipelines import pipeline
+from spectralbridge.pipelines.pipeline import go_forth_and_multiply
+from spectralbridge.pipelines import pipeline
 
 
 def _write_nonempty(path: Path, data: bytes = b"xx") -> Path:
@@ -143,16 +143,16 @@ def test_pipeline_idempotence_skip_behavior(
     def _fail(*_: object, **__: object) -> None:  # pragma: no cover - guard against regressions
         raise AssertionError("heavy stage should not be invoked when outputs exist")
 
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.neon_to_envi_no_hytools", _fail)
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.build_correction_parameters_dict", _fail)
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.apply_brdf_topo_core", _fail)
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.resample_to_sensor_bands", _fail)
-    monkeypatch.setattr("cross_sensor_cal.pipelines.pipeline.write_resampled_envi_cube", _fail)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.neon_to_envi_no_hytools", _fail)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.build_correction_parameters_dict", _fail)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.apply_brdf_topo_core", _fail)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.resample_to_sensor_bands", _fail)
+    monkeypatch.setattr("spectralbridge.pipelines.pipeline.write_resampled_envi_cube", _fail)
 
-    caplog.set_level(logging.INFO, logger="cross_sensor_cal.pipelines.pipeline")
+    caplog.set_level(logging.INFO, logger="spectralbridge.pipelines.pipeline")
 
     log_capture = io.StringIO()
-    logger = logging.getLogger("cross_sensor_cal.pipelines.pipeline")
+    logger = logging.getLogger("spectralbridge.pipelines.pipeline")
     handler = logging.StreamHandler(log_capture)
     logger.addHandler(handler)
     try:

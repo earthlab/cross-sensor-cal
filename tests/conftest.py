@@ -154,7 +154,7 @@ if "pyarrow" not in sys.modules:  # pragma: no cover - testing fallback
 
 
 if "hytools_compat" not in sys.modules:  # pragma: no cover - simple re-export helper
-    sys.modules["hytools_compat"] = import_module("cross_sensor_cal.hytools_compat")
+    sys.modules["hytools_compat"] = import_module("spectralbridge.hytools_compat")
 
 
 if "matplotlib" not in sys.modules:  # pragma: no cover - provide lightweight stand-in

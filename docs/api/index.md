@@ -4,7 +4,7 @@
 
 ## Quick example
 ```python
-from cross_sensor_cal import merge_duckdb
+from spectralbridge import merge_duckdb
 merge_duckdb(["parquet/a.parquet","parquet/b.parquet"], "merged/all.parquet")
 ```
 
@@ -16,7 +16,7 @@ The docstring walks through the affine model, parameter choices, and examples.
 Use it when you need to harmonise tiles prior to the full pipeline; the QA JSON
 will surface the per-band gain/offsets when this stage runs.
 
-::: cross_sensor_cal
+::: spectralbridge
     options:
       members: true
     filters:

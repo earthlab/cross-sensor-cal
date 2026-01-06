@@ -3,7 +3,7 @@
 The polygon workflow augments the standard flightline processing by producing
 per-polygon spectral libraries from the existing pixel-level Parquet products.
 The pipeline is optional today and can be invoked programmatically without
-changing the default `cscal-pipeline` behaviour.
+changing the default `spectralbridge-pipeline` behaviour.
 
 ## Overview
 
@@ -22,7 +22,7 @@ The polygon pipeline performs three steps for each flightline:
    the polygon index to produce a compact spectral library for all polygons in a
    flightline: ``*_polygons_merged_pixel_extraction.parquet``.
 
-The helper functions live in :mod:`cross_sensor_cal.polygons` and are available
+The helper functions live in :mod:`spectralbridge.polygons` and are available
 for bespoke workflows while we evaluate the approach.
 
 ## Data requirements
@@ -39,8 +39,8 @@ identifier is generated.
 ## Example usage
 
 ```python
-from cross_sensor_cal.paths import FlightlinePaths
-from cross_sensor_cal.polygons import run_polygon_pipeline_for_flightline
+from spectralbridge.paths import FlightlinePaths
+from spectralbridge.polygons import run_polygon_pipeline_for_flightline
 
 flight_paths = FlightlinePaths("/data/flightlines", "NEON_D12_NIWO_2021")
 polygons_path = "Datasets/niwot_aop_polygons_2023_12_8_23_analysis_ready_half_diam.gpkg"

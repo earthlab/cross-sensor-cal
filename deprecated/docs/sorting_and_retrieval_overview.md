@@ -1,7 +1,7 @@
 # 🔄 Data Pipeline Overview & Sorting Responsibilities
 
 > **Deprecated:** Modern runs rely on the idempotent pipeline in
-> `src/cross_sensor_cal/pipelines/pipeline.py` and the optional stage 8 sync
+> `src/spectralbridge/pipelines/pipeline.py` and the optional stage 8 sync
 > helpers. This onboarding note described now-removed scripts and GeoTIFF
 > deliverables.
 

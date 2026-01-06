@@ -4,7 +4,7 @@
 > the status boxes and notes as tasks are completed.
 
 ## 1. Package Structure & Metadata
-- [ ] Confirm the canonical package name (`cross-sensor-cal` vs `cross_sensor_cal`) and ensure the code lives under a single importable package directory (e.g., `src/cross_sensor_cal`).
+- [ ] Confirm the canonical package name (`SpectralBridge` vs `spectralbridge`) and ensure the code lives under a single importable package directory (e.g., `src/spectralbridge`).
 - [ ] Replace the minimal `setup.py` with a `pyproject.toml` using PEP 621 metadata (name, version, description, authors, URLs, keywords, classifiers) and optional `setup.cfg` for configuration. Align metadata with README and docs.
 - [ ] Add `__init__.py` exports and package-level documentation so users can discover public APIs easily.
 - [x] Decide on versioning scheme (CalVer or SemVer) and document it in CONTRIBUTING along with release tagging conventions.

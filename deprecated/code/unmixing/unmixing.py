@@ -30,7 +30,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from cross_sensor_cal.file_types import MaskedSpectralCSVFile, EndmembersCSVFile, \
+from spectralbridge.file_types import MaskedSpectralCSVFile, EndmembersCSVFile, \
     UnmixingModelBestTIF, UnmixingModelFractionsTIF, UnmixingModelRMSETIF
 
 

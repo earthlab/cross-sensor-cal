@@ -2,7 +2,8 @@ import argparse
 import logging
 from pathlib import Path
 
-from cross_sensor_cal.pipelines.pipeline import stage_export_envi_from_h5
+from spectralbridge._cli_compat import warn_if_legacy_command
+from spectralbridge.pipelines.pipeline import stage_export_envi_from_h5
 
 logger = logging.getLogger(__name__)
 
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     """Recover raw ENVI exports when corrected products already exist."""
 
+    warn_if_legacy_command()
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser(

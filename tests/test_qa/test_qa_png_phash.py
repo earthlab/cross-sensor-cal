@@ -10,7 +10,7 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - optional dependency
     imagehash = None  # type: ignore[assignment]
 
-from cross_sensor_cal.qa_plots import render_flightline_panel
+from spectralbridge.qa_plots import render_flightline_panel
 
 
 @pytest.mark.skipif(imagehash is None, reason="imagehash not installed")

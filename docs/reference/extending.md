@@ -7,7 +7,7 @@ Guide contributions that add sensors to Stage 5 or new exporters feeding [Output
 
 ## Inputs
 - Bandpass definitions (CSV/JSON) for the new sensor
-- Implementation classes under `cross_sensor_cal` to register
+- Implementation classes under `spectralbridge` to register
 - Tests covering the new workflow
 
 ## Outputs
@@ -19,7 +19,7 @@ pytest tests/convolution/test_new_sensor.py
 ```
 
 ```python
-from cross_sensor_cal.convolution import registry
+from spectralbridge.convolution import registry
 
 print(registry.available_sensors())
 ```
