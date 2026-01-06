@@ -13,12 +13,12 @@
 
 ## Entry points (pyproject)
 {
-  "cscal-download": "cross_sensor_cal.cli:download_main",
-  "cscal-pipeline": "cross_sensor_cal.cli.pipeline_cli:main",
-  "cscal-qa": "cross_sensor_cal.cli.qa_cli:main",
-  "cscal-recover-raw": "cross_sensor_cal.cli.recover_cli:main",
-  "cscal-qa-dashboard": "cross_sensor_cal.qa_dashboard:main",
-  "csc-merge-duckdb": "cross_sensor_cal.merge_duckdb:main"
+  "spectralbridge-download": "spectralbridge.cli:download_main",
+  "spectralbridge-pipeline": "spectralbridge.cli.pipeline_cli:main",
+  "spectralbridge-qa": "spectralbridge.cli.qa_cli:main",
+  "spectralbridge-recover-raw": "spectralbridge.cli.recover_cli:main",
+  "spectralbridge-qa-dashboard": "spectralbridge.qa_dashboard:main",
+  "spectralbridge-merge-duckdb": "spectralbridge.merge_duckdb:main"
 }
 
 ## CLI flags discovered
@@ -93,7 +93,7 @@
 }
 
 ## Stage markers found in logs
-- [cscal-qa] ✅ QA panels written to: {target.resolve()}
+- [spectralbridge-qa] ✅ QA panels written to: {target.resolve()}
 - ⏭️ Parquet already present for %s -> %s (skipping)
 - ⚠️  QA panel generation failed for %s: %s
 - ⚠️ Cannot create Parquet work directory for %s: %s

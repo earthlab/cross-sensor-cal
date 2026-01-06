@@ -1,7 +1,7 @@
 """Parquet export utilities for ENVI reflectance products.
 
 The helpers in this module are intentionally lightweight at import time so that
-unit tests can import :mod:`cross_sensor_cal.parquet_export` without requiring
+unit tests can import :mod:`spectralbridge.parquet_export` without requiring
 heavy geospatial dependencies. Expensive libraries (``rasterio``, ``pandas``,
 ``pyarrow``) are imported lazily inside :func:`build_parquet_from_envi`.
 """
@@ -142,7 +142,7 @@ def _plan_chunk_jobs(
 ) -> tuple[_ParquetChunkContext, list[_ParquetChunkJob], dict[str, object]]:
     import rasterio
 
-    from cross_sensor_cal.exports.schema_utils import (
+    from spectralbridge.exports.schema_utils import (
         SENSOR_WAVELENGTHS_NM,
         parse_envi_wavelengths_nm,
     )
@@ -288,7 +288,7 @@ def _process_chunk_to_dataframe(
     from rasterio.crs import CRS
     from rasterio.windows import Window
 
-    from cross_sensor_cal.exports.schema_utils import (
+    from spectralbridge.exports.schema_utils import (
         ensure_coord_columns,
         sort_and_rename_spectral_columns,
     )
@@ -383,7 +383,7 @@ def read_envi_in_chunks(
 ):
     """Yield DataFrame chunks from an ENVI cube along with shared metadata."""
 
-    from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
+    from spectralbridge.exports.schema_utils import infer_stage_from_name
 
     stage_key = infer_stage_from_name(parquet_name)
 
@@ -476,7 +476,7 @@ def _write_parquet_chunks(
                 continue
             table = pa.Table.from_pandas(df_chunk, preserve_index=False)
             try:
-                from cross_sensor_cal.pipelines.pipeline import _to_canonical_table
+                from spectralbridge.pipelines.pipeline import _to_canonical_table
             except ImportError:  # pragma: no cover - defensive fallback
                 canonical = table
             else:
@@ -553,7 +553,7 @@ def build_parquet_from_envi(
 
     parquet_path = Path(parquet_path)
     parquet_name = parquet_path.name
-    from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
+    from spectralbridge.exports.schema_utils import infer_stage_from_name
 
     stage_key = infer_stage_from_name(parquet_name)
     # Always use sequential processing (no Ray) to avoid OOM errors
@@ -605,7 +605,7 @@ def ensure_parquet_from_envi(
 
 
 def repair_lonlat_in_place(folder: Path):
-    from cross_sensor_cal.merge_duckdb import EXCLUDE_PATTERNS
+    from spectralbridge.merge_duckdb import EXCLUDE_PATTERNS
 
     folder = Path(folder)
     for pq_path in sorted(folder.glob("*.parquet")):

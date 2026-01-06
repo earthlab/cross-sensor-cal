@@ -40,7 +40,7 @@ DEFAULT_EXPECTED_SETS: Dict[str, int] = {
 
 
 def _load_json_resource(name: str) -> dict:
-    with resources.files("cross_sensor_cal.data").joinpath(name).open("r") as f:
+    with resources.files("spectralbridge.data").joinpath(name).open("r") as f:
         import json
 
         return json.load(f)

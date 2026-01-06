@@ -14,7 +14,7 @@ You will learn how to:
 4. apply BRDF correction  
 5. inspect corrected outputs and QA artifacts  
 
-This tutorial assumes you have installed cross-sensor-cal and have run through the [Quickstart](../quickstart.md).
+This tutorial assumes you have installed SpectralBridge and have run through the [Quickstart](../quickstart.md).
 
 ---
 
@@ -25,7 +25,7 @@ BASE=output_neon_to_envi
 mkdir -p "$BASE"
 2. Run the pipeline for one flight line
 Here we process a single NEON hyperspectral flight line at NIWO.
-cscal-pipeline \
+spectralbridge-pipeline \
   --base-folder "$BASE" \
   --site-code NIWO \
   --year-month 2023-08 \

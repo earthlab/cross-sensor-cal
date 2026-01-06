@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from spectralbridge._cli_compat import warn_if_legacy_command
+
 from ..qa_plots import render_flightline_panel
 
 
@@ -65,6 +67,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    warn_if_legacy_command()
+
     parser = _build_parser()
     args = parser.parse_args(argv)
 

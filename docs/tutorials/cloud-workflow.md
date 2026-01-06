@@ -1,6 +1,6 @@
 # Tutorial: Cloud & HPC Workflows
 
-This tutorial describes how to run the cross-sensor-cal pipeline efficiently in cloud or HPC environments where data access, storage, and memory constraints differ from a local workstation.
+This tutorial describes how to run the SpectralBridge pipeline efficiently in cloud or HPC environments where data access, storage, and memory constraints differ from a local workstation.
 
 ---
 
@@ -42,9 +42,9 @@ many flight lines
 distributed cloud environments
 parallel extraction and merging
 Enable Ray:
-pip install cross-sensor-cal[ray]
+pip install spectralbridge[ray]
 Run:
-cscal-pipeline ... --engine ray
+spectralbridge-pipeline ... --engine ray
 3. Memory considerations
 Large NEON flight lines may be tens of gigabytes. To avoid memory pressure:
 reduce chunk sizes
@@ -70,7 +70,7 @@ module load python
 BASE=$SCRATCH/cscal_${SLURM_JOB_ID}
 mkdir -p "$BASE"
 
-cscal-pipeline \
+spectralbridge-pipeline \
   --base-folder "$BASE" \
   --site-code NIWO \
   --year-month 2023-08 \

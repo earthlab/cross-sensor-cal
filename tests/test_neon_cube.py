@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cross_sensor_cal.io.neon import read_neon_cube
-from cross_sensor_cal.neon_cube import NeonCube
+from spectralbridge.io.neon import read_neon_cube
+from spectralbridge.neon_cube import NeonCube
 
 h5py = pytest.importorskip("h5py")
 

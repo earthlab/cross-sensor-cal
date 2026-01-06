@@ -1,14 +1,14 @@
 # Start Here: Notebook Workflow
 
-This page is the canonical notebook-first path for running cross-sensor-cal. It walks through one successful flightline run that produces harmonized, Landsat-referenced outputs on disk—not return values—so you can bridge UAS and NEON observations to the long-term Landsat record without touching the CLI.
+This page is the canonical notebook-first path for running SpectralBridge. It walks through one successful flightline run that produces harmonized, Landsat-referenced outputs on disk—not return values—so you can bridge UAS and NEON observations to the long-term Landsat record without touching the CLI.
 
 ---
 
 ## 1) Minimal setup
 
 ```python
-import cross_sensor_cal
-from cross_sensor_cal.pipelines.pipeline import (
+import spectralbridge
+from spectralbridge.pipelines.pipeline import (
     process_one_flightline,
     go_forth_and_multiply,
 )

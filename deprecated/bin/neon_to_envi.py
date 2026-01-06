@@ -1,5 +1,5 @@
 # DEPRECATED: This CLI reflects the pre-package layout and is not wired to the
-# current pipeline in cross_sensor_cal/pipelines/pipeline.py.
+# current pipeline in spectralbridge/pipelines/pipeline.py.
 # Use the new CLI / go_forth_and_multiply() entry points instead.
 import os
 import sys
@@ -15,8 +15,8 @@ try:  # pragma: no cover - optional dependency guard
 except ModuleNotFoundError:  # pragma: no cover - handled at runtime
     ray = None  # type: ignore[assignment]
 
-from cross_sensor_cal.hytools_compat import get_hytools_class
-from cross_sensor_cal.neon_to_envi import neon_to_envi_task, export_anc
+from spectralbridge.hytools_compat import get_hytools_class
+from spectralbridge.neon_to_envi import neon_to_envi_task, export_anc
 from neon_file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceAncillaryENVIFile,

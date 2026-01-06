@@ -2,16 +2,19 @@
 
 The CLI provides restart-safe entry points for downloading NEON flightlines, running the full pipeline, generating QA outputs, and merging Parquet artefacts.
 
+> Legacy `cscal-*`/`csc-*` entry points still work and forward to the same
+> implementation, but the primary names are ``spectralbridge-*``.
+
 ---
 
-## `cscal-download`
+## `spectralbridge-download`
 
-Purpose: Download NEON HDF5 flightlines into a workspace (`cross_sensor_cal.cli:download_main`).
+Purpose: Download NEON HDF5 flightlines into a workspace (`spectralbridge.cli:download_main`).
 
 **Usage:**
 
 ```bash
-cscal-download
+spectralbridge-download
 ```
 
 **Key options:**
@@ -20,18 +23,18 @@ cscal-download
 - `--product` sets the NEON product code (default `DP1.30006.001`).
 - `--output` controls the destination directory (default `data`).
 
-**Outputs:** HDF5 files saved under `<output>/<site>/` for later `cscal-pipeline` runs.
+**Outputs:** HDF5 files saved under `<output>/<site>/` for later `spectralbridge-pipeline` runs.
 
 ---
 
-## `cscal-pipeline`
+## `spectralbridge-pipeline`
 
-Purpose: Run the full cross-sensor pipeline (`cross_sensor_cal.cli.pipeline_cli:main`).
+Purpose: Run the full cross-sensor pipeline (`spectralbridge.cli.pipeline_cli:main`).
 
 **Usage:**
 
 ```bash
-cscal-pipeline
+spectralbridge-pipeline
 ```
 
 **Key options:**
@@ -45,14 +48,14 @@ cscal-pipeline
 
 ---
 
-## `cscal-qa`
+## `spectralbridge-qa`
 
-Purpose: Re-render QA panels/metrics for existing flightline folders (`cross_sensor_cal.cli.qa_cli:main`).
+Purpose: Re-render QA panels/metrics for existing flightline folders (`spectralbridge.cli.qa_cli:main`).
 
 **Usage:**
 
 ```bash
-cscal-qa
+spectralbridge-qa
 ```
 
 **Key options:**
@@ -66,14 +69,14 @@ cscal-qa
 
 ---
 
-## `cscal-recover-raw`
+## `spectralbridge-recover-raw`
 
-Purpose: Backfill raw ENVI exports when corrected products already exist (`cross_sensor_cal.cli.recover_cli:main`).
+Purpose: Backfill raw ENVI exports when corrected products already exist (`spectralbridge.cli.recover_cli:main`).
 
 **Usage:**
 
 ```bash
-cscal-recover-raw
+spectralbridge-recover-raw
 ```
 
 **Key options:**
@@ -84,14 +87,14 @@ cscal-recover-raw
 
 ---
 
-## `cscal-qa-dashboard`
+## `spectralbridge-qa-dashboard`
 
-Purpose: Aggregate QA metrics across flightlines and build an overview plot (`cross_sensor_cal.qa_dashboard:main`).
+Purpose: Aggregate QA metrics across flightlines and build an overview plot (`spectralbridge.qa_dashboard:main`).
 
 **Usage:**
 
 ```bash
-cscal-qa-dashboard
+spectralbridge-qa-dashboard
 ```
 
 **Key options:**
@@ -103,14 +106,14 @@ cscal-qa-dashboard
 
 ---
 
-## `csc-merge-duckdb`
+## `spectralbridge-merge-duckdb`
 
-Purpose: Merge per-product Parquet tables into a master parquet and optional QA panel (`cross_sensor_cal.merge_duckdb:main`).
+Purpose: Merge per-product Parquet tables into a master parquet and optional QA panel (`spectralbridge.merge_duckdb:main`).
 
 **Usage:**
 
 ```bash
-csc-merge-duckdb
+spectralbridge-merge-duckdb
 ```
 
 **Key options:**

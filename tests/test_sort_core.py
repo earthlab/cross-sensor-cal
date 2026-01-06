@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pytest
-from cross_sensor_cal.sort_core import classify_name
+from spectralbridge.sort_core import classify_name
 
 @pytest.mark.parametrize("fname,expected", [
     ("", "Generic"),

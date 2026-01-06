@@ -11,13 +11,13 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - environment-specific skip
     pytest.skip("duckdb is required for merge tests", allow_module_level=True)
 
-from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
+from spectralbridge.exports.schema_utils import infer_stage_from_name
 
 # Remove any lightweight stubs inserted by other tests so we always exercise the
 # real DuckDB merge code path here.
-for module_name in ("cross_sensor_cal.merge_duckdb", "cross_sensor_cal.paths"):
+for module_name in ("spectralbridge.merge_duckdb", "spectralbridge.paths"):
     sys.modules.pop(module_name, None)
-merge_duckdb = importlib.import_module("cross_sensor_cal.merge_duckdb")
+merge_duckdb = importlib.import_module("spectralbridge.merge_duckdb")
 merge_flightline = merge_duckdb.merge_flightline
 
 

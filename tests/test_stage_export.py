@@ -64,7 +64,7 @@ if "shapely" not in sys.modules:  # pragma: no cover - dependency shim for unit 
     sys.modules["shapely"] = fake_shapely
     sys.modules["shapely.geometry"] = fake_geometry
 
-from cross_sensor_cal.pipelines.pipeline import stage_export_envi_from_h5
+from spectralbridge.pipelines.pipeline import stage_export_envi_from_h5
 
 
 def _write_nonempty(path: Path, data: bytes = b"xx") -> Path:
@@ -91,7 +91,7 @@ def test_stage_export_envi_targets_raw_names(tmp_path: Path, monkeypatch: pytest
         _write_nonempty(out_dir / f"{flight_stem}_envi.hdr")
 
     monkeypatch.setattr(
-        "cross_sensor_cal.pipelines.pipeline.neon_to_envi_no_hytools",
+        "spectralbridge.pipelines.pipeline.neon_to_envi_no_hytools",
         _fake_export,
     )
 
@@ -126,7 +126,7 @@ def test_stage_export_raises_when_corrected_without_raw(tmp_path: Path, monkeypa
         raise AssertionError("Raw export should not run when corrected exists without raw")
 
     monkeypatch.setattr(
-        "cross_sensor_cal.pipelines.pipeline.neon_to_envi_no_hytools",
+        "spectralbridge.pipelines.pipeline.neon_to_envi_no_hytools",
         _fail_export,
     )
 
@@ -164,7 +164,7 @@ def test_stage_export_recovers_missing_raw(tmp_path: Path, monkeypatch: pytest.M
         _write_nonempty(created["output_dir"] / f"{flight_stem}_envi.hdr")
 
     monkeypatch.setattr(
-        "cross_sensor_cal.pipelines.pipeline.neon_to_envi_no_hytools",
+        "spectralbridge.pipelines.pipeline.neon_to_envi_no_hytools",
         _fake_export,
     )
 

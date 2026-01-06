@@ -1,4 +1,4 @@
-# Ty Tuff contributions to cross-sensor-cal (last 12 months)
+# Ty Tuff contributions to SpectralBridge (last 12 months)
 
 _Generated from git history using author filters for "ttuff" / "Ty Tuff"._
 
@@ -93,11 +93,11 @@ _Generated from git history using author filters for "ttuff" / "Ty Tuff"._
   - Key changes: Touched notebooks/src; primary focus: code.
 - `eb3320a` (2025-11-07) – Add PRISM streaming helper and notebook guard
   - Key changes: Touched notebooks/src; primary focus: code.
-- `d4ab665` (2025-11-07) [BRDF][NEON pipeline] – Merge pull request #217 from earthlab/revert-216-codex/investigate-cross-sensor-cal-crash-during-envi-export
+- `d4ab665` (2025-11-07) [BRDF][NEON pipeline] – Merge pull request #217 from earthlab/revert-216-codex/investigate-SpectralBridge-crash-during-envi-export
   - Key changes: Touched src/tests; primary focus: code.
 - `cfc3266` (2025-11-07) [BRDF][NEON pipeline] – Revert "Stream NeonCube tile access and pipeline stages"
   - Key changes: Touched src/tests; primary focus: code.
-- `80dba4d` (2025-11-07) [BRDF][NEON pipeline] – Merge pull request #216 from earthlab/codex/investigate-cross-sensor-cal-crash-during-envi-export
+- `80dba4d` (2025-11-07) [BRDF][NEON pipeline] – Merge pull request #216 from earthlab/codex/investigate-SpectralBridge-crash-during-envi-export
   - Key changes: Touched src/tests; primary focus: code.
 - `7bf0892` (2025-11-07) [BRDF][NEON pipeline] – Stream NeonCube tile access and pipeline stages
   - Key changes: Touched src/tests; primary focus: code.
@@ -219,7 +219,7 @@ _Generated from git history using author filters for "ttuff" / "Ty Tuff"._
   - Key changes: Touched .github/docs/pyproject.toml/src/tests; primary focus: docs.
 
 ### 2025-10
-- `5be4363` (2025-10-31) [Docs][NEON pipeline][Parquet] – Merge pull request #192 from earthlab/codex/refactor-and-expand-documentation-for-cross-sensor-cal
+- `5be4363` (2025-10-31) [Docs][NEON pipeline][Parquet] – Merge pull request #192 from earthlab/codex/refactor-and-expand-documentation-for-SpectralBridge
   - Key changes: Touched docs/mkdocs.yml/vendor; primary focus: docs.
 - `fa4e5c0` (2025-10-31) [Docs][NEON pipeline][Parquet] – docs: add quickstart, env, troubleshooting
   - Key changes: Touched docs/mkdocs.yml/vendor; primary focus: docs.
@@ -363,11 +363,11 @@ _Generated from git history using author filters for "ttuff" / "Ty Tuff"._
   - Key changes: Touched src; primary focus: code.
 - `765df30` (2025-10-29) [BRDF][NEON pipeline] – Improve tile progress reporting in parallel runs
   - Key changes: Touched src; primary focus: code.
-- `35244e9` (2025-10-29) [CI][Docs][NEON pipeline] – Merge pull request #161 from earthlab/codex/prepare-cross-sensor-cal-for-publication
+- `35244e9` (2025-10-29) [CI][Docs][NEON pipeline] – Merge pull request #161 from earthlab/codex/prepare-SpectralBridge-for-publication
   - Key changes: Touched CHANGELOG.md/CITATION.cff/README.md/docs/environment.yaml/mkdocs.yml/pyproject.toml/src; primary focus: code.
 - `c7b6cc1` (2025-10-29) [CI][Docs][NEON pipeline] – Replace QA image placeholder with text notes
   - Key changes: Touched CHANGELOG.md/CITATION.cff/README.md/docs/environment.yaml/mkdocs.yml/pyproject.toml/src; primary focus: code.
-- `8c853a6` (2025-10-29) – Merge pull request #160 from earthlab/codex/add-qa-summary-plots-to-cross-sensor-cal
+- `8c853a6` (2025-10-29) – Merge pull request #160 from earthlab/codex/add-qa-summary-plots-to-SpectralBridge
   - Key changes: Touched pyproject.toml/src; primary focus: code.
 - `2918d66` (2025-10-29) [BRDF][CI][Docs][NEON pipeline][Parquet][Sensor convolution][gocmd] – Add QA summary plotting utilities
   - Key changes: Touched .../...rectional_reflectance__envi_resample_Landsat_9_OLI-2_masked_spectral_data.csv/.DS_Store/.github/.gitignore/CHANGELOG.md/CITATION.cff/CODE_OF_CONDUCT.md/CONTRIBUTING.md/Datasets/LICENSE/Makefile/README.md/__pycache__/bin/constraints/data/deprecated/docs/environment.yaml/gocmd/mkdocs.yml/publication_checklist.md/pyproject.toml/pytest.ini/requirements-dev.txt/scripts/setup.py/src/tests; primary focus: other.

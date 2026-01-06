@@ -1,4 +1,4 @@
-"""cross_sensor_cal.merge_duckdb
+"""spectralbridge.merge_duckdb
 ================================
 
 DuckDB-backed merge utilities for the cross-sensor-cal pipeline.
@@ -16,7 +16,7 @@ same directory. This mirrors the default behaviour of
 
 Typical usage::
 
-    from cross_sensor_cal import merge_duckdb
+    from spectralbridge import merge_duckdb
 
     merge_duckdb.merge_flightline(
         Path("/path/to/flightline"),
@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import duckdb
+from spectralbridge._cli_compat import warn_if_legacy_command
 
 from .paths import scene_prefix_from_dir
 
@@ -1012,7 +1013,7 @@ def merge_flightline(
 
     if emit_qa_panel:
         try:
-            from cross_sensor_cal.qa_plots import render_flightline_panel
+            from spectralbridge.qa_plots import render_flightline_panel
 
             with _progress("QA: render panel"):
                 out_png_path, _ = render_flightline_panel(
@@ -1065,6 +1066,8 @@ def merge_all_flightlines(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     import argparse
+
+    warn_if_legacy_command()
 
     parser = argparse.ArgumentParser(
         description="Merge original/corrected/resampled Parquet tables with DuckDB.",

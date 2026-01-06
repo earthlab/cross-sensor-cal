@@ -4,7 +4,7 @@ from pathlib import Path
 
 pytest.importorskip("h5py")
 
-from cross_sensor_cal.pipelines.pipeline import _parse_envi_header, convolve_resample_product
+from spectralbridge.pipelines.pipeline import _parse_envi_header, convolve_resample_product
 
 
 def _write_envi_header(path: Path) -> None:

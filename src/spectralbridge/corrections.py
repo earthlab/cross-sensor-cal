@@ -15,7 +15,7 @@ from typing import Tuple, TYPE_CHECKING
 
 import numpy as np
 
-from cross_sensor_cal.paths import normalize_brdf_model_path, scene_prefix_from_dir
+from spectralbridge.paths import normalize_brdf_model_path, scene_prefix_from_dir
 
 __all__ = [
     "calc_cosine_i",

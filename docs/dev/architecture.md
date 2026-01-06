@@ -1,6 +1,6 @@
 # Package Architecture
 
-This page describes how cross-sensor-cal is organized internally. Understanding this structure helps contributors extend the pipeline or integrate new sensors without breaking guarantees.
+This page describes how SpectralBridge is organized internally. Understanding this structure helps contributors extend the pipeline or integrate new sensors without breaking guarantees.
 
 ---
 
@@ -24,28 +24,28 @@ This page describes how cross-sensor-cal is organized internally. Understanding 
 
 ## Directory structure (Python package)
 
-- `cross_sensor_cal/pipelines/`: orchestration entry points and Ray helpers
-- `cross_sensor_cal/exports/`: ENVI export helpers
-- `cross_sensor_cal/io/`: schema and I/O helpers (e.g., NEON schema resolution)
-- `cross_sensor_cal/utils/`: shared utilities, naming/path helpers, memory management
-- `cross_sensor_cal/data/`: spectral metadata and calibration tables
+- `spectralbridge/pipelines/`: orchestration entry points and Ray helpers
+- `spectralbridge/exports/`: ENVI export helpers
+- `spectralbridge/io/`: schema and I/O helpers (e.g., NEON schema resolution)
+- `spectralbridge/utils/`: shared utilities, naming/path helpers, memory management
+- `spectralbridge/data/`: spectral metadata and calibration tables
   - `landsat_band_parameters.json`: band centers/FWHM used for resampling
   - `brightness/*.json`: brightness adjustments between Landsat and MicaSense
   - `hyperspectral_bands.json`: reference metadata for hyperspectral inputs
-- `cross_sensor_cal/qa_plots.py` and `cross_sensor_cal/sensor_panel_plots.py`: QA visualization utilities
-- `cross_sensor_cal/standard_resample.py`: spectral resampling and coefficients
+- `spectralbridge/qa_plots.py` and `spectralbridge/sensor_panel_plots.py`: QA visualization utilities
+- `spectralbridge/standard_resample.py`: spectral resampling and coefficients
 
 ---
 
 ## Extending the system safely
 
 ### Adding or modifying a target sensor
-- Update spectral definitions in `cross_sensor_cal/data/landsat_band_parameters.json` (or analogous table for the new sensor) and ensure resampling logic in `standard_resample.py` knows how to consume them.
+- Update spectral definitions in `spectralbridge/data/landsat_band_parameters.json` (or analogous table for the new sensor) and ensure resampling logic in `standard_resample.py` knows how to consume them.
 - Confirm `get_flightline_products` and `FlightlinePaths` generate filenames for the new sensor; outputs must still include merged Parquet and QA artifacts.
 - Add tests that validate band definitions and resampled outputs; do not bypass the existing stage ordering.
 
 ### Updating brightness or calibration coefficients
-- Brightness and regression tables live under `cross_sensor_cal/data/brightness/` and are loaded via `brightness_config`. Changes here affect downstream cross-sensor harmonization.
+- Brightness and regression tables live under `spectralbridge/data/brightness/` and are loaded via `brightness_config`. Changes here affect downstream cross-sensor harmonization.
 - Keep JSON schema and key names stable; update any dependent tests and documentation describing the coefficients.
 - Validate against Landsat-referenced QA outputs to confirm calibrations remain within expected bounds.
 

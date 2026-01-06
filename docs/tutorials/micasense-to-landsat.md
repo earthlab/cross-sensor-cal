@@ -1,6 +1,6 @@
 # Tutorial: MicaSense → Landsat Harmonization
 
-This tutorial demonstrates how to harmonize drone-scale multispectral reflectance (e.g., MicaSense RedEdge) into Landsat-equivalent band values using the cross-sensor-cal regression workflow.
+This tutorial demonstrates how to harmonize drone-scale multispectral reflectance (e.g., MicaSense RedEdge) into Landsat-equivalent band values using the SpectralBridge regression workflow.
 
 ---
 
@@ -31,12 +31,12 @@ Each band should have known center wavelengths.
 
 ## 2. Harmonization workflow
 
-cross-sensor-cal uses regression relationships linking MicaSense band values to Landsat OLI bands. These regressions are derived from calibrated field and NEON comparisons.
+SpectralBridge uses regression relationships linking MicaSense band values to Landsat OLI bands. These regressions are derived from calibrated field and NEON comparisons.
 
 Run the following command:
 
 ```bash
-cscal-micasense-to-landsat \
+spectralbridge-micasense-to-landsat \
   --input your_micasense_input \
   --output ms_to_ls_output \
   --regression-table data/regression/micasense_to_landsat.csv

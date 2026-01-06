@@ -1,9 +1,9 @@
 # Deprecated resources
 
 This folder quarantines legacy code, scripts, notebooks, documentation, and tests
-that are no longer part of the supported cross-sensor-cal pipeline. The files are
+that are no longer part of the supported SpectralBridge pipeline. The files are
 kept temporarily for reference while teams finish migrating to the ENVI-only,
-idempotent workflow implemented in `src/cross_sensor_cal/pipelines/pipeline.py`.
+idempotent workflow implemented in `src/spectralbridge/pipelines/pipeline.py`.
 They are **not** imported, executed, or covered by CI.
 
 ## Layout

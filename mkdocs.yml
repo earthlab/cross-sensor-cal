@@ -1,9 +1,9 @@
-site_name: cross-sensor-cal
+site_name: SpectralBridge
 site_description: >-
-  Documentation for the Cross-Sensor Calibration pipeline that processes NEON
+  SpectralBridge translates reflectance across sensors and scales to place NEON
   AOP hyperspectral flightlines into analysis-ready products.
-site_url: https://earthlab.github.io/cross-sensor-cal
-repo_url: https://github.com/earthlab/cross-sensor-cal
+site_url: https://earthlab.github.io/spectralbridge
+repo_url: https://github.com/earthlab/spectralbridge
 edit_uri: edit/main/docs/
 
 theme:
@@ -96,4 +96,4 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/earthlab/cross-sensor-cal
+      link: https://github.com/earthlab/spectralbridge

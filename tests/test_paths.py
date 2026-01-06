@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from cross_sensor_cal.paths import (
+from spectralbridge.paths import (
     FlightlinePaths,
     scene_prefix_from_dir,
     normalize_brdf_model_path,

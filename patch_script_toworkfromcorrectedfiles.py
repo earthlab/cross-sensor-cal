@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from cross_sensor_cal.pipelines import pipeline
+from spectralbridge.pipelines import pipeline
 import inspect
 
 # ========== CONFIGURATION (hardcoded paths) ==========

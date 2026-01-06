@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cross_sensor_cal.file_sort import categorize_file
-from cross_sensor_cal.file_types import (
+from spectralbridge.file_sort import categorize_file
+from spectralbridge.file_types import (
     NEONReflectanceAncillaryENVIFile,
     NEONReflectanceBRDFCorrectedENVIFile,
     NEONReflectanceBRDFMaskENVIFile,

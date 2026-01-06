@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from cross_sensor_cal.exports.schema_utils import infer_stage_from_name, sort_and_rename_spectral_columns
+from spectralbridge.exports.schema_utils import infer_stage_from_name, sort_and_rename_spectral_columns
 
 
 def test_infer_stage_from_name_marks_undarkened_variant() -> None:

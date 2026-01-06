@@ -33,7 +33,7 @@ If you used the main pipeline, convolution runs automatically after BRDF+topo co
 To run only the convolution stage manually:
 
 ```bash
-cscal-pipeline \
+spectralbridge-pipeline \
   --base-folder "$BASE" \
   --site-code NIWO \
   --year-month 2023-08 \

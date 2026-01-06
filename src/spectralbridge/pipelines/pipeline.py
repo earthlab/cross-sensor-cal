@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cross_sensor_cal.pipelines.pipeline
+spectralbridge.pipelines.pipeline
 -----------------------------------
 
 Updated October 2025
@@ -30,7 +30,7 @@ Key guarantees:
 Typical usage:
 
     from pathlib import Path
-    from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
+    from spectralbridge.pipelines.pipeline import go_forth_and_multiply
 
     go_forth_and_multiply(
         base_folder=Path("output_tester"),
@@ -82,14 +82,14 @@ import numpy as np
 import h5py
 import pyarrow as pa
 
-from cross_sensor_cal.brdf_topo import (
+from spectralbridge.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
-from cross_sensor_cal.brightness_config import load_brightness_coefficients
-from cross_sensor_cal.io.neon_schema import resolve
+from spectralbridge.brightness_config import load_brightness_coefficients
+from spectralbridge.io.neon_schema import resolve
 try:
-    from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
+    from spectralbridge.paths import FlightlinePaths, normalize_brdf_model_path
 except ImportError:  # pragma: no cover - lightweight fallback for unit tests
     def normalize_brdf_model_path(flightline_dir: Path):  # type: ignore[override]
         return Path(flightline_dir) / "model.json"
@@ -138,15 +138,15 @@ except ImportError:  # pragma: no cover - lightweight fallback for unit tests
         @property
         def brdf_model(self) -> Path:
             return self.flight_dir / f"{self.flight_id}_brdf_model.json"
-from cross_sensor_cal.qa_plots import render_flightline_panel
-from cross_sensor_cal.resample import resample_chunk_to_sensor
-from cross_sensor_cal.sensor_panel_plots import (
+from spectralbridge.qa_plots import render_flightline_panel
+from spectralbridge.resample import resample_chunk_to_sensor
+from spectralbridge.sensor_panel_plots import (
     make_micasense_vs_landsat_panels,
     make_sensor_vs_neon_panels,
 )
-from cross_sensor_cal.utils import get_package_data_path
-from cross_sensor_cal.utils.memory import clean_memory
-from cross_sensor_cal.utils_checks import is_valid_json
+from spectralbridge.utils import get_package_data_path
+from spectralbridge.utils.memory import clean_memory
+from spectralbridge.utils_checks import is_valid_json
 
 from ..envi_download import download_neon_file
 from ..file_sort import generate_file_move_list
@@ -578,7 +578,7 @@ def _export_parquet_stage(
 
     # When ``ray_cpus`` is provided we parallelise Parquet creation per ENVI cube
     # using :func:`ray_map`, falling back to serial execution otherwise.
-    from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
+    from spectralbridge.parquet_export import ensure_parquet_for_envi
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
     work_dir = Path(paths.get("work_dir", Path(base_folder) / flight_stem))
@@ -620,7 +620,7 @@ def _export_parquet_stage(
         from pathlib import Path as _Path
         import logging as _logging
 
-        from cross_sensor_cal.parquet_export import ensure_parquet_for_envi as _ensure_parquet
+        from spectralbridge.parquet_export import ensure_parquet_for_envi as _ensure_parquet
 
         local_logger = _logging.getLogger(__name__)
         path = _Path(img_path_str)

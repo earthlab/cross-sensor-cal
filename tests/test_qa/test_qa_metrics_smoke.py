@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cross_sensor_cal.qa_plots import render_flightline_panel
+from spectralbridge.qa_plots import render_flightline_panel
 
 
 def test_render_panel_writes_png_and_json(qa_fixture_dir: Path) -> None:

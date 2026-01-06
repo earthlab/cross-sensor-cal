@@ -8,7 +8,7 @@ safe to deploy in the production cloud environment.
 
 ## Ways to contribute
 - Report issues and pipeline regressions through
-  [GitHub Issues](https://github.com/earthlab/cross-sensor-cal/issues).
+  [GitHub Issues](https://github.com/earthlab/spectralbridge/issues).
 - Improve documentation, tutorials, and example notebooks.
 - Add tests that increase coverage without expanding production data size.
 - Triage dependency compatibility problems or OS-specific installation bugs.

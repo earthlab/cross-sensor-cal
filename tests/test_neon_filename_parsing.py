@@ -1,6 +1,6 @@
 import pytest
 
-from cross_sensor_cal.file_types import (
+from spectralbridge.file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceENVIHDRFile,
     NEONReflectanceFile,

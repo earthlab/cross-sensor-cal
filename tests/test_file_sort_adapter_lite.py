@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from pathlib import Path
-from cross_sensor_cal.file_sort_adapter import scan_and_categorize
+from spectralbridge.file_sort_adapter import scan_and_categorize
 from tests.utils_builders import make_tiny_envi, fake_neon_name
 
 pytestmark = pytest.mark.lite

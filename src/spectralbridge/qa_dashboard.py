@@ -11,7 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from cross_sensor_cal.exports.geo_utils import write_parquet_with_lonlat
+from spectralbridge._cli_compat import warn_if_legacy_command
+from spectralbridge.exports.geo_utils import write_parquet_with_lonlat
 
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,7 @@ def _default_outputs(base_folder: Path) -> tuple[Path, Path]:
 def main(argv: Iterable[str] | None = None) -> None:
     """Entry-point for the ``cscal-qa-dashboard`` CLI."""
 
+    warn_if_legacy_command()
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser(

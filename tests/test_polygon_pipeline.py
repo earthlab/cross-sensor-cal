@@ -10,8 +10,8 @@ from shapely.geometry import Polygon
 
 import duckdb
 
-from cross_sensor_cal.paths import FlightlinePaths
-from cross_sensor_cal.polygons import (
+from spectralbridge.paths import FlightlinePaths
+from spectralbridge.polygons import (
     build_polygon_pixel_index,
     extract_polygon_parquets_for_flightline,
     merge_polygon_parquets_for_flightline,
