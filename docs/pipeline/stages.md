@@ -6,17 +6,20 @@ This page describes every stage of the pipeline, what it consumes, what it produ
 
 ---
 
-## Pipeline summary
+## Pipeline stages and idempotence
 
-1. **Data acquisition** (download NEON HDF5 tiles)
-2. **HDF5 → ENVI export**
-3. **Topographic correction**
-4. **BRDF correction**
-5. **Sensor harmonization (spectral convolution)**
-6. **Parquet extraction + merging**
-7. **Quality assurance (QA PNG, PDF, JSON)**
+The orchestrators `process_one_flightline` and `go_forth_and_multiply` enforce the following order:
 
-Each stage can be run independently using the `--start-at` and `--end-at` flags.
+1. Download HDF5 (via `stage_download_h5`).
+2. Export ENVI.
+3. Build correction JSON.
+4. Apply BRDF + topo correction.
+5. Resample/convolve all sensors.
+6. Export Parquet sidecars.
+7. DuckDB merge to merged parquet.
+8. Render QA panel + metrics.
+
+Each stage checks whether its expected outputs already exist and are valid, logs a skip message when they do, and recomputes missing or corrupted artefacts. Recovery mode exists for raw ENVI exports when corrected outputs are present (`stage_export_envi_from_h5` supports `recover_missing_raw`, used by `cscal-recover-raw`).
 
 ---
 
@@ -29,12 +32,7 @@ Each stage can be run independently using the `--start-at` and `--end-at` flags.
 **Outputs:**
 - cached HDF5 tiles stored under the selected `--base-folder`
 
-The pipeline fetches *only* the tiles required for the selected flight line.
-
-**Common issues:**
-- missing HDF5 files in NEON storage
-- interrupted downloads in cloud environments
-- insufficient space in temporary directories
+Downloads are handled by `stage_download_h5` and are triggered automatically by `go_forth_and_multiply`.
 
 ---
 
@@ -46,133 +44,69 @@ The pipeline fetches *only* the tiles required for the selected flight line.
 - per-pixel geometry and metadata
 
 **Outputs:**
-- `*_directional_reflectance_envi.img/.hdr`
-- sidecar JSON documenting extracted wavelengths, masks, and scaling
+- `*_envi.img/.hdr` (see [Outputs](outputs.md))
 
-This stage produces an ENVI image that mirrors the HDF5 directional reflectance dataset.
-
-**What the ENVI file contains:**
-- reflectance (scaled NEON values)
-- wavelength metadata
-- per-pixel masks (cloud, cloud shadow, water, snow, invalid)
-
-**Common issues:**
-- mismatch between HDF5 metadata and ENVI header
-- extremely large tile sizes causing I/O delays
-- NaN bands due to malformed HDF5 datasets
+`stage_export_envi_from_h5` creates the ENVI pair using the canonical naming in `FlightlinePaths`, with optional brightness offsets.
 
 ---
 
 <a id="topographic-correction"></a>
-## 3. Topographic correction
+## 3. Topographic + BRDF correction
 
 **Inputs:**
-- directional reflectance ENVI
+- directional or raw ENVI exports
 - DEM-derived slope and aspect
-- solar geometry
+- solar/view geometry
 
 **Outputs:**
-- `*_topocorrected_envi.img`
+- `<flight_id>_brdfandtopo_corrected_envi.(img|hdr|json)`
 
-Topographic correction reduces slope- and aspect-driven variation in illumination.
-
-The method assumes surface reflectance behaves consistently with simple terrain-adjustment models.
-
-**Common issues:**
-- DEM resolution mismatch
-- strong terrain shadows that remain after correction
-- negative reflectance in deep shadows (masked)
-
----
-
-<a id="brdf-correction"></a>
-## 4. BRDF correction
-
-**Inputs:**
-- topographically corrected ENVI reflectance
-- view geometry (sensor zenith / azimuth)
-- solar geometry
-
-**Outputs:**
-- `*_brdfandtopo_corrected_envi.img`
-- BRDF coefficient tables in the QA JSON
-
-BRDF correction adjusts reflectance to a consistent view/illumination angle, making spectra across the flight line more comparable.
-
-**Common issues:**
-- instabilities in BRDF coefficient fitting
-- extreme reflectance values that must be masked
-- spatial artifacts in low-SNR bands
+`stage_build_and_write_correction_json` writes the parameter JSON, and `stage_apply_brdf_and_topo` applies the combined correction before downstream resampling.
 
 ---
 
 <a id="sensor-harmonization"></a>
-## 5. Sensor harmonization (spectral convolution)
+## 4. Sensor harmonization (spectral convolution)
 
 **Inputs:**
 - BRDF+topo corrected ENVI
 - sensor spectral response functions (SRFs)
 
 **Outputs:**
-- `*_landsat_convolved_envi.img` or other sensor-equivalent ENVI products
-- bandpass-harmonized Parquet files
+- `<flight_id>_<sensor>_envi.(img|hdr|parquet)`
 
-This stage integrates the corrected spectrum against the target sensor's SRFs.
-Supported sensors include Landsat OLI/OLI-2; others can be added.
-
-**Common issues:**
-- wavelength misalignment
-- missing SRF tables
-- sensor bands with near-zero response across NEON wavelengths
+`stage_convolve_all_sensors` delegates to the configured resample method (convolution, legacy, or resample) and iterates through `FlightlinePaths.sensor_products`.
 
 ---
 
 <a id="parquet-extraction-merging"></a>
-## 6. Parquet extraction & merging
+## 5. Parquet extraction & merging
 
 **Inputs:**
 - any ENVI cube produced by earlier stages
 
 **Outputs:**
-- a Parquet file per cube (one row per pixel)
-- a merged pixel extraction table for the whole flight line
+- Parquet files for raw, corrected, and resampled cubes
+- `<flight_id>_merged_pixel_extraction.parquet`
 
-This step makes downstream analysis easy in Python, R, or DuckDB.
-
-**Common issues:**
-- extremely large tables (billions of rows)
-- insufficient memory for merges
-- incorrect CRS metadata in ENVI headers
+`_export_parquet_stage` builds the per-product Parquet sidecars, and `merge_flightline` (DuckDB) consolidates them with schema validation before optional QA rendering.
 
 ---
 
 <a id="quality-assurance"></a>
-## 7. Quality assurance (QA)
+## 6. Quality assurance (QA)
 
 **Inputs:**
-- all previous outputs
+- merged parquet and supporting ENVI files
 
 **Outputs:**
-- `*_qa.png`
-- `*_qa.pdf`
-- `*_qa.json`
+- `<flight_id>_qa.png`
+- `<flight_id>_qa.json`
+- `<flight_id>_qa.pdf` (when rendered)
 
-QA artifacts summarize reflectance distributions, masks, wavelength metadata, and BRDF/brightness statistics.
-See the [QA page](qa.md) for details.
+QA artefacts come from `render_flightline_panel` and mirror the canonical stems listed in [Outputs](outputs.md).
 
 ---
-
-## Running a partial pipeline
-
-You can run only part of the pipeline:
-
-```bash
-cscal-pipeline \
-  --start-at brdf \
-  --end-at convolution
-```
-
-Or run a single stage manually if needed.
 
 ## Next steps
 

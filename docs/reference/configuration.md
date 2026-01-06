@@ -50,26 +50,49 @@ Use cautiously when memory is limited.
 
 ---
 
-### `start-at` and `end-at`
+### Pipeline scope
 
-Define subsets of the pipeline to run.
+The CLI currently runs the full stage sequence; idempotent checks in `process_one_flightline` skip work when outputs already exist.
 
-Example:
+### Environment variables
 
-```bash
---start-at brdf --end-at convolution
-Environment variables
-VariableMeaning
-CSCAL_TMPDIROverride temporary directory
-CSCAL_LOGLEVELSet logging verbosity
-CSCAL_RAY_ADDRESSUse an existing Ray cluster
+| Variable | Meaning |
+| --- | --- |
+| `CSCAL_TMPDIR` | Override temporary directory |
+| `CSCAL_LOGLEVEL` | Set logging verbosity |
+| `CSCAL_RAY_ADDRESS` | Use an existing Ray cluster |
+
 Advanced configuration
 These settings primarily matter for large-scale workflows:
-chunk sizes for Parquet extraction
-memory thresholds for Ray worker processes
-default CRS assignments
-sensor SRF paths
+
+- chunk sizes for Parquet extraction
+- memory thresholds for Ray worker processes
+- default CRS assignments
+- sensor SRF paths
+
 Details of internal architecture appear in the Developer section.
+
+---
+
+## Sensor support & configuration sources
+
+Supported sensor outputs (from `FlightlinePaths.sensor_products`):
+
+- `landsat_tm`
+- `landsat_etm+`
+- `landsat_oli`
+- `landsat_oli2`
+- `micasense`
+- `micasense_to_match_tm_etm+`
+- `micasense_to_match_oli_oli2`
+
+Spectral configuration comes from:
+
+- `cross_sensor_cal/data/landsat_band_parameters.json`
+- `cross_sensor_cal/data/hyperspectral_bands.json`
+- brightness coefficients loaded via `load_brightness_coefficients(system_pair)` in `cross_sensor_cal/brightness_config.py` with tables stored under `cross_sensor_cal/data/brightness/*.json`
+
+If you update brightness coefficients, refresh the JSON tables accordingly. Provenance/citation for brightness regression tables: (needs project decision).
 Next steps
 JSON schemas
 Validation metrics
