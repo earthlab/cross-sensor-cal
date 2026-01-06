@@ -1,3 +1,5 @@
+![SpectralBridge logo](asset/img/spectralbridge_logo.png)
+
 # SpectralBridge
 
 **SpectralBridge (formerly cross-sensor-cal)** translates reflectance among NEON AOP, uncrewed aerial system (e.g., MicaSense), and Landsat observations to place disparate datasets into a common Landsat-referenced frame. It is designed for notebook-first scientists who need reliable, reproducible harmonization to bridge fine-scale ecological measurements with the long-term continental Landsat record. The workflow is pipeline-based rather than a single correction, and it produces artifacts that can be inspected, reused, and resumed.

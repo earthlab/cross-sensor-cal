@@ -8,6 +8,7 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
+  logo: asset/img/spectralbridge_logo.png
   features:
     - navigation.instant
     - navigation.tracking
@@ -97,3 +98,21 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/earthlab/spectralbridge
+  footer: |
+    <div class="footer-affiliations">
+      <p>Affiliated organizations</p>
+      <div class="footer-logo-row" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <a href="https://cires.colorado.edu" aria-label="CIRES website">
+          <img src="asset/img/CIRES%20logo%20black%20lettering%20transparent%20bkgrnd.png" alt="CIRES logo" height="48" loading="lazy">
+        </a>
+        <a href="https://esiil.org" aria-label="ESIIL website">
+          <img src="asset/img/Final_ESIIL%20Wordmark%20Color_0.png" alt="ESIIL logo" height="48" loading="lazy">
+        </a>
+        <a href="https://www.nsf.gov" aria-label="National Science Foundation website">
+          <img src="asset/img/NSF_Official_logo_High_Res_1200ppi.png" alt="National Science Foundation logo" height="48" loading="lazy">
+        </a>
+        <a href="https://bouldercolorado.gov" aria-label="City of Boulder website">
+          <img src="asset/img/Boulder_shorty_left_2025.png" alt="City of Boulder logo" height="48" loading="lazy">
+        </a>
+      </div>
+    </div>

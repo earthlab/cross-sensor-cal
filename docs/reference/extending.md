@@ -27,4 +27,4 @@ print(registry.available_sensors())
 ## Pitfalls
 - Forgetting to update schemas will break Stage 6 merges.
 - Ship lightbox-friendly QA thumbnails when adding new visualization layers.
-- Document new sensors in [Pipeline Stages](../pipeline/stages.md#5-sensor-harmonization-spectral-convolution) and [Troubleshooting](../troubleshooting.md).
+- Document new sensors in [Pipeline Stages](../pipeline/stages.md#sensor-harmonization) and [Troubleshooting](../troubleshooting.md).
