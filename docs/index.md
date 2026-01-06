@@ -2,6 +2,13 @@
 
 Earth Lab’s **cross-sensor-cal** is a Python package for producing physically corrected and sensor-harmonized reflectance from NEON hyperspectral data and other fine-resolution imagery.
 
+## What cross-sensor-cal does
+
+- Converts NEON AOP directional reflectance HDF5 flightlines into ENVI products (see `stage_export_envi_from_h5`).
+- Builds a correction JSON, applies BRDF + topo correction, then resamples to target sensors via convolution or a configured resample method (`process_one_flightline` in `cross_sensor_cal.pipelines.pipeline`).
+- Exports Parquet sidecars for raw/corrected/resampled products, then merges them with DuckDB into `<flight_id>_merged_pixel_extraction.parquet` (`merge_flightline` in `cross_sensor_cal.merge_duckdb`).
+- Generates QA outputs `<flight_id>_qa.png` and `<flight_id>_qa.json` (and PDF when produced) via `render_flightline_panel`.
+
 It provides a reproducible workflow that:
 
 - exports NEON HDF5 to ENVI

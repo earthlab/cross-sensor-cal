@@ -1,124 +1,26 @@
 # Outputs & File Structure
 
-The cross-sensor-cal pipeline produces a consistent directory structure for each flight line. This page describes every artifact, what it contains, and how to use it.
+The pipeline writes every artefact into a per-flightline folder using naming rules shared by `FlightlinePaths` and `cross_sensor_cal.utils.naming`. All patterns below come directly from `src/cross_sensor_cal/paths.py` and are reused by the CLI and QA tools.
 
----
+## Per-flightline outputs (canonical names)
 
-## Flight line directory layout
+Naming is centralized in `cross_sensor_cal.paths.FlightlinePaths` and `cross_sensor_cal.utils.naming.get_flightline_products`.
 
-A typical directory looks like:
+| Output | Pattern |
+| --- | --- |
+| Raw ENVI | `<flight_id>_envi.(img|hdr)` with optional `<flight_id>_envi.parquet` |
+| Corrected ENVI | `<flight_id>_brdfandtopo_corrected_envi.(img|hdr|json|parquet)` |
+| Sensor outputs | `<flight_id>_<sensor>_envi.(img|hdr|parquet)` where `sensor` is one of `landsat_tm`, `landsat_etm+`, `landsat_oli`, `landsat_oli2`, `micasense`, `micasense_to_match_tm_etm+`, `micasense_to_match_oli_oli2` |
+| Merged Parquet | `<flight_id>_merged_pixel_extraction.parquet` |
+| QA | `<flight_id>_qa.png`, `<flight_id>_qa.json`, `<flight_id>_qa.pdf` (when rendered) |
 
-NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/
-directional/
-topo/
-brdf/
-convolved/
-parquet/
-qa/
+Docs drift CI expects `_merged_pixel_extraction.parquet` and `_qa.png` to be mentioned; see `tools/doc_drift_audit.py`.
 
-Within each folder, ENVI images, Parquet tables, and sidecar JSON files share common prefixes.
+## Where outputs come from
 
----
+- ENVI exports are produced in `stage_export_envi_from_h5` and validated in `process_one_flightline`.
+- BRDF/topo correction plus the correction JSON are written by `stage_build_and_write_correction_json` and `stage_apply_brdf_and_topo`.
+- Sensor-specific cubes follow the resample method passed to `process_one_flightline` and use the sensor list from `FlightlinePaths.sensor_products`.
+- Parquet sidecars for raw, corrected, and resampled cubes are emitted by `_export_parquet_stage` and merged by `merge_flightline` into the canonical merged parquet.
+- QA panels and metrics (`render_flightline_panel`) align with the same naming stems, including `_qa.png` and `_qa.json`.
 
-## Key outputs
-
-### 1. Corrected ENVI products
-
-**Files:**
-
-*_directional_reflectance_envi.img
-*_topocorrected_envi.img
-*_brdfandtopo_corrected_envi.img
-
-**Contents:**
-
-- reflectance bands  
-- wavelength metadata  
-- masks (cloud, shadow, water, snow, invalid)  
-- CRS and pixel geometry  
-
----
-
-### 2. Sensor-harmonized ENVI cubes
-
-**Files:**
-
-*_landsat_convolved_envi.img
-
-One file is produced for each requested sensor type.
-
-**Contents:**
-
-- band-averaged reflectance values for the sensor  
-- metadata documenting SRFs used  
-- brightness adjustment coefficients (if applicable)  
-
----
-
-### 3. Per-product Parquet tables
-
-Every ENVI file has a corresponding Parquet table:
-
-*_brdfandtopo_corrected.parquet
-*_landsat_convolved.parquet
-
-Each row = one pixel.  
-Columns include:
-
-- reflectance values  
-- masks  
-- wavelengths  
-- pixel coordinates  
-
-These tables are ideal for large-scale analysis using DuckDB, pandas, or xarray.
-
----
-
-### 4. Merged pixel extraction table
-
-*_merged_pixel_extraction.parquet
-
-This contains all extracted pixel-level data for the flight line, merged across products.
-
----
-
-### 5. QA artifacts
-
-*_qa.png
-*_qa.pdf
-*_qa.json
-
-See the [QA page](qa.md) for details.
-
----
-
-## Naming conventions
-
-Files follow a consistent pattern:
-
-<NEON ID><date><stage><sensor?><format>.{img|hdr|parquet}
-
-Examples:
-
-- `NEON_D13_NIWO_DP1_L020-1_20230815_brdfandtopo_corrected_envi.img`  
-- `NEON_D13_NIWO_DP1_L020-1_20230815_landsat_convolved_parquet`  
-
-The prefixes and suffixes are designed for predictable sorting and automation.
-
----
-
-## Using outputs in analysis
-
-Example with DuckDB:
-
-```python
-import duckdb
-duckdb.query("SELECT NIR, Red FROM '..._landsat_convolved.parquet' LIMIT 10").df()
-Example with rioxarray:
-import rioxarray as rxr
-cube = rxr.open_rasterio("..._brdfandtopo_corrected_envi.img")
-Next steps
-Pipeline stages
-QA panels & metrics
-
----

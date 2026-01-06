@@ -47,3 +47,24 @@ Package architecture
 Codex edit guidelines
 
 ---
+
+## Continuous Integration (CI) and test markers
+
+What runs in CI (from `.github/workflows/*.yml`):
+
+- Ubuntu runners with Python 3.11 for all jobs.
+- Lint + smoke: `ruff check src tests` and `pytest -q -m "lite"` with `CSCAL_TEST_MODE=lite`.
+- Full tests: `pytest -q` with `CSCAL_TEST_MODE=unit`.
+- Docs: `python tools/site_prepare.py` then `mkdocs build --strict`, plus a best-effort `linkchecker` pass.
+- Docs drift: `python tools/doc_drift_audit.py` with a hard check that `_merged_pixel_extraction.parquet` and `_qa.png` are mentioned.
+- QA quick check: `pytest tests/test_qa -q` followed by generating a QA panel fixture image/JSON.
+
+Run locally with:
+
+```bash
+python -m pytest -m lite
+python -m pytest
+mkdocs build --strict
+```
+
+---
