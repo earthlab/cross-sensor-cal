@@ -491,10 +491,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#minimal-example-cli" class="md-nav__link">
+  <a href="#why-this-approach-is-trustworthy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Minimal example (CLI)
+        Why this approach is trustworthy
       
     </span>
   </a>
@@ -502,10 +502,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-the-pipeline-works" class="md-nav__link">
+  <a href="#connection-to-the-scientific-literature" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How the pipeline works
+        Connection to the scientific literature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#who-should-use-this" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who should use this
       
     </span>
   </a>
@@ -1589,53 +1600,29 @@
 
 
 <h1 id="cross-sensor-calibration">Cross-Sensor Calibration<a class="headerlink" href="#cross-sensor-calibration" title="Permanent link">&para;</a></h1>
-<p>Earth Lab’s <strong>cross-sensor-cal</strong> is a Python package for producing physically corrected and sensor-harmonized reflectance from NEON hyperspectral data and other fine-resolution imagery.</p>
+<p>Earth Lab's <strong>cross-sensor-cal</strong> translates reflectance among NEON AOP, uncrewed aerial system (e.g., MicaSense), and Landsat observations to place disparate datasets into a common Landsat-referenced frame. It is designed for notebook-first scientists who need reliable, reproducible harmonization to bridge fine-scale ecological measurements with the long-term continental Landsat record. The workflow is pipeline-based rather than a single correction, and it produces artifacts that can be inspected, reused, and resumed.</p>
 <h2 id="what-cross-sensor-cal-does">What cross-sensor-cal does<a class="headerlink" href="#what-cross-sensor-cal-does" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Converts NEON AOP directional reflectance HDF5 flightlines into ENVI products (see <code>stage_export_envi_from_h5</code>).</li>
-<li>Builds a correction JSON, applies BRDF + topo correction, then resamples to target sensors via convolution or a configured resample method (<code>process_one_flightline</code> in <code>cross_sensor_cal.pipelines.pipeline</code>).</li>
-<li>Exports Parquet sidecars for raw/corrected/resampled products, then merges them with DuckDB into <code>&lt;flight_id&gt;_merged_pixel_extraction.parquet</code> (<code>merge_flightline</code> in <code>cross_sensor_cal.merge_duckdb</code>).</li>
-<li>Generates QA outputs <code>&lt;flight_id&gt;_qa.png</code> and <code>&lt;flight_id&gt;_qa.json</code> (and PDF when produced) via <code>render_flightline_panel</code>.</li>
+<li>Normalizes directional reflectance through topographic and BRDF adjustments, then resamples spectra into Landsat and other target bandpasses for direct comparison.</li>
+<li>Bridges across ecological scales by aligning field, UAS, and airborne measurements with the Landsat time series, enabling cross-scale analyses and model transfer.</li>
+<li>Generates harmonized, provenance-rich spectral libraries alongside imagery so downstream modeling can start from analysis-ready data.</li>
+<li>Emits restart-safe outputs (ENVI, Parquet sidecars, merged pixel tables) plus QA panels that document every run.</li>
 </ul>
-<p>It provides a reproducible workflow that:</p>
+<h2 id="why-this-approach-is-trustworthy">Why this approach is trustworthy<a class="headerlink" href="#why-this-approach-is-trustworthy" title="Permanent link">&para;</a></h2>
 <ul>
-<li>exports NEON HDF5 to ENVI</li>
-<li>applies topographic and BRDF correction</li>
-<li>harmonizes reflectance to Landsat / MicaSense bandspaces</li>
-<li>writes Parquet tables</li>
-<li>emits QA PNG, PDF, and JSON summaries</li>
+<li>Physics-informed normalization (topographic + BRDF) precedes empirical calibration to keep results grounded in surface reflectance rather than image brightness alone.</li>
+<li>Cross-sensor calibration is referenced to Landsat NBAR, providing an anchored target for spectral translation.</li>
+<li>Every run produces QA PNG/PDF panels and JSON summaries so users can interrogate performance and document decisions.</li>
+<li>The pipeline is deterministic and restartable: intermediate artifacts are written to disk, making runs auditable and recoverable.</li>
 </ul>
-<hr />
-<h2 id="minimal-example-cli">Minimal example (CLI)<a class="headerlink" href="#minimal-example-cli" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span class="nv">BASE</span><span class="o">=</span>output_demo
-mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span>
-
-cscal-pipeline<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--base-folder<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$BASE</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--site-code<span class="w"> </span>NIWO<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--year-month<span class="w"> </span><span class="m">2023</span>-08<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--product-code<span class="w"> </span>DP1.30006.001<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--flight-lines<span class="w"> </span>NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--max-workers<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--engine<span class="w"> </span>thread
-</code></pre></div>
-<p>Inspect QA outputs:</p>
-<div class="highlight"><pre><span></span><code>open<span class="w"> </span><span class="nv">$BASE</span>/NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance/*_qa.png
-</code></pre></div>
-<p>For a Python/Jupyter version, see:</p>
+<h2 id="connection-to-the-scientific-literature">Connection to the scientific literature<a class="headerlink" href="#connection-to-the-scientific-literature" title="Permanent link">&para;</a></h2>
+<p>This software implements the workflow described in the Remote Sensing of Environment manuscript, <em>Bridging Scales for Macrosystems Ecology: Harmonizing Western US Plant Functional Types Spectral Data from Drones and NEON Airborne Imagery to Landsat Observations</em>. It operationalizes that study's approach to aligning UAS and NEON hyperspectral data with Landsat, providing an open, inspectable implementation for reproducible science.</p>
+<h2 id="who-should-use-this">Who should use this<a class="headerlink" href="#who-should-use-this" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Usage → <a href="usage/notebook-example/">Jupyter notebook example</a></li>
+<li>Notebook-first scientists analyzing spectral libraries and reflectance products.</li>
+<li>Ecologists and remote sensing researchers needing to connect plot-level or flightline observations to Landsat's long-term record.</li>
+<li>Advanced users and developers integrating the pipeline into larger workflows or extending it to additional sensors.</li>
 </ul>
-<h2 id="how-the-pipeline-works">How the pipeline works<a class="headerlink" href="#how-the-pipeline-works" title="Permanent link">&para;</a></h2>
-<ol>
-<li><a href="pipeline/stages/#hdf5-to-envi">HDF5 → ENVI export</a></li>
-<li><a href="pipeline/stages/#topographic-correction">Topographic correction</a></li>
-<li><a href="pipeline/stages/#brdf-correction">BRDF correction</a></li>
-<li><a href="pipeline/stages/#sensor-harmonization">Sensor harmonization (bandpass convolution)</a></li>
-<li><a href="pipeline/stages/#parquet-extraction-merging">Parquet extraction + merging</a></li>
-<li><a href="pipeline/stages/#quality-assurance">QA reporting</a></li>
-</ol>
-<p>See the <a href="pipeline/stages/">Pipeline overview</a> for details.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="quickstart/">Quickstart</a></li>
@@ -1643,7 +1630,6 @@ cscal-pipeline<span class="w"> </span><span class="se">\</span>
 <li><a href="tutorials/neon-to-envi/">Tutorials</a></li>
 <li><a href="reference/configuration/">Reference</a></li>
 </ul>
-<hr />
 
 
 

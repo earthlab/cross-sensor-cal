@@ -10,13 +10,9 @@
       
       
       
-        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/dev/architecture/">
+        <link rel="canonical" href="https://earthlab.github.io/cross-sensor-cal/usage/recipes/">
       
       
-        <link rel="prev" href="../../faq/">
-      
-      
-        <link rel="next" href="../contributing/">
       
       
         
@@ -27,7 +23,7 @@
     
     
       
-        <title>How the package is organized - cross-sensor-cal</title>
+        <title>Recipes: Notebook Patterns - cross-sensor-cal</title>
       
     
     
@@ -72,7 +68,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#package-architecture" class="md-skip">
+        <a href="#recipes-notebook-patterns" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              How the package is organized
+              Recipes: Notebook Patterns
             
           </span>
         </div>
@@ -294,7 +290,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../usage/cli/" class="md-tabs__link">
+        <a href="../cli/" class="md-tabs__link">
           
   
   
@@ -350,13 +346,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../dev/architecture/" class="md-tabs__link">
           
   
   
@@ -989,7 +983,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -1017,7 +1011,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/parquet/" class="md-nav__link">
+      <a href="../parquet/" class="md-nav__link">
         
   
   
@@ -1045,7 +1039,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/notebook-example/" class="md-nav__link">
+      <a href="../notebook-example/" class="md-nav__link">
         
   
   
@@ -1335,31 +1329,26 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
         
           
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
             
   
   
@@ -1377,7 +1366,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_9">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1392,37 +1381,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    How the package is organized
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../dev/architecture/" class="md-nav__link">
         
   
   
@@ -1438,131 +1400,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#design-philosophy-and-invariants" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design philosophy and invariants
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pipeline-architecture-high-level" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pipeline architecture (high level)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#directory-structure-python-package" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Directory structure (Python package)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#extending-the-system-safely" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Extending the system safely
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Extending the system safely">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#adding-or-modifying-a-target-sensor" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Adding or modifying a target sensor
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#updating-brightness-or-calibration-coefficients" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Updating brightness or calibration coefficients
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#modifying-qa-outputs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Modifying QA outputs
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#relationship-to-scientific-reproducibility" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Relationship to scientific reproducibility
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1575,7 +1412,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../../dev/contributing/" class="md-nav__link">
         
   
   
@@ -1603,7 +1440,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../codex-guidelines/" class="md-nav__link">
+      <a href="../../dev/codex-guidelines/" class="md-nav__link">
         
   
   
@@ -1648,7 +1485,7 @@
 
 
   
-    <a href="https://github.com/earthlab/cross-sensor-cal/edit/main/docs/dev/architecture.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/earthlab/cross-sensor-cal/edit/main/docs/usage/recipes.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1656,70 +1493,133 @@
   
 
 
-<h1 id="package-architecture">Package Architecture<a class="headerlink" href="#package-architecture" title="Permanent link">&para;</a></h1>
-<p>This page describes how cross-sensor-cal is organized internally. Understanding this structure helps contributors extend the pipeline or integrate new sensors without breaking guarantees.</p>
+<h1 id="recipes-notebook-patterns">Recipes: Notebook Patterns<a class="headerlink" href="#recipes-notebook-patterns" title="Permanent link">&para;</a></h1>
+<p>These short recipes start from files on disk after the pipeline has run. Copy the cells into your notebook to repeat common workflows and stay aligned with the outputs-and-naming contract.</p>
 <hr />
-<h2 id="design-philosophy-and-invariants">Design philosophy and invariants<a class="headerlink" href="#design-philosophy-and-invariants" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Reproducibility first.</strong> Pipeline behavior is predictable and restart-safe; stages skip when valid outputs already exist instead of recomputing.</li>
-<li><strong>Fixed ordering.</strong> <code>process_one_flightline</code> and <code>go_forth_and_multiply</code> orchestrate the same sequence: ENVI export → BRDF/topographic parameter build → BRDF+topo correction → sensor convolution/resampling → Parquet exports → DuckDB merge → QA panels.</li>
-<li><strong>File contracts.</strong> <code>FlightlinePaths</code> centralizes filenames and directories; stages communicate only through these artifacts. Downstream docs and CI treat the merged Parquet and QA products as required outputs.</li>
-<li><strong>Outputs are the API.</strong> Functions return little; correctness is expressed through on-disk ENVI/Parquet and QA files that can be inspected or reused.</li>
-</ul>
+<h2 id="recipe-1-run-a-single-flightline-recap">Recipe 1: Run a single flightline (recap)<a class="headerlink" href="#recipe-1-run-a-single-flightline-recap" title="Permanent link">&para;</a></h2>
+<p>Use this when you want the canonical, restart-safe run for one flightline. See the <a href="../notebook-example/">Start Here notebook workflow</a> for the full walkthrough.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal.pipelines.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">process_one_flightline</span>
+
+<span class="n">base_folder</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;csc_output&quot;</span><span class="p">)</span>
+<span class="n">site_code</span> <span class="o">=</span> <span class="s2">&quot;NIWO&quot;</span>
+<span class="n">year_month</span> <span class="o">=</span> <span class="s2">&quot;2023-08&quot;</span>
+<span class="n">flightline_id</span> <span class="o">=</span> <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span>
+
+<span class="n">process_one_flightline</span><span class="p">(</span>
+    <span class="n">base_folder</span><span class="o">=</span><span class="n">base_folder</span><span class="p">,</span>
+    <span class="n">product_code</span><span class="o">=</span><span class="s2">&quot;DP1.30006.001&quot;</span><span class="p">,</span>
+    <span class="n">flight_stem</span><span class="o">=</span><span class="n">flightline_id</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Expect to see <code>{flightline_id}_merged_pixel_extraction.parquet</code> plus <code>{flightline_id}_qa.png</code>/<code>{flightline_id}_qa.json</code> in <code>base_folder / flightline_id</code> when it finishes.</p>
 <hr />
-<h2 id="pipeline-architecture-high-level">Pipeline architecture (high level)<a class="headerlink" href="#pipeline-architecture-high-level" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Stages</strong> are pure file transforms. Each consumes a known input set and writes ENVI, Parquet, and JSON/PNG sidecars. Stages do not mutate shared state.</li>
-<li><strong>Orchestration</strong> happens in <code>pipelines/pipeline.py</code> via <code>process_one_flightline</code> (single flightline) and <code>go_forth_and_multiply</code> (batch). Both rely on <code>FlightlinePaths</code> to resolve paths and naming before delegating work.</li>
-<li><strong>Communication</strong> between stages is file-based. The BRDF+topo-corrected ENVI is always the source for sensor resampling; Parquet exports derive from both raw and corrected ENVI; the merged Parquet and QA summaries consume all earlier artifacts.</li>
-<li><strong>Restart safety</strong> is achieved because each stage validates its outputs and returns early when they already exist. Partial runs can be resumed without recomputation or corrupting prior files.</li>
-</ul>
+<h2 id="recipe-2-batch-process-multiple-flightlines">Recipe 2: Batch process multiple flightlines<a class="headerlink" href="#recipe-2-batch-process-multiple-flightlines" title="Permanent link">&para;</a></h2>
+<p><code>go_forth_and_multiply</code> applies the same pipeline to many flightlines and skips work that already succeeded. Safe to re-run if a notebook or kernel restarts mid-way.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal.pipelines.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">go_forth_and_multiply</span>
+
+<span class="n">base_folder</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;csc_output&quot;</span><span class="p">)</span>
+<span class="n">flightline_ids</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-2_20230815_directional_reflectance&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">go_forth_and_multiply</span><span class="p">(</span>
+    <span class="n">base_folder</span><span class="o">=</span><span class="n">base_folder</span><span class="p">,</span>
+    <span class="n">product_code</span><span class="o">=</span><span class="s2">&quot;DP1.30006.001&quot;</span><span class="p">,</span>
+    <span class="n">flight_stems</span><span class="o">=</span><span class="n">flightline_ids</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Restarting this cell later will fast-forward past any flightlines that already have merged Parquet and QA artefacts.</p>
 <hr />
-<h2 id="directory-structure-python-package">Directory structure (Python package)<a class="headerlink" href="#directory-structure-python-package" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>cross_sensor_cal/pipelines/</code>: orchestration entry points and Ray helpers</li>
-<li><code>cross_sensor_cal/exports/</code>: ENVI export helpers</li>
-<li><code>cross_sensor_cal/io/</code>: schema and I/O helpers (e.g., NEON schema resolution)</li>
-<li><code>cross_sensor_cal/utils/</code>: shared utilities, naming/path helpers, memory management</li>
-<li><code>cross_sensor_cal/data/</code>: spectral metadata and calibration tables</li>
-<li><code>landsat_band_parameters.json</code>: band centers/FWHM used for resampling</li>
-<li><code>brightness/*.json</code>: brightness adjustments between Landsat and MicaSense</li>
-<li><code>hyperspectral_bands.json</code>: reference metadata for hyperspectral inputs</li>
-<li><code>cross_sensor_cal/qa_plots.py</code> and <code>cross_sensor_cal/sensor_panel_plots.py</code>: QA visualization utilities</li>
-<li><code>cross_sensor_cal/standard_resample.py</code>: spectral resampling and coefficients</li>
-</ul>
+<h2 id="recipe-3-re-run-qa-on-existing-outputs">Recipe 3: Re-run QA on existing outputs<a class="headerlink" href="#recipe-3-re-run-qa-on-existing-outputs" title="Permanent link">&para;</a></h2>
+<p>Generate fresh QA artefacts from completed flightlines without recomputing the pipeline.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal.qa_plots</span><span class="w"> </span><span class="kn">import</span> <span class="n">render_flightline_panel</span>
+
+<span class="n">flight_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;csc_output&quot;</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span>
+
+<span class="n">png_path</span><span class="p">,</span> <span class="n">metrics</span> <span class="o">=</span> <span class="n">render_flightline_panel</span><span class="p">(</span>
+    <span class="n">flightline_dir</span><span class="o">=</span><span class="n">flight_dir</span><span class="p">,</span>
+    <span class="n">quick</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># deterministic sampling</span>
+    <span class="n">save_json</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;QA PNG →&quot;</span><span class="p">,</span> <span class="n">png_path</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Issues:&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;issues&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+</code></pre></div>
+<p>This operates on existing ENVI and Parquet products in <code>flight_dir</code> and rewrites <code>{flight_id}_qa.png</code> and <code>{flight_id}_qa.json</code> only. If you prefer the CLI, <code>cscal-qa</code> wraps the same logic for batch folders.</p>
 <hr />
-<h2 id="extending-the-system-safely">Extending the system safely<a class="headerlink" href="#extending-the-system-safely" title="Permanent link">&para;</a></h2>
-<h3 id="adding-or-modifying-a-target-sensor">Adding or modifying a target sensor<a class="headerlink" href="#adding-or-modifying-a-target-sensor" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Update spectral definitions in <code>cross_sensor_cal/data/landsat_band_parameters.json</code> (or analogous table for the new sensor) and ensure resampling logic in <code>standard_resample.py</code> knows how to consume them.</li>
-<li>Confirm <code>get_flightline_products</code> and <code>FlightlinePaths</code> generate filenames for the new sensor; outputs must still include merged Parquet and QA artifacts.</li>
-<li>Add tests that validate band definitions and resampled outputs; do not bypass the existing stage ordering.</li>
-</ul>
-<h3 id="updating-brightness-or-calibration-coefficients">Updating brightness or calibration coefficients<a class="headerlink" href="#updating-brightness-or-calibration-coefficients" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Brightness and regression tables live under <code>cross_sensor_cal/data/brightness/</code> and are loaded via <code>brightness_config</code>. Changes here affect downstream cross-sensor harmonization.</li>
-<li>Keep JSON schema and key names stable; update any dependent tests and documentation describing the coefficients.</li>
-<li>Validate against Landsat-referenced QA outputs to confirm calibrations remain within expected bounds.</li>
-</ul>
-<h3 id="modifying-qa-outputs">Modifying QA outputs<a class="headerlink" href="#modifying-qa-outputs" title="Permanent link">&para;</a></h3>
-<ul>
-<li>QA panels and JSON summaries are produced after merging outputs. Filenames such as <code>&lt;flight_id&gt;_qa.png</code> and <code>&lt;flight_id&gt;_qa.json</code> are assumed by docs and CI.</li>
-<li>If adding metrics or changing formats, ensure <code>_qa.png</code> and <code>_qa.json</code> remain available and update the QA tests under <code>tests/test_qa</code> accordingly.</li>
-<li>Maintain quick-mode rendering used in CI fixtures so drift checks continue to pass.</li>
-</ul>
+<h2 id="recipe-4-load-and-explore-the-merged-parquet">Recipe 4: Load and explore the merged Parquet<a class="headerlink" href="#recipe-4-load-and-explore-the-merged-parquet" title="Permanent link">&para;</a></h2>
+<p>The merged Parquet is the analysis starting point. Use pandas or pyarrow/DuckDB depending on scale.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">flight_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;csc_output&quot;</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span>
+<span class="n">merged_parquet</span> <span class="o">=</span> <span class="n">flight_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">flight_dir</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">_merged_pixel_extraction.parquet&quot;</span>
+
+<span class="n">merged_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">merged_parquet</span><span class="p">)</span>
+<span class="n">merged_df</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</code></pre></div>
+<p>Inspect available fields to guide filtering and joins:</p>
+<div class="highlight"><pre><span></span><code><span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">merged_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="s2">&quot;wl&quot;</span> <span class="ow">in</span> <span class="n">col</span><span class="p">][:</span><span class="mi">10</span><span class="p">]</span>  <span class="c1"># sample band columns</span>
+</code></pre></div>
+<p>For large files, prefer streaming SQL with DuckDB:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">duckdb</span>
+
+<span class="n">rel</span> <span class="o">=</span> <span class="n">duckdb</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">merged_parquet</span><span class="p">))</span>
+<span class="n">rel</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">df</span><span class="p">()</span>
+</code></pre></div>
 <hr />
-<h2 id="relationship-to-scientific-reproducibility">Relationship to scientific reproducibility<a class="headerlink" href="#relationship-to-scientific-reproducibility" title="Permanent link">&para;</a></h2>
-<ul>
-<li>The repository encodes the workflow described in the RSE manuscript; artifacts (ENVI, Parquet, QA) are the evidence trail for analyses.</li>
-<li>Centralized naming, stage ordering, and idempotent execution make runs auditable and repeatable across environments.</li>
-<li>Contributors are expected to preserve these invariants so published and future analyses can be reproduced from the same on-disk products.</li>
-</ul>
+<h2 id="recipe-5-extract-spectra-for-polygons">Recipe 5: Extract spectra for polygons<a class="headerlink" href="#recipe-5-extract-spectra-for-polygons" title="Permanent link">&para;</a></h2>
+<p>Link pixels to polygons using the optional polygon pipeline utilities built on top of the merged Parquet and ENVI outputs.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal.paths</span><span class="w"> </span><span class="kn">import</span> <span class="n">FlightlinePaths</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal.polygons</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_polygon_pipeline_for_flightline</span>
+
+<span class="n">flight_paths</span> <span class="o">=</span> <span class="n">FlightlinePaths</span><span class="p">(</span><span class="s2">&quot;csc_output&quot;</span><span class="p">,</span> <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span><span class="p">)</span>
+<span class="n">polygons_path</span> <span class="o">=</span> <span class="s2">&quot;Datasets/niwot_aop_polygons_2023_12_8_23_analysis_ready_half_diam.gpkg&quot;</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">run_polygon_pipeline_for_flightline</span><span class="p">(</span>
+    <span class="n">flight_paths</span><span class="p">,</span>
+    <span class="n">polygons_path</span><span class="p">,</span>
+    <span class="n">products</span><span class="o">=</span><span class="p">[</span>
+        <span class="s2">&quot;envi&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;brdfandtopo_corrected_envi&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;landsat_tm_envi&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;landsat_oli_envi&quot;</span><span class="p">,</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">result</span><span class="p">[</span><span class="s2">&quot;polygon_merged_parquet&quot;</span><span class="p">]</span>
+</code></pre></div>
+<p>The helper rasterises polygons, filters per-product Parquet tables, and writes <code>&lt;flight_id&gt;_polygons_merged_pixel_extraction.parquet</code> for direct use in modeling notebooks. See <code>docs/pipeline/polygons.md</code> for deeper details.</p>
 <hr />
-<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<h2 id="recipe-6-compare-sensors-for-the-same-targets">Recipe 6: Compare sensors for the same targets<a class="headerlink" href="#recipe-6-compare-sensors-for-the-same-targets" title="Permanent link">&para;</a></h2>
+<p>Pull harmonized spectra across sensors from the merged Parquet to validate translation results.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">flight_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;csc_output&quot;</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span>
+<span class="n">merged_parquet</span> <span class="o">=</span> <span class="n">flight_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">flight_dir</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">_merged_pixel_extraction.parquet&quot;</span>
+
+<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">merged_parquet</span><span class="p">)</span>
+
+<span class="c1"># Example: pick a handful of pixels and compare corrected NEON vs Landsat-resampled bands</span>
+<span class="n">pixel_subset</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">100</span><span class="p">)[</span><span class="s2">&quot;pixel_id&quot;</span><span class="p">]</span>
+
+<span class="n">corr_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;corr_&quot;</span><span class="p">)]</span>
+<span class="n">landsat_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="s2">&quot;landsat&quot;</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="n">c</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;nm&quot;</span><span class="p">)]</span>
+
+<span class="n">comparison</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;pixel_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">pixel_subset</span><span class="p">),</span> <span class="p">[</span><span class="s2">&quot;pixel_id&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">corr_cols</span><span class="p">[:</span><span class="mi">5</span><span class="p">],</span> <span class="o">*</span><span class="n">landsat_cols</span><span class="p">[:</span><span class="mi">5</span><span class="p">]]]</span>
+<span class="n">comparison</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</code></pre></div>
+<p>This lightweight slice shows matched bands from corrected NEON cubes alongside Landsat-referenced resamples for the same pixels; extend the selection for full-band comparisons or summary statistics.</p>
+<hr />
+<h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../contributing/">Contributing &amp; development workflow</a></li>
-<li><a href="../codex-guidelines/">Guidelines for AI/Codex edits</a></li>
+<li>Return to the <a href="../notebook-example/">Start Here notebook workflow</a> if you need to rerun the pipeline.</li>
+<li>Review <a href="../../pipeline/outputs/">Outputs &amp; file structure</a> for naming guarantees.</li>
+<li>Read the <a href="../../concepts/why-calibration/">Concepts</a> page for the scientific rationale behind the translation steps.</li>
 </ul>
 
 

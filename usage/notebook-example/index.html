@@ -72,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#jupyter-notebook-example" class="md-skip">
+        <a href="#start-here-notebook-workflow" class="md-skip">
           Skip to content
         </a>
       
@@ -1110,10 +1110,54 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-imports-and-configuration" class="md-nav__link">
+  <a href="#1-minimal-setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Imports and configuration
+        1) Minimal setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-canonical-single-flightline-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2) Canonical single-flightline example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-what-gets-created" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3) What gets created
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-inspect-results-in-the-notebook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4) Inspect results in the notebook
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-what-to-do-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5) What to do next
       
     </span>
   </a>
@@ -1562,88 +1606,76 @@
   
 
 
-<h1 id="jupyter-notebook-example">Jupyter Notebook Example<a class="headerlink" href="#jupyter-notebook-example" title="Permanent link">&para;</a></h1>
-<p>This page shows a complete Jupyter-style workflow using cross-sensor-cal:</p>
-<ol>
-<li>Run the pipeline from Python  </li>
-<li>Preview the merged Parquet table  </li>
-<li>Compute a simple NDVI diagnostic  </li>
-</ol>
-<p>You can copy these cells directly into a notebook.</p>
+<h1 id="start-here-notebook-workflow">Start Here: Notebook Workflow<a class="headerlink" href="#start-here-notebook-workflow" title="Permanent link">&para;</a></h1>
+<p>This page is the canonical notebook-first path for running cross-sensor-cal. It walks through one successful flightline run that produces harmonized, Landsat-referenced outputs on disk—not return values—so you can bridge UAS and NEON observations to the long-term Landsat record without touching the CLI.</p>
 <hr />
-<h2 id="1-imports-and-configuration">1. Imports and configuration<a class="headerlink" href="#1-imports-and-configuration" title="Permanent link">&para;</a></h2>
-<p>```python
-import os
-import duckdb
-import pandas as pd</p>
-<p>from cross_sensor_cal import go_forth_and_multiply</p>
-<p>base_folder = "output_notebook_demo"
-site_code = "NIWO"
-year_month = "2023-08"
-product_code = "DP1.30006.001"
-flight_lines = ["NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance"]
-2. Run the pipeline from Python
-go_forth_and_multiply(
-    base_folder=base_folder,
-    site_code=site_code,
-    year_month=year_month,
-    product_code=product_code,
-    flight_lines=flight_lines,
-    max_workers=2,
-    engine="thread",  # start with thread; switch to "ray" if configured
-)
-This cell will:
-download NEON HDF5 tiles if needed
-export ENVI cubes
-apply topographic + BRDF correction
-convolve to Landsat (if configured)
-write Parquet tables
-generate QA PNG, PDF, and JSON
-3. Locate the merged Parquet file
-fl_prefix = flight_lines[0]
-fl_dir = os.path.join(base_folder, fl_prefix)</p>
-<p>merged = os.path.join(
-    fl_dir,
-    f"{fl_prefix}_merged_pixel_extraction.parquet",
-)
-merged
-4. Preview the merged table with DuckDB
-con = duckdb.connect()</p>
-<p>head_df = con.execute(
-    f"SELECT * FROM read_parquet('{merged}') LIMIT 5"
-).df()
-head_df
-5. Compute a quick NDVI diagnostic
-This example assumes Landsat-style band names Red and NIR are present in the merged table.
-ndvi_df = con.execute(
-    """
-    SELECT
-      Red,
-      NIR,
-      (NIR - Red) / NULLIF(NIR + Red, 0) AS ndvi
-    FROM read_parquet($merged)
-    LIMIT 5000
-    """,
-    {"merged": merged},
-).df()</p>
-<p>ndvi_df["ndvi"].describe()
-You can extend this pattern to:
-filter by masks
-aggregate by plot or polygon
-export subsets for modeling
-6. Visualize NDVI distribution (optional)
-If you have matplotlib installed:
-import matplotlib.pyplot as plt</p>
-<p>ndvi_df["ndvi"].plot.hist(bins=50)
-plt.xlabel("NDVI")
-plt.ylabel("Count")
-plt.title("NDVI distribution (sample)")
-plt.show()
-Next steps
-Quickstart
-Working with Parquet outputs
-Pipeline overview &amp; stages</p>
+<h2 id="1-minimal-setup">1) Minimal setup<a class="headerlink" href="#1-minimal-setup" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">cross_sensor_cal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cross_sensor_cal.pipelines.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">process_one_flightline</span><span class="p">,</span>
+    <span class="n">go_forth_and_multiply</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Use <code>process_one_flightline</code> when you are exploring or validating a single flightline. Use <code>go_forth_and_multiply</code> when you have a list of flightlines and want the same pipeline applied in batch.</p>
 <hr />
+<h2 id="2-canonical-single-flightline-example">2) Canonical single-flightline example<a class="headerlink" href="#2-canonical-single-flightline-example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="c1"># Where all artifacts will be written</span>
+<span class="n">base_folder</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;csc_output&quot;</span><span class="p">)</span>
+
+<span class="c1"># Identify the NEON site and acquisition window for clarity</span>
+<span class="n">site_code</span> <span class="o">=</span> <span class="s2">&quot;NIWO&quot;</span>
+<span class="n">year_month</span> <span class="o">=</span> <span class="s2">&quot;2023-08&quot;</span>
+<span class="n">flightline_id</span> <span class="o">=</span> <span class="s2">&quot;NEON_D13_NIWO_DP1_L020-1_20230815_directional_reflectance&quot;</span>
+
+<span class="c1"># Run the structured, skip-aware pipeline for one flightline</span>
+<span class="n">process_one_flightline</span><span class="p">(</span>
+    <span class="n">base_folder</span><span class="o">=</span><span class="n">base_folder</span><span class="p">,</span>
+    <span class="n">product_code</span><span class="o">=</span><span class="s2">&quot;DP1.30006.001&quot;</span><span class="p">,</span>  <span class="c1"># NEON hyperspectral product</span>
+    <span class="n">flight_stem</span><span class="o">=</span><span class="n">flightline_id</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The defaults handle topographic + BRDF correction, spectral convolution into the Landsat frame, brightness adjustment, Parquet export, and QA generation. Re-running the cell will skip stages that are already valid so interrupted sessions can resume safely.</p>
+<hr />
+<h2 id="3-what-gets-created">3) What gets created<a class="headerlink" href="#3-what-gets-created" title="Permanent link">&para;</a></h2>
+<p>A successful run produces a directory named after the flightline inside <code>base_folder</code> containing:</p>
+<ul>
+<li>Corrected ENVI reflectance cubes.</li>
+<li>Landsat-resampled ENVI cubes and Parquet sidecars.</li>
+<li><code>{flightline_id}_merged_pixel_extraction.parquet</code> (the master table that merges all Parquet sidecars).</li>
+<li><code>{flightline_id}_qa.png</code> and <code>{flightline_id}_qa.json</code> (visual + numeric QA summaries).</li>
+</ul>
+<p>Existing, validated outputs are reused on subsequent runs, so partial runs can be resumed without starting over. Seeing both the merged Parquet and QA artifacts is a good signal that the end-to-end pipeline completed.</p>
+<hr />
+<h2 id="4-inspect-results-in-the-notebook">4) Inspect results in the notebook<a class="headerlink" href="#4-inspect-results-in-the-notebook" title="Permanent link">&para;</a></h2>
+<p>Load the merged Parquet table to confirm the expected columns and a few rows:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="n">flight_dir</span> <span class="o">=</span> <span class="n">base_folder</span> <span class="o">/</span> <span class="n">flightline_id</span>
+<span class="n">merged_parquet</span> <span class="o">=</span> <span class="n">flight_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">flightline_id</span><span class="si">}</span><span class="s2">_merged_pixel_extraction.parquet&quot;</span>
+
+<span class="n">merged_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">merged_parquet</span><span class="p">)</span>
+<span class="n">merged_df</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</code></pre></div>
+<p>Check the available fields to guide downstream analysis:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">sorted</span><span class="p">(</span><span class="n">merged_df</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+</code></pre></div>
+<p>Locate the QA outputs so you can open them in your notebook or file browser:</p>
+<div class="highlight"><pre><span></span><code><span class="n">qa_png</span> <span class="o">=</span> <span class="n">flight_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">flightline_id</span><span class="si">}</span><span class="s2">_qa.png&quot;</span>
+<span class="n">qa_json</span> <span class="o">=</span> <span class="n">flight_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">flightline_id</span><span class="si">}</span><span class="s2">_qa.json&quot;</span>
+
+<span class="n">qa_png</span><span class="p">,</span> <span class="n">qa_json</span>
+</code></pre></div>
+<p>Use your notebook environment to display the PNG or parse the JSON for validation details.</p>
+<hr />
+<h2 id="5-what-to-do-next">5) What to do next<a class="headerlink" href="#5-what-to-do-next" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Browse notebook <a href="../recipes/">recipes</a> for batch runs, QA refreshes, and quick exploration patterns.</li>
+<li>Review <a href="../../pipeline/outputs/">Outputs &amp; naming</a> to understand the file contract and where to find products.</li>
+<li>Read the <a href="../../concepts/why-calibration/">Concepts</a> section for the rationale behind the Landsat-referenced normalization.</li>
+<li>If you prefer or need the command-line interface, see the <a href="../cli/">CLI reference</a>.</li>
+</ul>
 
 
 

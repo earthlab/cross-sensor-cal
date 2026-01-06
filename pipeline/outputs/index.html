@@ -939,10 +939,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#per-flightline-outputs-canonical-names" class="md-nav__link">
+  <a href="#purpose-of-this-page" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Per-flightline outputs (canonical names)
+        Purpose of this page
       
     </span>
   </a>
@@ -950,10 +950,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-outputs-come-from" class="md-nav__link">
+  <a href="#canonical-per-flightline-outputs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where outputs come from
+        Canonical per-flightline outputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-success-means" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What “success” means
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#idempotence-and-restart-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Idempotence and restart-safety
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci-and-documentation-guarantees" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CI and documentation guarantees
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-rely-on-these-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to rely on these outputs
       
     </span>
   </a>
@@ -1574,47 +1618,80 @@
 
 
 <h1 id="outputs-file-structure">Outputs &amp; File Structure<a class="headerlink" href="#outputs-file-structure" title="Permanent link">&para;</a></h1>
-<p>The pipeline writes every artefact into a per-flightline folder using naming rules shared by <code>FlightlinePaths</code> and <code>cross_sensor_cal.utils.naming</code>. All patterns below come directly from <code>src/cross_sensor_cal/paths.py</code> and are reused by the CLI and QA tools.</p>
-<h2 id="per-flightline-outputs-canonical-names">Per-flightline outputs (canonical names)<a class="headerlink" href="#per-flightline-outputs-canonical-names" title="Permanent link">&para;</a></h2>
-<p>Naming is centralized in <code>cross_sensor_cal.paths.FlightlinePaths</code> and <code>cross_sensor_cal.utils.naming.get_flightline_products</code>.</p>
+<h2 id="purpose-of-this-page">Purpose of this page<a class="headerlink" href="#purpose-of-this-page" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Outputs on disk are the primary interface of cross-sensor-cal.</li>
+<li>Downstream analyses should rely on these artefacts, not return values from the Python API.</li>
+</ul>
+<h2 id="canonical-per-flightline-outputs">Canonical per-flightline outputs<a class="headerlink" href="#canonical-per-flightline-outputs" title="Permanent link">&para;</a></h2>
+<p>Naming stems come from <code>cross_sensor_cal.paths.FlightlinePaths</code> and <code>cross_sensor_cal.utils.naming.get_flightline_products</code>; sensor-specific stems come from <code>SensorProductPaths</code>.</p>
 <table>
 <thead>
 <tr>
-<th>Output</th>
-<th>Pattern</th>
+<th>Output type</th>
+<th>Canonical filename pattern</th>
+<th>Description</th>
+<th>Notes / guarantees</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Raw ENVI</td>
-<td><code>&lt;flight_id&gt;_envi.(img|hdr)</code> with optional <code>&lt;flight_id&gt;_envi.parquet</code></td>
+<td>Raw ENVI (when available)</td>
+<td><code>&lt;flight_id&gt;_envi.(img|hdr|parquet)</code></td>
+<td>Direct export of the NEON HDF5 reflectance cube.</td>
+<td>Used when present to seed later stages; parquet sidecar is written when exported.</td>
 </tr>
 <tr>
-<td>Corrected ENVI</td>
+<td>BRDF + topographic corrected ENVI</td>
 <td><code>&lt;flight_id&gt;_brdfandtopo_corrected_envi.(img|hdr|json|parquet)</code></td>
+<td>Physics-informed normalization and correction JSON produced before sensor resampling.</td>
+<td>One corrected set per flightline; parquet mirrors the corrected ENVI cube.</td>
 </tr>
 <tr>
-<td>Sensor outputs</td>
-<td><code>&lt;flight_id&gt;_&lt;sensor&gt;_envi.(img|hdr|parquet)</code> where <code>sensor</code> is one of <code>landsat_tm</code>, <code>landsat_etm+</code>, <code>landsat_oli</code>, <code>landsat_oli2</code>, <code>micasense</code>, <code>micasense_to_match_tm_etm+</code>, <code>micasense_to_match_oli_oli2</code></td>
+<td>Sensor-resampled ENVI + Parquet</td>
+<td><code>&lt;flight_id&gt;_&lt;sensor&gt;_envi.(img|hdr|parquet)</code> where <code>&lt;sensor&gt;</code> is one of <code>landsat_tm</code>, <code>landsat_etm+</code>, <code>landsat_oli</code>, <code>landsat_oli2</code>, <code>micasense</code>, <code>micasense_to_match_tm_etm+</code>, <code>micasense_to_match_oli_oli2</code></td>
+<td>Reflectance cubes resampled into the Landsat-referenced frame and MicaSense variants.</td>
+<td>Each sensor has its own ENVI/Parquet trio; stems are consistent with <code>FlightlinePaths.sensor_products</code>.</td>
 </tr>
 <tr>
 <td>Merged Parquet</td>
 <td><code>&lt;flight_id&gt;_merged_pixel_extraction.parquet</code></td>
+<td>Master table that merges Parquet sidecars across stages into one analysis-ready spectral library.</td>
+<td>Exactly one per flightline; treated as the primary success signal.</td>
 </tr>
 <tr>
-<td>QA</td>
-<td><code>&lt;flight_id&gt;_qa.png</code>, <code>&lt;flight_id&gt;_qa.json</code>, <code>&lt;flight_id&gt;_qa.pdf</code> (when rendered)</td>
+<td>QA artefacts</td>
+<td><code>&lt;flight_id&gt;_qa.png</code>, <code>&lt;flight_id&gt;_qa.json</code>, optional <code>&lt;flight_id&gt;_qa.pdf</code></td>
+<td>Visual and numeric QA summaries aligned to the merged outputs.</td>
+<td>PNG and JSON are expected for every completed run; PDF is produced when rendering is enabled.</td>
+</tr>
+<tr>
+<td>QA metrics parquet</td>
+<td><code>&lt;flight_id&gt;_qa_metrics.parquet</code></td>
+<td>Structured QA metrics by band and sensor.</td>
+<td>Emitted alongside QA JSON/PNG when QA calculation runs.</td>
 </tr>
 </tbody>
 </table>
-<p>Docs drift CI expects <code>_merged_pixel_extraction.parquet</code> and <code>_qa.png</code> to be mentioned; see <code>tools/doc_drift_audit.py</code>.</p>
-<h2 id="where-outputs-come-from">Where outputs come from<a class="headerlink" href="#where-outputs-come-from" title="Permanent link">&para;</a></h2>
+<h2 id="what-success-means">What “success” means<a class="headerlink" href="#what-success-means" title="Permanent link">&para;</a></h2>
 <ul>
-<li>ENVI exports are produced in <code>stage_export_envi_from_h5</code> and validated in <code>process_one_flightline</code>.</li>
-<li>BRDF/topo correction plus the correction JSON are written by <code>stage_build_and_write_correction_json</code> and <code>stage_apply_brdf_and_topo</code>.</li>
-<li>Sensor-specific cubes follow the resample method passed to <code>process_one_flightline</code> and use the sensor list from <code>FlightlinePaths.sensor_products</code>.</li>
-<li>Parquet sidecars for raw, corrected, and resampled cubes are emitted by <code>_export_parquet_stage</code> and merged by <code>merge_flightline</code> into the canonical merged parquet.</li>
-<li>QA panels and metrics (<code>render_flightline_panel</code>) align with the same naming stems, including <code>_qa.png</code> and <code>_qa.json</code>.</li>
+<li>The merged parquet exists and is readable: <code>&lt;flight_id&gt;_merged_pixel_extraction.parquet</code>.</li>
+<li>The QA PNG renders: <code>&lt;flight_id&gt;_qa.png</code> (with matching <code>&lt;flight_id&gt;_qa.json</code>).</li>
+<li>Sensor-specific ENVI/Parquet products exist as configured; absence may reflect configuration rather than failure.</li>
+<li>If the merged parquet and QA PNG are present, the pipeline completed successfully for that flightline.</li>
+</ul>
+<h2 id="idempotence-and-restart-safety">Idempotence and restart-safety<a class="headerlink" href="#idempotence-and-restart-safety" title="Permanent link">&para;</a></h2>
+<p><code>process_one_flightline</code> and <code>go_forth_and_multiply</code> skip stages whose outputs already exist and validate, so re-running the pipeline will not recompute completed products. This skip-if-valid behavior makes restarts safe and is relied upon in notebook workflows and batch processing alike.</p>
+<h2 id="ci-and-documentation-guarantees">CI and documentation guarantees<a class="headerlink" href="#ci-and-documentation-guarantees" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Documentation drift checks (<code>tools/doc_drift_audit.py</code>) assert that <code>_merged_pixel_extraction.parquet</code> and <code>_qa.png</code> remain part of the documented contract.</li>
+<li>QA expectations and output stems are shared between user-facing docs and automated validation to protect reproducibility.</li>
+</ul>
+<h2 id="how-to-rely-on-these-outputs">How to rely on these outputs<a class="headerlink" href="#how-to-rely-on-these-outputs" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Load Parquet products directly (especially the merged parquet) for analysis; they are the authoritative API.</li>
+<li>Inspect QA PNG/JSON before downstream modeling to confirm spectral health and calibration quality.</li>
+<li>Treat intermediate ENVI products as optional diagnostics; most workflows can ignore them once Parquet and QA artefacts are present.</li>
 </ul>
 
 

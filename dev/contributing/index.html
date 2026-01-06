@@ -1483,10 +1483,93 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#basic-principles" class="md-nav__link">
+  <a href="#design-philosophy-and-invariants" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Basic principles
+        Design philosophy and invariants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-integration-and-guarantees" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous integration and guarantees
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-extend-the-system-safely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to extend the system safely
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How to extend the system safely">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#adding-or-modifying-a-target-sensor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding or modifying a target sensor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updating-brightness-or-calibration-coefficients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating brightness or calibration coefficients
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modifying-qa-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modifying QA outputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changing-extraction-or-merge-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing extraction or merge logic
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationship-to-scientific-reproducibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationship to scientific reproducibility
       
     </span>
   </a>
@@ -1574,67 +1657,69 @@
 
 
 <h1 id="contributing-development-workflow">Contributing &amp; Development Workflow<a class="headerlink" href="#contributing-development-workflow" title="Permanent link">&para;</a></h1>
-<p>We welcome contributions from the community. This page outlines the workflow for proposing changes, running tests, and maintaining documentation quality.</p>
+<p>We welcome contributions from the community. This page outlines expectations for maintaining scientific guarantees, the checks that enforce them, and where to change code safely.</p>
 <hr />
-<h2 id="basic-principles">Basic principles<a class="headerlink" href="#basic-principles" title="Permanent link">&para;</a></h2>
+<h2 id="design-philosophy-and-invariants">Design philosophy and invariants<a class="headerlink" href="#design-philosophy-and-invariants" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Keep all processing steps <strong>transparent and auditable</strong>  </li>
-<li>Do not introduce new scientific claims without citation or review  </li>
-<li>Maintain consistent naming and directory conventions  </li>
-<li>Ensure any new feature is accompanied by documentation updates  </li>
+<li>Preserve reproducibility: stages are idempotent and restart-safe; do not add side effects that bypass existing skip logic.</li>
+<li>Respect ordering: <code>process_one_flightline</code> and <code>go_forth_and_multiply</code> must continue to run stages in the documented sequence.</li>
+<li>Treat filenames as contracts: <code>FlightlinePaths</code> and naming utilities define how users and CI locate outputs.</li>
+<li>Outputs over returns: ENVI/Parquet/QA artifacts are the primary interface and must remain stable.</li>
+</ul>
+<hr />
+<h2 id="continuous-integration-and-guarantees">Continuous integration and guarantees<a class="headerlink" href="#continuous-integration-and-guarantees" title="Permanent link">&para;</a></h2>
+<p>CI workflows enforce the invariants above:</p>
+<ul>
+<li><strong>Lint + smoke (<code>ci.yml</code>, lite job):</strong> <code>ruff check src tests</code> and <code>pytest -q -m "lite"</code> with <code>CSCAL_TEST_MODE=lite</code> on Python 3.11.</li>
+<li><strong>Full tests (<code>ci.yml</code>, unit job):</strong> <code>pytest -q</code> with <code>CSCAL_TEST_MODE=unit</code> after lite completes.</li>
+<li><strong>QA quick check (<code>qa-ci.yml</code>):</strong> runs <code>pytest tests/test_qa -q</code> and renders a QA fixture image/JSON to ensure <code>_qa.*</code> outputs remain consistent.</li>
+<li><strong>Docs build (<code>docs.yml</code>):</strong> <code>python tools/site_prepare.py</code> then <code>mkdocs build --strict</code> plus a best-effort link check.</li>
+<li><strong>Docs drift (<code>docs-drift.yml</code>):</strong> <code>python tools/doc_drift_audit.py</code> flags missing mentions of critical artifacts; <code>_merged_pixel_extraction.parquet</code> and <code>_qa.png</code> are treated as required outputs in examples.</li>
+</ul>
+<p>Run the key checks locally before opening a PR:</p>
+<div class="highlight"><pre><span></span><code>ruff<span class="w"> </span>check<span class="w"> </span>src<span class="w"> </span>tests
+python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>lite
+python<span class="w"> </span>-m<span class="w"> </span>pytest
+python<span class="w"> </span>tools/site_prepare.py<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkdocs<span class="w"> </span>build<span class="w"> </span>--strict
+</code></pre></div>
+<hr />
+<h2 id="how-to-extend-the-system-safely">How to extend the system safely<a class="headerlink" href="#how-to-extend-the-system-safely" title="Permanent link">&para;</a></h2>
+<h3 id="adding-or-modifying-a-target-sensor">Adding or modifying a target sensor<a class="headerlink" href="#adding-or-modifying-a-target-sensor" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Update spectral parameters in <code>cross_sensor_cal/data/landsat_band_parameters.json</code> (or add an analogous entry) and ensure <code>standard_resample.py</code> can consume them.</li>
+<li>Confirm <code>get_flightline_products</code>/<code>FlightlinePaths</code> emit filenames for the new sensor and that merged Parquet and QA outputs remain unchanged.</li>
+<li>Add tests that validate resampled bands and naming; do not change stage ordering or skip logic.</li>
+</ul>
+<h3 id="updating-brightness-or-calibration-coefficients">Updating brightness or calibration coefficients<a class="headerlink" href="#updating-brightness-or-calibration-coefficients" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Coefficients live under <code>cross_sensor_cal/data/brightness/</code> and are loaded via <code>brightness_config</code>. Keep keys stable so regression lookups continue to work.</li>
+<li>Re-run QA-focused tests and inspect QA outputs against Landsat-referenced expectations after changes.</li>
+</ul>
+<h3 id="modifying-qa-outputs">Modifying QA outputs<a class="headerlink" href="#modifying-qa-outputs" title="Permanent link">&para;</a></h3>
+<ul>
+<li>QA artifacts (<code>&lt;flight_id&gt;_qa.png</code>, <code>&lt;flight_id&gt;_qa.json</code>) are consumed by docs, drift checks, and downstream users. Preserve these filenames even if adding metrics or plots.</li>
+<li>Update <code>tests/test_qa</code> and any quick-mode fixtures if output contents change; ensure CI still passes without downloading large datasets.</li>
+</ul>
+<h3 id="changing-extraction-or-merge-logic">Changing extraction or merge logic<a class="headerlink" href="#changing-extraction-or-merge-logic" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Merged Parquet files (<code>&lt;flight_id&gt;_merged_pixel_extraction.parquet</code>) are the contract for downstream analysis. Maintain column consistency and schema ordering expected by users and tests.</li>
+<li>If adding columns, keep existing ones intact and document the change in the outputs contract page.</li>
+</ul>
+<hr />
+<h2 id="relationship-to-scientific-reproducibility">Relationship to scientific reproducibility<a class="headerlink" href="#relationship-to-scientific-reproducibility" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The repository implements the workflow described in the RSE manuscript, so code changes can affect published analyses.</li>
+<li>Explicit artifacts (ENVI, Parquet, QA) plus drift and QA checks provide an audit trail; contributors are stewards of that record.</li>
+<li>When altering calibration tables, QA logic, or stage ordering, consider how prior runs would be reproduced and update documentation accordingly.</li>
 </ul>
 <hr />
 <h2 id="development-environment">Development environment<a class="headerlink" href="#development-environment" title="Permanent link">&para;</a></h2>
-<p>Install the package in editable mode:</p>
-<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
-Run<span class="w"> </span>tests:
-pytest
-Build<span class="w"> </span>documentation:
-mkdocs<span class="w"> </span>build
-Making<span class="w"> </span>code<span class="w"> </span>changes
-Open<span class="w"> </span>an<span class="w"> </span>issue<span class="w"> </span>describing<span class="w"> </span>the<span class="w"> </span>proposed<span class="w"> </span>change
-Create<span class="w"> </span>a<span class="w"> </span>feature<span class="w"> </span>branch
-Add<span class="w"> </span>or<span class="w"> </span>update<span class="w"> </span>unit<span class="w"> </span>tests
-Update<span class="w"> </span>relevant<span class="w"> </span>documentation<span class="w"> </span>pages
-Submit<span class="w"> </span>a<span class="w"> </span>pull<span class="w"> </span>request
-Modifying<span class="w"> </span>documentation
-Update<span class="w"> </span>Markdown<span class="w"> </span>files<span class="w"> </span>directly<span class="w"> </span>under<span class="w"> </span>docs/
-Ensure<span class="w"> </span>navigation<span class="w"> </span><span class="k">in</span><span class="w"> </span>mkdocs.yml<span class="w"> </span>remains<span class="w"> </span>valid
-Keep<span class="w"> </span>sections<span class="w"> </span>coherent<span class="w"> </span>and<span class="w"> </span>avoid<span class="w"> </span>duplication
-Run<span class="w"> </span>mkdocs<span class="w"> </span>serve<span class="w"> </span>locally<span class="w"> </span>to<span class="w"> </span>preview
-Adding<span class="w"> </span>datasets<span class="w"> </span>or<span class="w"> </span>SRFs
-Place<span class="w"> </span>files<span class="w"> </span>under<span class="w"> </span>cross_sensor_cal/data/
-Update<span class="w"> </span>relevant<span class="w"> </span>stages<span class="w"> </span>to<span class="w"> </span>load<span class="w"> </span>the<span class="w"> </span>new<span class="w"> </span>assets
-Document<span class="w"> </span>usage<span class="w"> </span><span class="k">in</span><span class="w"> </span>tutorials
-Coding<span class="w"> </span>standards
-Prefer<span class="w"> </span>pure<span class="w"> </span>functions<span class="w"> </span>and<span class="w"> </span>isolated<span class="w"> </span>dependencies
-Avoid<span class="w"> </span>large<span class="w"> </span><span class="k">in</span>-memory<span class="w"> </span>operations<span class="w"> </span>unless<span class="w"> </span>necessary
-Log<span class="w"> </span>processing<span class="w"> </span>decisions<span class="w"> </span>clearly
-Next<span class="w"> </span>steps
-Package<span class="w"> </span>architecture
-Codex<span class="w"> </span>edit<span class="w"> </span>guidelines
-
----
-
-<span class="c1">## Continuous Integration (CI) and test markers</span>
-
-What<span class="w"> </span>runs<span class="w"> </span><span class="k">in</span><span class="w"> </span>CI<span class="w"> </span><span class="o">(</span>from<span class="w"> </span><span class="sb">`</span>.github/workflows/*.yml<span class="sb">`</span><span class="o">)</span>:
-
--<span class="w"> </span>Ubuntu<span class="w"> </span>runners<span class="w"> </span>with<span class="w"> </span>Python<span class="w"> </span><span class="m">3</span>.11<span class="w"> </span><span class="k">for</span><span class="w"> </span>all<span class="w"> </span>jobs.
--<span class="w"> </span>Lint<span class="w"> </span>+<span class="w"> </span>smoke:<span class="w"> </span><span class="sb">`</span>ruff<span class="w"> </span>check<span class="w"> </span>src<span class="w"> </span>tests<span class="sb">`</span><span class="w"> </span>and<span class="w"> </span><span class="sb">`</span>pytest<span class="w"> </span>-q<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;lite&quot;</span><span class="sb">`</span><span class="w"> </span>with<span class="w"> </span><span class="sb">`</span><span class="nv">CSCAL_TEST_MODE</span><span class="o">=</span>lite<span class="sb">`</span>.
--<span class="w"> </span>Full<span class="w"> </span>tests:<span class="w"> </span><span class="sb">`</span>pytest<span class="w"> </span>-q<span class="sb">`</span><span class="w"> </span>with<span class="w"> </span><span class="sb">`</span><span class="nv">CSCAL_TEST_MODE</span><span class="o">=</span>unit<span class="sb">`</span>.
--<span class="w"> </span>Docs:<span class="w"> </span><span class="sb">`</span>python<span class="w"> </span>tools/site_prepare.py<span class="sb">`</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="sb">`</span>mkdocs<span class="w"> </span>build<span class="w"> </span>--strict<span class="sb">`</span>,<span class="w"> </span>plus<span class="w"> </span>a<span class="w"> </span>best-effort<span class="w"> </span><span class="sb">`</span>linkchecker<span class="sb">`</span><span class="w"> </span>pass.
--<span class="w"> </span>Docs<span class="w"> </span>drift:<span class="w"> </span><span class="sb">`</span>python<span class="w"> </span>tools/doc_drift_audit.py<span class="sb">`</span><span class="w"> </span>with<span class="w"> </span>a<span class="w"> </span>hard<span class="w"> </span>check<span class="w"> </span>that<span class="w"> </span><span class="sb">`</span>_merged_pixel_extraction.parquet<span class="sb">`</span><span class="w"> </span>and<span class="w"> </span><span class="sb">`</span>_qa.png<span class="sb">`</span><span class="w"> </span>are<span class="w"> </span>mentioned.
--<span class="w"> </span>QA<span class="w"> </span>quick<span class="w"> </span>check:<span class="w"> </span><span class="sb">`</span>pytest<span class="w"> </span>tests/test_qa<span class="w"> </span>-q<span class="sb">`</span><span class="w"> </span>followed<span class="w"> </span>by<span class="w"> </span>generating<span class="w"> </span>a<span class="w"> </span>QA<span class="w"> </span>panel<span class="w"> </span>fixture<span class="w"> </span>image/JSON.
-
-Run<span class="w"> </span>locally<span class="w"> </span>with:
-
-<span class="sb">```</span>bash
-python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>lite
-python<span class="w"> </span>-m<span class="w"> </span>pytest
-mkdocs<span class="w"> </span>build<span class="w"> </span>--strict
-</code></pre></div>
-<hr />
+<ul>
+<li>Install in editable mode: <code>pip install -e ".[dev]"</code></li>
+<li>Prefer pure functions and clear logging; avoid needless in-memory copies.</li>
+<li>Update documentation alongside code changes to keep drift checks green.</li>
+<li>Open an issue, work on a feature branch, add tests, and submit a pull request once checks pass.</li>
+</ul>
 
 
 
