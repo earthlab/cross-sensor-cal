@@ -1,4 +1,4 @@
-"""spectralbridge.merge_duckdb
+"""cross_sensor_cal.merge_duckdb
 ================================
 
 DuckDB-backed merge utilities for the cross-sensor-cal pipeline.
@@ -16,7 +16,7 @@ same directory. This mirrors the default behaviour of
 
 Typical usage::
 
-    from spectralbridge import merge_duckdb
+    from cross_sensor_cal import merge_duckdb
 
     merge_duckdb.merge_flightline(
         Path("/path/to/flightline"),
@@ -42,8 +42,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+import numpy as np
 import duckdb
-from spectralbridge._cli_compat import warn_if_legacy_command
 
 from .paths import scene_prefix_from_dir
 
@@ -418,6 +418,198 @@ def _register_union(
     )
 
 
+def _filter_no_data_rows_from_parquet(
+    con: duckdb.DuckDBPyConnection,
+    parquet_path: Path,
+    row_group_size: int | None = None,
+) -> None:
+    """
+    Filter out rows where most (>90%) spectral columns are invalid/no-data.
+    
+    This function reads the parquet file, identifies spectral columns (columns
+    with wavelengths or band indicators), and removes rows where MORE THAN 90%
+    of spectral columns are invalid (NaN, -9999, negative, or >1.5).
+    Metadata columns (pixel_id, row, col, x, y, polygon_id, etc.) are preserved
+    and not checked.
+    
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        DuckDB connection to use for filtering
+    parquet_path : Path
+        Path to the parquet file to filter (will be overwritten)
+    row_group_size : int | None, optional
+        Row group size for output parquet file. If None, uses DuckDB default.
+    """
+    print("[merge] 🔍 Filtering rows with all -9999 values (no-data)...")
+    
+    # Get all column names
+    columns_df = con.execute(
+        f"DESCRIBE SELECT * FROM read_parquet('{_quote_path(str(parquet_path))}')"
+    ).df()
+    all_columns = columns_df['column_name'].tolist()
+    
+    # Identify spectral columns by POSITIVE indicators (wavelength patterns)
+    # This ensures we only check actual reflectance/spectral bands, not metadata or other numeric columns
+    import re
+    
+    # Metadata columns to exclude (even if they match wavelength patterns)
+    metadata_keywords = {
+        'pixel_id', 'row', 'col', 'x', 'y', 'lon', 'lat', 'epsg', 'crs',
+        'flight_id', 'polygon_source', 'reference_product', 'raster_crs',
+        'polygon_id', 'objectid', 'globalid', 'shape__area', 'shape__length',
+        'creationdate', 'creator', 'editdate', 'editor', 'description_notes',
+        'raster_file', 'polygon_file', 'chunk', 'dbh', 'tree_height', 'species',
+        'other_species', 'plot', 'location', 'aop_site', 'source_image'
+    }
+    
+    # Identify spectral columns by wavelength pattern: _wl####nm or wl####nm
+    # Examples: corr_b001_wl0450nm, landsat_tm_b001_wl0485nm, wl0450nm
+    wavelength_pattern = re.compile(r'_wl\d+nm|^wl\d+nm', re.IGNORECASE)
+    
+    spectral_columns = []
+    for col in all_columns:
+        col_lower = col.lower()
+        # Skip known metadata columns
+        is_metadata = any(kw in col_lower for kw in metadata_keywords)
+        if is_metadata:
+            continue
+        
+        # Check if column matches wavelength pattern (positive indicator of spectral data)
+        if wavelength_pattern.search(col):
+            spectral_columns.append(col)
+    
+    if not spectral_columns:
+        print("[merge]    ⚠️  No spectral columns found to filter - skipping no-data filter")
+        return
+    
+    print(f"[merge]    Found {len(spectral_columns)} spectral columns to check")
+    
+    # Get row count before filtering
+    row_count_before = con.execute(
+        f"SELECT COUNT(*) FROM read_parquet('{_quote_path(str(parquet_path))}')"
+    ).fetchone()[0]
+    
+    if row_count_before == 0:
+        print("[merge]    ⚠️  File is empty - nothing to filter")
+        return
+    
+    # Use pandas for filtering when we have many columns (more reliable than huge SQL queries)
+    # This approach is more efficient and handles edge cases better
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    
+    print(f"[merge]    Reading parquet file for filtering ({row_count_before:,} rows)...")
+    
+    # Read the parquet file
+    df = pd.read_parquet(parquet_path)
+    
+    print(f"[merge]    Checking {len(spectral_columns)} spectral columns for rows with majority invalid values (>90%)...")
+    
+    # Select only spectral columns
+    spectral_df = df[spectral_columns]
+    
+    # Check which rows have ALL spectral columns as invalid/no-data
+    # Convert to numeric, handling any non-numeric values
+    for col in spectral_columns:
+        spectral_df[col] = pd.to_numeric(spectral_df[col], errors='coerce')
+    
+    # Filter rows where MOST (>90%) spectral columns are invalid:
+    # Invalid = -9999 (no-data marker) or negative values
+    # Note: We do NOT filter based on >1.5 because valid reflectance can exceed 1.5,
+    # and different products may use different scales (0-1, 0-100, etc.)
+    INVALID_THRESHOLD = 0.90  # Filter rows where >90% of non-NULL values are invalid
+    
+    def get_invalid_fraction(row):
+        """Calculate what fraction of reflectance values are invalid.
+        
+        NOTE: NULL/NaN values are NOT counted as invalid - they represent missing
+        data from a product that doesn't have that pixel (e.g., BRDF product missing
+        for some pixels). Only actual invalid values (-9999, negative) count.
+        
+        We do NOT filter based on >1.5 because:
+        - Reflectance values can legitimately be >1.5 (water, bright surfaces)
+        - Different products may use different scales (0-1, 0-100, etc.)
+        - The important check is for no-data markers (-9999) and physically impossible negatives
+        """
+        values = row.values
+        # Count non-NULL values only
+        non_null_mask = ~pd.isna(values)
+        non_null_count = non_null_mask.sum()
+        
+        if non_null_count == 0:
+            # If ALL values are NULL, this row has no data from any product
+            # This should be filtered out
+            return 1.0
+        
+        # Count invalid values (only among non-NULL values)
+        # Only count -9999 (no-data marker) and negatives (physically impossible)
+        invalid_count = 0
+        for i, val in enumerate(values):
+            if not non_null_mask[i]:
+                # NULL - skip (don't count as invalid)
+                continue
+            elif np.isclose(val, -9999.0, atol=0.01):
+                invalid_count += 1
+            elif val < 0:  # Negative is invalid (reflectance can't be negative)
+                invalid_count += 1
+            # NOTE: Removed >1.5 check - valid reflectance can be >1.5, and different scales are valid
+        
+        # Calculate invalid fraction based on non-NULL values only
+        return invalid_count / non_null_count
+    
+    # Calculate invalid fraction for each row
+    invalid_fractions = spectral_df.apply(get_invalid_fraction, axis=1)
+    
+    # Filter rows where most values are invalid
+    is_no_data = invalid_fractions > INVALID_THRESHOLD
+    
+    # Keep rows that are NOT all no-data
+    df_filtered = df[~is_no_data].copy()
+    
+    rows_filtered = row_count_before - len(df_filtered)
+    
+    if rows_filtered > 0:
+        print(
+            f"[merge]    ✅ Filtered out {rows_filtered:,} rows with >{INVALID_THRESHOLD*100:.0f}% invalid reflectance values "
+            f"({rows_filtered/row_count_before*100:.1f}% of total)"
+        )
+        print(
+            f"[merge]    Remaining rows: {len(df_filtered):,} (from {row_count_before:,})"
+        )
+        
+        # Write filtered dataframe back to parquet
+        temp_path = parquet_path.with_suffix('.tmp.parquet')
+        try:
+            # Use pyarrow to write with same compression settings
+            table = pa.Table.from_pandas(df_filtered, preserve_index=False)
+            pq.write_table(
+                table,
+                temp_path,
+                compression='zstd',
+                row_group_size=row_group_size if row_group_size else 25_000,
+            )
+            
+            # Replace original file with filtered version
+            if temp_path.exists():
+                temp_path.replace(parquet_path)
+                print(f"[merge]    ✅ Replaced original file with filtered version")
+            else:
+                print(f"[merge]    ❌ ERROR: Filtered file was not created!")
+                raise RuntimeError("Filtered parquet file was not created")
+        except Exception as write_error:
+            print(f"[merge]    ❌ ERROR writing filtered parquet: {write_error}")
+            if temp_path.exists():
+                temp_path.unlink()
+            raise
+    else:
+        print(f"[merge]    ℹ️  No rows filtered (all rows have valid data)")
+    
+    # Clean up
+    del df, df_filtered, spectral_df
+
+
 def merge_flightline(
     flightline_dir: Path,
     out_name: str | None = None,
@@ -432,6 +624,8 @@ def merge_flightline(
     merge_threads: int | None = 4,
     merge_row_group_size: int | None = None,  # None = let DuckDB auto-determine (better streaming performance)
     merge_temp_directory: Path | None = None,
+    is_polygon_mode: bool | None = None,  # If None, auto-detect from glob patterns
+    filter_no_data_rows: bool = True,  # Filter rows with >90% invalid reflectance values
 ) -> Path:
     """
     Merge all pixel-level parquet tables for one flightline.
@@ -477,8 +671,25 @@ def merge_flightline(
 
     flightline_dir = Path(flightline_dir).resolve()
     prefix = _derive_prefix(flightline_dir)
+    
+    # Auto-detect polygon mode if not explicitly set
+    if is_polygon_mode is None:
+        is_polygon_mode = (
+            original_glob == "*_polygons.parquet"
+            and corrected_glob == "*_polygons.parquet"
+            and resampled_glob == "*_polygons.parquet"
+        ) or (
+            "*_polygons.parquet" in original_glob
+            and "*_polygons.parquet" in corrected_glob
+            and "*_polygons.parquet" in resampled_glob
+        )
+    
+    # Set output name based on mode
     if out_name is None:
-        out_name = f"{prefix}_merged_pixel_extraction.parquet"
+        if is_polygon_mode:
+            out_name = f"{prefix}_polygons_merged_pixel_extraction.parquet"
+        else:
+            out_name = f"{prefix}_merged_pixel_extraction.parquet"
     out_parquet = (flightline_dir / out_name).resolve()
 
     merge_memory_limit_gb = _coerce_memory_limit(merge_memory_limit_gb)
@@ -513,58 +724,104 @@ def merge_flightline(
     )
 
     def _discover_inputs() -> Dict[str, List[Path]]:
+        # Check if we're in polygon mode (all parquets have _polygons suffix)
+        is_polygon_mode = (
+            original_glob == "*_polygons.parquet"
+            and corrected_glob == "*_polygons.parquet"
+            and resampled_glob == "*_polygons.parquet"
+        )
+        
         # When default globs are supplied, favour precise patterns with exclusions.
         if (
             original_glob == "**/*original*.parquet"
             and corrected_glob == "**/*corrected*.parquet"
             and resampled_glob == "**/*resampl*.parquet"
-        ):
+        ) or is_polygon_mode:
             inputs: Dict[str, List[Path]] = {"orig": [], "corr": [], "resamp": []}
 
-            # originals (long format from raw ENVI)
-            # Only the base uncorrected ENVI file, not sensor-specific resampled files
-            orig = sorted(flightline_dir.glob("*_envi.parquet"))
-            orig = [
-                p for p in orig 
-                if "brdfandtopo_corrected" not in p.name
-                and "landsat" not in p.name.lower()
-                and "micasense" not in p.name.lower()
-                and "oli" not in p.name.lower()
-                and "tm" not in p.name.lower()
-                and "etm" not in p.name.lower()
-            ]
-            inputs["orig"] = _exclude_parquets(orig)
+            if is_polygon_mode:
+                # Polygon mode: all parquets have _polygons suffix
+                # Find original polygon parquet
+                orig = sorted(flightline_dir.glob("*_envi_polygons.parquet"))
+                orig = [
+                    p for p in orig 
+                    if "brdfandtopo_corrected" not in p.name
+                    and "landsat" not in p.name.lower()
+                    and "micasense" not in p.name.lower()
+                    and "oli" not in p.name.lower()
+                    and "tm" not in p.name.lower()
+                    and "etm" not in p.name.lower()
+                ]
+                inputs["orig"] = _exclude_parquets(orig)
 
-            # corrected (long format from corrected ENVI)
-            corr = sorted(
-                flightline_dir.glob("*_brdfandtopo_corrected_envi.parquet")
-            )
-            inputs["corr"] = _exclude_parquets(corr)
+                # corrected polygon parquet
+                corr = sorted(
+                    flightline_dir.glob("*_brdfandtopo_corrected_envi_polygons.parquet")
+                )
+                inputs["corr"] = _exclude_parquets(corr)
 
-            # resampled (sensor stacks)
-            # Find all parquets that end with _envi.parquet but are not originals or corrected
-            # Capture both brightness-adjusted and *_undarkened_envi parquet sidecars
-            resamp: List[Path] = []
-            
-            # Find all parquets ending with _envi.parquet (includes both regular and undarkened)
-            all_envi_parquets = sorted(flightline_dir.glob("*_envi.parquet"))
-            
-            # Also find undarkened parquets explicitly
-            all_undarkened_parquets = sorted(flightline_dir.glob("*_undarkened_envi.parquet"))
-            all_envi_parquets.extend(all_undarkened_parquets)
-            
-            # Build sets of already-discovered files to exclude
-            orig_set = set(inputs["orig"])
-            corr_set = set(inputs["corr"])
-            
-            for pq in all_envi_parquets:
-                # Skip originals and corrected
-                if pq in orig_set or pq in corr_set:
-                    continue
-                # Skip if it's in the exclusion patterns (merged, qa, etc.)
-                name = pq.name.lower()
-                if any(ex in name for ex in EXCLUDE_PATTERNS):
-                    continue
+                # resampled polygon parquets (sensor stacks)
+                resamp: List[Path] = []
+                all_polygon_parquets = sorted(flightline_dir.glob("*_polygons.parquet"))
+                orig_set = set(inputs["orig"])
+                corr_set = set(inputs["corr"])
+                
+                for pq in all_polygon_parquets:
+                    # Skip originals and corrected
+                    if pq in orig_set or pq in corr_set:
+                        continue
+                    # Skip exclusion patterns
+                    name = pq.name.lower()
+                    if any(ex in name for ex in EXCLUDE_PATTERNS):
+                        continue
+                    resamp.append(pq)
+                inputs["resamp"] = _exclude_parquets(resamp)
+            else:
+                # Normal mode: full parquet files
+                # originals (long format from raw ENVI)
+                # Only the base uncorrected ENVI file, not sensor-specific resampled files
+                orig = sorted(flightline_dir.glob("*_envi.parquet"))
+                orig = [
+                    p for p in orig 
+                    if "brdfandtopo_corrected" not in p.name
+                    and "landsat" not in p.name.lower()
+                    and "micasense" not in p.name.lower()
+                    and "oli" not in p.name.lower()
+                    and "tm" not in p.name.lower()
+                    and "etm" not in p.name.lower()
+                ]
+                inputs["orig"] = _exclude_parquets(orig)
+
+                # corrected (long format from corrected ENVI)
+                corr = sorted(
+                    flightline_dir.glob("*_brdfandtopo_corrected_envi.parquet")
+                )
+                inputs["corr"] = _exclude_parquets(corr)
+
+                # resampled (sensor stacks)
+                # Find all parquets that end with _envi.parquet but are not originals or corrected
+                # Capture both brightness-adjusted and *_undarkened_envi parquet sidecars
+                resamp: List[Path] = []
+                
+                # Find all parquets ending with _envi.parquet (includes both regular and undarkened)
+                all_envi_parquets = sorted(flightline_dir.glob("*_envi.parquet"))
+                
+                # Also find undarkened parquets explicitly
+                all_undarkened_parquets = sorted(flightline_dir.glob("*_undarkened_envi.parquet"))
+                all_envi_parquets.extend(all_undarkened_parquets)
+                
+                # Build sets of already-discovered files to exclude
+                orig_set = set(inputs["orig"])
+                corr_set = set(inputs["corr"])
+                
+                for pq in all_envi_parquets:
+                    # Skip originals and corrected
+                    if pq in orig_set or pq in corr_set:
+                        continue
+                    # Skip if it's in the exclusion patterns (merged, qa, etc.)
+                    name = pq.name.lower()
+                    if any(ex in name for ex in EXCLUDE_PATTERNS):
+                        continue
                 # Skip if it's the simple original format (no sensor name)
                 # Original format: <flight_stem>_envi.parquet (no underscore before envi)
                 # Sensor format: <flight_stem>_<sensor>_envi.parquet (has underscore before envi)
@@ -610,15 +867,42 @@ def merge_flightline(
     try:
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
-        # Reduce threads to reduce memory pressure (fewer threads = less memory per thread)
-        # ROW_NUMBER() was removed to avoid OOM, but we still need to be conservative with memory
+        # Set threads based on memory limit to balance performance and memory usage
+        # More memory = can use more threads safely
         if merge_threads is None:
-            effective_threads = 2  # Reduced from default to save memory
-            print("[merge] Using threads=2 to reduce memory pressure")
+            # Auto-determine threads based on memory limit
+            if merge_memory_limit_gb is None:
+                memory_gb = 64.0  # Default
+            elif isinstance(merge_memory_limit_gb, str):
+                # Try to parse string like "128GB" or "128"
+                try:
+                    memory_gb = float(merge_memory_limit_gb.replace("GB", "").replace("gb", "").strip())
+                except ValueError:
+                    memory_gb = 64.0  # Fallback
+            else:
+                memory_gb = float(merge_memory_limit_gb)
+            
+            # Scale threads with memory: 2 threads per 32GB, max 8 threads
+            # This allows more parallelism when memory is available
+            effective_threads = min(max(2, int(memory_gb / 32) * 2), 8)
+            print(f"[merge] Auto-selected threads={effective_threads} based on memory_limit={memory_gb}GB")
         else:
-            effective_threads = min(merge_threads, 2)  # Cap at 2 threads to avoid OOM
-            if merge_threads > 2:
-                print(f"[merge] Capping threads at 2 (requested {merge_threads}) to avoid OOM")
+            # User explicitly set threads - respect it but cap based on memory
+            if merge_memory_limit_gb is None:
+                max_threads = 4  # Conservative default
+            elif isinstance(merge_memory_limit_gb, str):
+                try:
+                    memory_gb = float(merge_memory_limit_gb.replace("GB", "").replace("gb", "").strip())
+                    max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
+                except ValueError:
+                    max_threads = 4
+            else:
+                memory_gb = float(merge_memory_limit_gb)
+                max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
+            
+            effective_threads = min(merge_threads, max_threads)
+            if merge_threads > max_threads:
+                print(f"[merge] Capping threads at {max_threads} (requested {merge_threads}) based on memory_limit")
         con.execute(f"PRAGMA threads = {effective_threads}")
 
         # Set memory limit - increase default for large merges
@@ -960,6 +1244,10 @@ def merge_flightline(
             f"[merge] ✅ Wrote parquet: {out_parquet} (exists={Path(out_parquet).exists()})"
         )
         
+        # Filter rows with majority invalid reflectance values (>90%) if requested
+        if filter_no_data_rows:
+            _filter_no_data_rows_from_parquet(con, out_parquet, merge_row_group_size)
+        
         # Validate row count matches expectations
         try:
             import pyarrow.parquet as pq
@@ -1013,7 +1301,7 @@ def merge_flightline(
 
     if emit_qa_panel:
         try:
-            from spectralbridge.qa_plots import render_flightline_panel
+            from cross_sensor_cal.qa_plots import render_flightline_panel
 
             with _progress("QA: render panel"):
                 out_png_path, _ = render_flightline_panel(
@@ -1066,8 +1354,6 @@ def merge_all_flightlines(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     import argparse
-
-    warn_if_legacy_command()
 
     parser = argparse.ArgumentParser(
         description="Merge original/corrected/resampled Parquet tables with DuckDB.",
