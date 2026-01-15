@@ -59,6 +59,18 @@ def _infer_base_stage(name: str) -> str:
     n = name.lower()
     if "_brdfandtopo_corrected" in n:
         return "corr"
+    
+    # Check for abbreviated Landsat patterns (e.g., L5TM, L8OLI in drone filenames)
+    if "l5tm" in n or ("l5" in n and "tm" in n):
+        return "tm"
+    if "l7etm" in n or ("l7" in n and "etm" in n):
+        return "etm+"
+    if "l92oli" in n or "l9oli" in n:
+        return "oli2"
+    if "l8oli" in n:
+        return "oli"
+    
+    # Check for full sensor names
     if any(k in n for k in ("landsat_tm", "landsat_etm+", "landsat_oli2", "landsat_oli", "micasense")):
         # return the sensor key as stage (short)
         for k in SENSOR_WAVELENGTHS_NM:
