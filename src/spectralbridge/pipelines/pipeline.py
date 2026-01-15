@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-spectralbridge.pipelines.pipeline
+cross_sensor_cal.pipelines.pipeline
 -----------------------------------
 
 Updated October 2025
@@ -30,7 +30,7 @@ Key guarantees:
 Typical usage:
 
     from pathlib import Path
-    from spectralbridge.pipelines.pipeline import go_forth_and_multiply
+    from cross_sensor_cal.pipelines.pipeline import go_forth_and_multiply
 
     go_forth_and_multiply(
         base_folder=Path("output_tester"),
@@ -82,14 +82,14 @@ import numpy as np
 import h5py
 import pyarrow as pa
 
-from spectralbridge.brdf_topo import (
+from cross_sensor_cal.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
-from spectralbridge.brightness_config import load_brightness_coefficients
-from spectralbridge.io.neon_schema import resolve
+from cross_sensor_cal.brightness_config import load_brightness_coefficients
+from cross_sensor_cal.io.neon_schema import resolve
 try:
-    from spectralbridge.paths import FlightlinePaths, normalize_brdf_model_path
+    from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
 except ImportError:  # pragma: no cover - lightweight fallback for unit tests
     def normalize_brdf_model_path(flightline_dir: Path):  # type: ignore[override]
         return Path(flightline_dir) / "model.json"
@@ -138,15 +138,15 @@ except ImportError:  # pragma: no cover - lightweight fallback for unit tests
         @property
         def brdf_model(self) -> Path:
             return self.flight_dir / f"{self.flight_id}_brdf_model.json"
-from spectralbridge.qa_plots import render_flightline_panel
-from spectralbridge.resample import resample_chunk_to_sensor
-from spectralbridge.sensor_panel_plots import (
+from cross_sensor_cal.qa_plots import render_flightline_panel
+from cross_sensor_cal.resample import resample_chunk_to_sensor
+from cross_sensor_cal.sensor_panel_plots import (
     make_micasense_vs_landsat_panels,
     make_sensor_vs_neon_panels,
 )
-from spectralbridge.utils import get_package_data_path
-from spectralbridge.utils.memory import clean_memory
-from spectralbridge.utils_checks import is_valid_json
+from cross_sensor_cal.utils import get_package_data_path
+from cross_sensor_cal.utils.memory import clean_memory
+from cross_sensor_cal.utils_checks import is_valid_json
 
 from ..envi_download import download_neon_file
 from ..file_sort import generate_file_move_list
@@ -162,7 +162,8 @@ from ..file_types import (
     NEONReflectanceENVIFile,
     NEONReflectanceResampledENVIFile,
 )
-from .._ray_utils import ray_map
+# Lazy import of ray_map to prevent Ray initialization when using thread/process engines
+# ray_map will be imported only when engine="ray"
 
 # ---------------------------------------------------------------------
 # Logging setup (safe even if module imported multiple times)
@@ -578,7 +579,7 @@ def _export_parquet_stage(
 
     # When ``ray_cpus`` is provided we parallelise Parquet creation per ENVI cube
     # using :func:`ray_map`, falling back to serial execution otherwise.
-    from spectralbridge.parquet_export import ensure_parquet_for_envi
+    from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
     work_dir = Path(paths.get("work_dir", Path(base_folder) / flight_stem))
@@ -620,7 +621,7 @@ def _export_parquet_stage(
         from pathlib import Path as _Path
         import logging as _logging
 
-        from spectralbridge.parquet_export import ensure_parquet_for_envi as _ensure_parquet
+        from cross_sensor_cal.parquet_export import ensure_parquet_for_envi as _ensure_parquet
 
         local_logger = _logging.getLogger(__name__)
         path = _Path(img_path_str)
@@ -848,26 +849,6 @@ def _sensor_requires_landsat_adjustment(sensor_name: str | None) -> bool:
     return "landsat" in lowered
 
 
-# band_index is wavelength-aligned Landsat-like order; do not assume native Landsat numbering
-# or OLI band index equivalence when selecting brightness coefficients.
-_DEFAULT_LANDSAT_SYSTEM_PAIR = "landsat_to_micasense"
-
-
-def _resolve_landsat_brightness_pair(
-    sensor_name: str | None, brightness_system_pair: str | None
-) -> str:
-    if brightness_system_pair:
-        return brightness_system_pair
-    if not sensor_name:
-        return _DEFAULT_LANDSAT_SYSTEM_PAIR
-
-    lowered = sensor_name.lower()
-    if "landsat" in lowered and ("tm" in lowered or "etm" in lowered):
-        return "landsat_tm_etm_to_micasense"
-
-    return _DEFAULT_LANDSAT_SYSTEM_PAIR
-
-
 def _apply_landsat_brightness_adjustment(
     cube: np.ndarray,
     system_pair: str = "landsat_to_micasense",
@@ -888,16 +869,12 @@ def _apply_landsat_brightness_adjustment(
     bands = cube.shape[0]
     applied: dict[int, float] = {}
 
-    for band_idx in range(1, bands + 1):
-        coeff_pct = float(coeffs_pct.get(band_idx, 0.0))
+    for band_idx, coeff_pct in coeffs_pct.items():
         zero_based = band_idx - 1
-        applied[band_idx] = coeff_pct
-        if coeff_pct == 0.0:
-            continue
-
-        # gain = 1 + (delta_percent / 100.0); negative deltas darken (scale down)
-        gain = 1.0 + (coeff_pct / 100.0)
-        cube[zero_based] = cube[zero_based] * gain
+        if 0 <= zero_based < bands:
+            frac = coeff_pct / 100.0
+            cube[zero_based] = cube[zero_based] * (1.0 + frac)
+            applied[band_idx] = coeff_pct
 
     return applied
 
@@ -1054,7 +1031,7 @@ def convolve_resample_product(
     )
 
     if _sensor_requires_landsat_adjustment(sensor_name):
-        system_pair = _resolve_landsat_brightness_pair(sensor_name, brightness_system_pair)
+        system_pair = brightness_system_pair or "landsat_to_micasense"
         applied_coeffs = _apply_landsat_brightness_adjustment(mm_out, system_pair=system_pair)
         if applied_coeffs:
             brightness_map[system_pair] = applied_coeffs
@@ -1883,6 +1860,12 @@ def stage_convolve_all_sensors(
     merge_threads: int | None = 4,
     merge_row_group_size: int | None = None,
     merge_temp_directory: Path | None = None,
+    polygon_path: Path | str | None = None,
+    polygon_pixel_size: tuple[int, int] | None = (4, 4),
+    polygon_overwrite: bool = False,
+    polygon_min_overlap: float = 0.0,
+    polygon_search_buffer_m: float = 0.0,
+    extraction_mode: str | None = None,  # "polygon", "full", or None (auto-detect from polygon_path)
 ):
     """Convolve the BRDF+topo corrected ENVI cube into sensor bandstacks."""
 
@@ -2047,34 +2030,230 @@ def stage_convolve_all_sensors(
         _is_legacy,
     )
 
-    logger.info("📦 Parquet export for %s ...", flight_stem)
-    parquet_outputs = _export_parquet_stage(
-        base_folder=base_folder,
-        product_code=product_code,
-        flight_stem=flight_stem,
-        parquet_chunk_size=effective_parquet_chunk_size,
-        logger=logger,
-        ray_cpus=ray_cpus,
-    )
+    # Determine extraction mode
+    # If extraction_mode is explicitly set, use it; otherwise auto-detect from polygon_path
+    if extraction_mode is None:
+        # Auto-detect: if polygon_path provided, use polygon mode; otherwise full mode
+        actual_extraction_mode = "polygon" if polygon_path is not None else "full"
+    else:
+        actual_extraction_mode = extraction_mode.lower()
+        if actual_extraction_mode not in ("polygon", "full"):
+            raise ValueError(f"extraction_mode must be 'polygon' or 'full', got '{extraction_mode}'")
+    
+    logger.info("📋 Extraction mode: %s", actual_extraction_mode)
+    
+    # Polygon extraction mode: skip full parquet export, extract polygon parquets directly
+    polygon_extraction_succeeded = False
+    polygon_index_path_for_merge = None
+    polygon_parquets_for_merge = None
+    if actual_extraction_mode == "polygon":
+        if polygon_path is None:
+            raise ValueError(
+                "extraction_mode='polygon' requires polygon_path to be provided. "
+                "Either provide polygon_path or set extraction_mode='full'."
+            )
+        logger.info("🌐 Polygon extraction mode: skipping full parquet export")
+        try:
+            from cross_sensor_cal.polygons import (
+                build_polygon_pixel_index,
+                extract_all_polygon_parquets_from_envi,
+                create_dummy_polygon,
+                filter_polygons_by_overlap,
+                visualize_polygons_on_envi,
+            )
+            
+            # Get FlightlinePaths for polygon extraction
+            flight_paths = FlightlinePaths(base_folder=Path(base_folder), flight_id=flight_stem)
+            
+            # Determine which reference product to use (corrected ENVI may not exist yet)
+            reference_product = "brdfandtopo_corrected_envi"
+            if not flight_paths.corrected_img.exists():
+                logger.warning(
+                    "⚠️  Corrected ENVI not found yet, using raw ENVI for polygon operations"
+                )
+                reference_product = "envi"
+            
+            # Handle polygon file
+            polygon_path_obj = Path(polygon_path) if isinstance(polygon_path, str) else polygon_path
+            
+            # Check if it's a dummy polygon request
+            if polygon_path_obj.name == "dummy" or str(polygon_path_obj) == "dummy":
+                pixel_size = polygon_pixel_size if polygon_pixel_size else (4, 4)
+                logger.info("📐 Creating %dx%d pixel dummy polygon for %s", pixel_size[0], pixel_size[1], flight_stem)
+                polygon_path_obj = create_dummy_polygon(
+                    flight_paths,
+                    reference_product=reference_product,
+                    pixel_size=pixel_size,
+                )
+                filtered_polygon_path = polygon_path_obj  # Dummy polygon is already filtered
+                overlap_df = None
+            elif not polygon_path_obj.exists():
+                raise FileNotFoundError(f"Polygon file not found: {polygon_path_obj}")
+            else:
+                # Real GeoJSON file: filter by overlap
+                logger.info("🔍 Filtering polygons by overlap with flightline...")
+                filtered_polygon_path, overlap_df = filter_polygons_by_overlap(
+                    polygon_path_obj,
+                    flight_paths,
+                    reference_product=reference_product,
+                    min_overlap_pct=polygon_min_overlap,
+                    search_buffer_m=polygon_search_buffer_m,
+                )
+                
+                # Create visualization
+                logger.info("🎨 Creating polygon overlay visualization...")
+                try:
+                    viz_path = visualize_polygons_on_envi(
+                        flight_paths,
+                        filtered_polygon_path,
+                        reference_product=reference_product,
+                    )
+                    logger.info("✅ Visualization saved: %s", viz_path)
+                except Exception as viz_exc:
+                    logger.warning("⚠️  Failed to create visualization: %s", viz_exc)
+            
+            # Delete existing polygon parquets if overwrite is enabled
+            if polygon_overwrite:
+                logger.info("🗑️  Removing existing polygon parquets (overwrite=True)...")
+                for existing_parquet in flight_paths.flight_dir.glob("*_polygons.parquet"):
+                    try:
+                        existing_parquet.unlink()
+                        logger.debug("   Deleted: %s", existing_parquet.name)
+                    except Exception as e:
+                        logger.warning("   Failed to delete %s: %s", existing_parquet.name, e)
+            
+            # Build polygon pixel index (use filtered polygons)
+            polygon_index_path = build_polygon_pixel_index(
+                flight_paths,
+                filtered_polygon_path,
+                reference_product=reference_product,
+                overwrite=polygon_overwrite,
+            )
+            logger.info("✅ Polygon pixel index created: %s", polygon_index_path)
+            
+            # Extract polygon parquets directly from ENVI files
+            polygon_parquets = extract_all_polygon_parquets_from_envi(
+                flight_paths,
+                polygon_index_path,
+                chunk_size=effective_parquet_chunk_size,
+                overwrite=polygon_overwrite,
+            )
+            
+            logger.info(
+                "✅ Polygon extraction complete: %d products extracted",
+                len(polygon_parquets),
+            )
+            for product, parquet_path in polygon_parquets.items():
+                logger.info("   - %s → %s", product, parquet_path.name)
+            
+            # Use polygon parquets for merge
+            parquet_outputs = list(polygon_parquets.values())
+            polygon_extraction_succeeded = True
+            # Store polygon_index_path and polygon_parquets for later merge
+            polygon_index_path_for_merge = polygon_index_path
+            polygon_parquets_for_merge = polygon_parquets
+        except ValueError as exc:
+            # ValueError from filter_polygons_by_overlap means no overlap - this should be raised
+            # to allow the batch processor to skip to next flightline
+            if "No polygons found" in str(exc) or "do not overlap" in str(exc).lower():
+                logger.error(
+                    "❌ Polygon overlap check failed for %s: %s",
+                    flight_stem,
+                    exc,
+                )
+                logger.error(
+                    "This flightline will be skipped. Continuing to next flightline..."
+                )
+                # Re-raise to allow batch processing to continue to next flightline
+                raise
+            else:
+                # Other ValueError - treat as unexpected error
+                logger.error(
+                    "❌ Unexpected error during polygon extraction for %s: %s",
+                    flight_stem,
+                    exc,
+                )
+                import traceback
+                logger.error(traceback.format_exc())
+                raise
+        except Exception as exc:
+            # Unexpected errors - log and re-raise
+            logger.error(
+                "❌ Unexpected error during polygon extraction for %s: %s",
+                flight_stem,
+                exc,
+            )
+            import traceback
+            logger.error(traceback.format_exc())
+            logger.error(
+                "❌ Polygon extraction failed. No parquets will be created. "
+                "Please fix the issue before retrying."
+            )
+            raise
+    else:
+        # Normal mode: export full parquets
+        logger.info("📦 Parquet export for %s ...", flight_stem)
+        parquet_outputs = _export_parquet_stage(
+            base_folder=base_folder,
+            product_code=product_code,
+            flight_stem=flight_stem,
+            parquet_chunk_size=effective_parquet_chunk_size,
+            logger=logger,
+            ray_cpus=ray_cpus,
+        )
 
-    clean_memory("parquet export")
+        clean_memory("parquet export")
 
-    logger.info("✅ Parquet stage complete for %s", flight_stem)
+        logger.info("✅ Parquet stage complete for %s", flight_stem)
 
     if parquet_outputs:
         # Disable Ray in merge when ray_cpus is None (e.g., when engine="thread") to avoid OOM
         # Process parquet validation sequentially to prevent LocalRayletDiedError
         merge_ray_cpus = None
-        merge_out = merge_flightline(
-            flightline_dir,
-            out_name=None,
-            emit_qa_panel=True,
-            ray_cpus=merge_ray_cpus,  # None = no Ray, process sequentially
-            merge_memory_limit_gb=merge_memory_limit_gb,
-            merge_threads=merge_threads,
-            merge_row_group_size=merge_row_group_size,
-            merge_temp_directory=merge_temp_directory,
-        )
+        # For polygon mode, merge only polygon parquets (if extraction succeeded)
+        # Note: polygon_extraction_succeeded is set in the polygon extraction block above
+        if polygon_path is not None and polygon_extraction_succeeded:
+            # Use the proper polygon merge function that joins with polygon index
+            from cross_sensor_cal.polygons import merge_polygon_parquets_for_flightline
+            from cross_sensor_cal.merge_duckdb import _filter_no_data_rows_from_parquet
+            import duckdb
+            
+            logger.info("🔗 Merging polygon parquets with polygon index...")
+            merge_out = merge_polygon_parquets_for_flightline(
+                flight_paths,
+                polygon_index_path_for_merge,
+                polygon_parquets_for_merge,
+                output_path=None,  # Use default naming
+                overwrite=polygon_overwrite,
+                row_group_size=merge_row_group_size if merge_row_group_size else 25_000,
+            )
+            logger.info("✅ Polygon merge complete: %s", merge_out)
+            
+            # Apply filtering to remove rows with majority invalid reflectance values (>90%)
+            logger.info("🔍 Filtering no-data rows from merged file...")
+            con = duckdb.connect()
+            try:
+                _filter_no_data_rows_from_parquet(
+                    con,
+                    merge_out,
+                    merge_row_group_size,
+                )
+            finally:
+                con.close()
+            logger.info("✅ No-data filtering complete")
+        else:
+            merge_out = merge_flightline(
+                flightline_dir,
+                out_name=None,
+                emit_qa_panel=True,
+                ray_cpus=merge_ray_cpus,  # None = no Ray, process sequentially
+                merge_memory_limit_gb=merge_memory_limit_gb,
+                merge_threads=merge_threads,
+                merge_row_group_size=merge_row_group_size,
+                merge_temp_directory=merge_temp_directory,
+                is_polygon_mode=False,  # Full extraction mode
+                filter_no_data_rows=True,  # Filter rows with all -9999 values
+            )
         logger.info("✅ DuckDB master → %s", merge_out)
         qa_plots_dir = flightline_dir / "qa_plots"
         qa_plots_dir.mkdir(parents=True, exist_ok=True)
@@ -2138,6 +2317,12 @@ def process_one_flightline(
     merge_threads: int | None = 4,
     merge_row_group_size: int | None = None,
     merge_temp_directory: Path | None = None,
+    polygon_path: Path | str | None = None,  # Path to polygon GeoJSON, or "dummy" for auto-generated 4x4 pixel polygon
+    polygon_pixel_size: tuple[int, int] | None = (4, 4),  # Size of dummy polygon in pixels (width, height). Only used if polygon_path="dummy"
+    polygon_overwrite: bool = False,  # Whether to overwrite existing polygon parquets
+    polygon_min_overlap: float = 0.0,  # Minimum overlap percentage (0.0-1.0) for polygons to be included. 0.0 = any overlap, 1.0 = completely inside
+    polygon_search_buffer_m: float = 0.0,  # Buffer distance in meters to expand flightline search area. Polygons within this distance will be included even if they don't directly overlap.
+    extraction_mode: str | None = None,  # "polygon", "full", or None (auto-detect from polygon_path)
 ):
     """Run the structured, skip-aware workflow for a single flightline.
 
@@ -2222,6 +2407,12 @@ def process_one_flightline(
         merge_threads=merge_threads,
         merge_row_group_size=merge_row_group_size,
         merge_temp_directory=merge_temp_directory,
+        polygon_path=polygon_path,
+        polygon_pixel_size=polygon_pixel_size,
+        polygon_overwrite=polygon_overwrite,
+        polygon_min_overlap=polygon_min_overlap,
+        polygon_search_buffer_m=polygon_search_buffer_m,
+        extraction_mode=extraction_mode,
     )
 
     clean_memory("convolution")
@@ -2230,6 +2421,67 @@ def process_one_flightline(
         render_flightline_panel(Path(base_folder) / flight_stem, quick=True, save_json=True)
     except Exception as e:  # pragma: no cover - metrics best effort
         logger.warning("⚠️  QA rendering failed for %s: %s", flight_stem, e)
+    
+    # Polygon extraction stage (if polygon_path is provided)
+    # This creates "sister parquets" for all existing parquet files
+    if polygon_path is not None:
+        try:
+            from cross_sensor_cal.polygons import (
+                build_polygon_pixel_index,
+                extract_polygon_parquets_for_flightline,
+                create_dummy_polygon,
+            )
+            
+            logger.info("🌐 Starting polygon extraction for %s", flight_stem)
+            
+            # Get FlightlinePaths for polygon extraction
+            flight_paths = FlightlinePaths(base_folder=Path(base_folder), flight_id=flight_stem)
+            
+            # Handle dummy polygon creation
+            polygon_path_obj = Path(polygon_path) if isinstance(polygon_path, str) else polygon_path
+            if polygon_path_obj.name == "dummy" or str(polygon_path_obj) == "dummy":
+                pixel_size = polygon_pixel_size if polygon_pixel_size else (4, 4)
+                logger.info("📐 Creating %dx%d pixel dummy polygon for %s", pixel_size[0], pixel_size[1], flight_stem)
+                polygon_path_obj = create_dummy_polygon(
+                    flight_paths,
+                    reference_product="brdfandtopo_corrected_envi",
+                    pixel_size=pixel_size,
+                )
+            elif not polygon_path_obj.exists():
+                raise FileNotFoundError(f"Polygon file not found: {polygon_path_obj}")
+            
+            # Build polygon pixel index
+            polygon_index_path = build_polygon_pixel_index(
+                flight_paths,
+                polygon_path_obj,
+                reference_product="brdfandtopo_corrected_envi",
+                overwrite=polygon_overwrite,
+            )
+            logger.info("✅ Polygon pixel index created: %s", polygon_index_path)
+            
+            # Extract polygon parquets for all products
+            polygon_parquets = extract_polygon_parquets_for_flightline(
+                flight_paths,
+                polygon_index_path,
+                products=None,  # Extract all available products
+                overwrite=polygon_overwrite,
+            )
+            
+            logger.info(
+                "✅ Polygon extraction complete: %d products extracted",
+                len(polygon_parquets),
+            )
+            for product, parquet_path in polygon_parquets.items():
+                logger.info("   - %s → %s", product, parquet_path.name)
+                
+        except Exception as exc:
+            logger.warning(
+                "⚠️ Polygon extraction failed for %s: %s",
+                flight_stem,
+                exc,
+            )
+            import traceback
+            logger.debug(traceback.format_exc())
 
 
 class _FlightlineTask(NamedTuple):
@@ -2247,6 +2499,12 @@ class _FlightlineTask(NamedTuple):
     merge_threads: int | None
     merge_row_group_size: int
     merge_temp_directory: Path | None
+    polygon_path: Path | str | None
+    polygon_pixel_size: tuple[int, int] | None
+    polygon_overwrite: bool
+    polygon_min_overlap: float
+    polygon_search_buffer_m: float
+    extraction_mode: str | None
 
 
 def _execute_flightline(task: "_FlightlineTask") -> str:
@@ -2266,6 +2524,12 @@ def _execute_flightline(task: "_FlightlineTask") -> str:
             merge_threads=task.merge_threads,
             merge_row_group_size=task.merge_row_group_size,
             merge_temp_directory=task.merge_temp_directory,
+            polygon_path=task.polygon_path,
+            polygon_pixel_size=task.polygon_pixel_size,
+            polygon_overwrite=task.polygon_overwrite,
+            polygon_min_overlap=task.polygon_min_overlap,
+            polygon_search_buffer_m=task.polygon_search_buffer_m,
+            extraction_mode=task.extraction_mode,
         )
     return task.flight_stem
 
@@ -2292,6 +2556,10 @@ def _run_flightlines_with_ray(
 
     if not tasks:
         return []
+
+    # Lazy import: only import ray_map when actually using Ray engine
+    # This prevents Ray from initializing when using thread/process engines
+    from .._ray_utils import ray_map
 
     cpu_budget = num_cpus if num_cpus and num_cpus > 0 else None
 
@@ -2327,14 +2595,33 @@ def _iter_engine_results(
     if not tasks:
         return
 
-    if engine in {"thread", "process"}:
-        yield from _iter_executor_results(tasks, engine=engine, max_workers=max_workers)
+    # Explicitly check engine to prevent accidental Ray initialization
+    engine_lower = engine.lower() if isinstance(engine, str) else str(engine).lower()
+    
+    if engine_lower in {"thread", "process"}:
+        logger.info("Using %s executor (Ray will NOT be initialized)", engine_lower)
+        # Double-check: ensure Ray is not initialized (shutdown if it is)
+        try:
+            import ray
+            if ray.is_initialized():
+                logger.warning(
+                    "⚠️  Ray is initialized but engine='%s'. Shutting down Ray...",
+                    engine_lower,
+                )
+                try:
+                    ray.shutdown()
+                except Exception:
+                    pass
+        except ImportError:
+            pass  # Ray not installed, which is fine
+        yield from _iter_executor_results(tasks, engine=engine_lower, max_workers=max_workers)
         return
-    if engine == "ray":
+    if engine_lower == "ray":
+        logger.debug("Using Ray executor (Ray WILL be initialized)")
         for flight_id in _run_flightlines_with_ray(tasks, num_cpus=max_workers):
             yield flight_id
         return
-    raise ValueError(f"Unknown engine '{engine}'")
+    raise ValueError(f"Unknown engine '{engine}' (normalized: '{engine_lower}')")
 
 
 def sort_and_sync_files(base_folder: str, remote_prefix: str = "", sync_files: bool = True):
@@ -2411,11 +2698,17 @@ def go_forth_and_multiply(
     brightness_offset: float | None = None,
     max_workers: int = 8,
     parquet_chunk_size: int = 50_000,
-    engine: Literal["thread", "process", "ray"] = "ray",
+    engine: Literal["thread", "process", "ray"] = "thread",  # Changed default to "thread" to avoid Ray initialization issues
     merge_memory_limit_gb: float | str | None = 64.0,  # Increased default to 64GB for large merges (multiple JOINs need larger hash tables)
     merge_threads: int | None = 4,
     merge_row_group_size: int | None = None,
     merge_temp_directory: Path | None = None,
+    polygon_path: Path | str | None = None,  # Path to polygon GeoJSON, or "dummy" for auto-generated 4x4 pixel polygon
+    polygon_pixel_size: tuple[int, int] | None = (4, 4),  # Size of dummy polygon in pixels (width, height). Only used if polygon_path="dummy"
+    polygon_overwrite: bool = False,  # Whether to overwrite existing polygon parquets
+    polygon_min_overlap: float = 0.0,  # Minimum overlap percentage (0.0-1.0) for polygons to be included. 0.0 = any overlap, 1.0 = completely inside
+    polygon_search_buffer_m: float = 0.0,  # Buffer distance in meters to expand flightline search area. Polygons within this distance will be included even if they don't directly overlap.
+    extraction_mode: str | None = None,  # "polygon", "full", or None (auto-detect from polygon_path)
 ) -> None:
     """High-level orchestrator for processing multiple flight lines.
 
@@ -2444,6 +2737,30 @@ def go_forth_and_multiply(
     if engine_norm not in {"thread", "process", "ray"}:
         raise ValueError(
             "engine must be one of 'thread', 'process', or 'ray'"
+        )
+
+    # Explicitly prevent Ray initialization when using thread/process engines
+    if engine_norm in {"thread", "process"}:
+        # Set environment variables to prevent Ray auto-initialization
+        os.environ["RAY_DISABLE_AUTO_CONNECT"] = "1"
+        os.environ["RAY_DISABLE_IMPORT_WARNING"] = "1"
+        # Try to shutdown Ray if it's already initialized
+        try:
+            import ray
+            if ray.is_initialized():
+                logger.warning(
+                    "⚠️  Ray was already initialized. Shutting down before using %s engine...",
+                    engine_norm,
+                )
+                try:
+                    ray.shutdown()
+                except Exception:
+                    pass
+        except ImportError:
+            pass  # Ray not installed, which is fine
+        logger.info(
+            "🔒 Using %s engine - Ray initialization disabled",
+            engine_norm,
         )
 
     parallel_mode = engine_norm == "ray" or (engine_norm != "thread" and max_workers > 1)
@@ -2568,6 +2885,12 @@ def go_forth_and_multiply(
             merge_threads=merge_threads,
             merge_row_group_size=merge_row_group_size,
             merge_temp_directory=merge_temp_directory,
+            polygon_path=polygon_path,
+            polygon_pixel_size=polygon_pixel_size,
+            polygon_overwrite=polygon_overwrite,
+            polygon_min_overlap=polygon_min_overlap,
+            polygon_search_buffer_m=polygon_search_buffer_m,
+            extraction_mode=extraction_mode,
         )
         for flight_stem in flight_lines
     ]
@@ -2575,6 +2898,37 @@ def go_forth_and_multiply(
     if not tasks:
         logger.info("No flight lines provided; nothing to process.")
     else:
+        logger.info(
+            "🚀 Starting flightline processing with engine=%s, max_workers=%d",
+            engine_norm,
+            max_workers,
+        )
+        if engine_norm == "ray":
+            logger.warning(
+                "⚠️  Using Ray engine. If you intended to use threads, check your engine parameter."
+            )
+        elif engine_norm in {"thread", "process"}:
+            # Final check: ensure Ray is not initialized before starting
+            try:
+                import ray
+                if ray.is_initialized():
+                    logger.error(
+                        "❌ Ray is initialized but engine='%s'. This should not happen!",
+                        engine_norm,
+                    )
+                    logger.error("   Attempting to shutdown Ray...")
+                    try:
+                        ray.shutdown()
+                        logger.info("   ✅ Ray shutdown successful")
+                    except Exception as e:
+                        logger.error(f"   ❌ Failed to shutdown Ray: {e}")
+                        raise RuntimeError(
+                            f"Ray is initialized but engine='{engine_norm}'. "
+                            "Please restart your kernel and try again."
+                        ) from e
+            except ImportError:
+                pass  # Ray not installed, which is fine
+        
         for done_flight in _iter_engine_results(
             tasks,
             engine=engine_norm,
