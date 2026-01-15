@@ -2,218 +2,218 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://earthlab.github.io/spectralbridge/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/benchmarks/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/brdf_topo_algorithm/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/configuration/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/cyverse-irods/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/dev-notes/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/documentation-overview/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/documentation_style_guide/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/env-setup/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/env/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/extending/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/faq/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/glossary/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/naming-conventions/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/overview/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/pipeline/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/qa/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/quickstart/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/refactor_notes/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/references/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/schemas/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/stage-03-pixel-extraction/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/stage-04-spectral-library/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/stage-05-mesma/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/troubleshooting/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/validation/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/_build/doc_drift_report/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/api/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/api/merge_duckdb/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/api/qa_plots/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/concepts/why-calibration/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/dev/architecture/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/dev/codex-guidelines/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/dev/contributing/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/dev/doc_drift/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/dev/doc_drift_report/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/pipeline/outputs/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/pipeline/polygons/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/pipeline/qa/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/pipeline/qa_panel/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/pipeline/stages/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/reference/configuration/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/reference/extending/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/reference/schemas/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/reference/validation/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/tutorials/cloud-workflow/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/tutorials/micasense-to-landsat/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/tutorials/neon-to-envi/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/tutorials/neon-to-landsat/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/usage/cli/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/usage/notebook-example/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/usage/parquet/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/usage/parquet_preview/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
     <url>
          <loc>https://earthlab.github.io/spectralbridge/usage/recipes/</loc>
-         <lastmod>2026-01-06</lastmod>
+         <lastmod>2026-01-15</lastmod>
     </url>
 </urlset>
