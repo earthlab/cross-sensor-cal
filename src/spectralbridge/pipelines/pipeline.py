@@ -82,14 +82,14 @@ import numpy as np
 import h5py
 import pyarrow as pa
 
-from cross_sensor_cal.brdf_topo import (
+from spectralbridge.brdf_topo import (
     apply_brdf_topo_core,
     build_correction_parameters_dict,
 )
-from cross_sensor_cal.brightness_config import load_brightness_coefficients
-from cross_sensor_cal.io.neon_schema import resolve
+from spectralbridge.brightness_config import load_brightness_coefficients
+from spectralbridge.io.neon_schema import resolve
 try:
-    from cross_sensor_cal.paths import FlightlinePaths, normalize_brdf_model_path
+    from spectralbridge.paths import FlightlinePaths, normalize_brdf_model_path
 except ImportError:  # pragma: no cover - lightweight fallback for unit tests
     def normalize_brdf_model_path(flightline_dir: Path):  # type: ignore[override]
         return Path(flightline_dir) / "model.json"
@@ -138,15 +138,15 @@ except ImportError:  # pragma: no cover - lightweight fallback for unit tests
         @property
         def brdf_model(self) -> Path:
             return self.flight_dir / f"{self.flight_id}_brdf_model.json"
-from cross_sensor_cal.qa_plots import render_flightline_panel
-from cross_sensor_cal.resample import resample_chunk_to_sensor
-from cross_sensor_cal.sensor_panel_plots import (
+from spectralbridge.qa_plots import render_flightline_panel
+from spectralbridge.resample import resample_chunk_to_sensor
+from spectralbridge.sensor_panel_plots import (
     make_micasense_vs_landsat_panels,
     make_sensor_vs_neon_panels,
 )
-from cross_sensor_cal.utils import get_package_data_path
-from cross_sensor_cal.utils.memory import clean_memory
-from cross_sensor_cal.utils_checks import is_valid_json
+from spectralbridge.utils import get_package_data_path
+from spectralbridge.utils.memory import clean_memory
+from spectralbridge.utils_checks import is_valid_json
 
 from ..envi_download import download_neon_file
 from ..file_sort import generate_file_move_list
@@ -579,7 +579,7 @@ def _export_parquet_stage(
 
     # When ``ray_cpus`` is provided we parallelise Parquet creation per ENVI cube
     # using :func:`ray_map`, falling back to serial execution otherwise.
-    from cross_sensor_cal.parquet_export import ensure_parquet_for_envi
+    from spectralbridge.parquet_export import ensure_parquet_for_envi
 
     paths = get_flightline_products(base_folder, product_code, flight_stem)
     work_dir = Path(paths.get("work_dir", Path(base_folder) / flight_stem))
@@ -621,7 +621,7 @@ def _export_parquet_stage(
         from pathlib import Path as _Path
         import logging as _logging
 
-        from cross_sensor_cal.parquet_export import ensure_parquet_for_envi as _ensure_parquet
+        from spectralbridge.parquet_export import ensure_parquet_for_envi as _ensure_parquet
 
         local_logger = _logging.getLogger(__name__)
         path = _Path(img_path_str)
@@ -2054,7 +2054,7 @@ def stage_convolve_all_sensors(
             )
         logger.info("🌐 Polygon extraction mode: skipping full parquet export")
         try:
-            from cross_sensor_cal.polygons import (
+            from spectralbridge.polygons import (
                 build_polygon_pixel_index,
                 extract_all_polygon_parquets_from_envi,
                 create_dummy_polygon,
@@ -2213,11 +2213,13 @@ def stage_convolve_all_sensors(
         # For polygon mode, merge only polygon parquets (if extraction succeeded)
         # Note: polygon_extraction_succeeded is set in the polygon extraction block above
         if polygon_path is not None and polygon_extraction_succeeded:
+            print("[pipeline] ✅ Entering polygon merge path (polygon_path is not None and extraction succeeded)")
             # Use the proper polygon merge function that joins with polygon index
-            from cross_sensor_cal.polygons import merge_polygon_parquets_for_flightline
-            from cross_sensor_cal.merge_duckdb import _filter_no_data_rows_from_parquet
+            from spectralbridge.polygons import merge_polygon_parquets_for_flightline
+            from spectralbridge.merge_duckdb import _filter_no_data_rows_from_parquet
             import duckdb
             
+            print("[pipeline] 🔗 Merging polygon parquets with polygon index...")
             logger.info("🔗 Merging polygon parquets with polygon index...")
             merge_out = merge_polygon_parquets_for_flightline(
                 flight_paths,
@@ -2227,20 +2229,60 @@ def stage_convolve_all_sensors(
                 overwrite=polygon_overwrite,
                 row_group_size=merge_row_group_size if merge_row_group_size else 25_000,
             )
+            print(f"[pipeline] ✅ Polygon merge complete: {merge_out}")
             logger.info("✅ Polygon merge complete: %s", merge_out)
             
             # Apply filtering to remove rows with majority invalid reflectance values (>90%)
+            print("[pipeline] 🔍 About to filter no-data rows from merged file...")
+            print(f"[pipeline] 📍 merge_out path: {merge_out}, exists: {merge_out.exists()}")
             logger.info("🔍 Filtering no-data rows from merged file...")
             con = duckdb.connect()
             try:
+                print(f"[pipeline] 📍 Calling _filter_no_data_rows_from_parquet on: {merge_out}")
                 _filter_no_data_rows_from_parquet(
                     con,
                     merge_out,
                     merge_row_group_size,
                 )
+                print("[pipeline] ✅ _filter_no_data_rows_from_parquet completed successfully")
+            except Exception as filter_exc:
+                print(f"[pipeline] ❌ ERROR in _filter_no_data_rows_from_parquet: {filter_exc}")
+                import traceback
+                print(traceback.format_exc())
+                raise
             finally:
                 con.close()
+                print("[pipeline] ✅ DuckDB connection closed")
+            print("[pipeline] ✅ No-data filtering complete - continuing to QA panel generation")
             logger.info("✅ No-data filtering complete")
+            
+            # Generate QA panel for polygon mode (merge_polygon_parquets_for_flightline doesn't do this)
+            print("[pipeline] 🖼️  Generating QA panel for polygon merge...")
+            print(f"[pipeline] 📍 Current flightline_dir: {flightline_dir}")
+            print(f"[pipeline] 📍 flightline_dir exists: {flightline_dir.exists()}")
+            logger.info("🖼️  Generating QA panel for polygon merge...")
+            try:
+                from spectralbridge.qa_plots import render_flightline_panel
+                # Force reload to ensure latest code
+                import importlib
+                import sys
+                if 'spectralbridge.qa_plots' in sys.modules:
+                    importlib.reload(sys.modules['spectralbridge.qa_plots'])
+                    print("[pipeline] 🔄 Reloaded qa_plots module to ensure latest code")
+                    logger.info("🔄 Reloaded qa_plots module to ensure latest code")
+                
+                print("[pipeline] 📞 Calling render_flightline_panel...")
+                qa_png_path, _ = render_flightline_panel(
+                    flightline_dir, quick=True, save_json=True
+                )
+                print(f"[pipeline] ✅ QA panel generated: {qa_png_path}")
+                logger.info("✅ QA panel generated: %s", qa_png_path)
+            except Exception as qa_exc:
+                print(f"[pipeline] ⚠️  QA panel generation failed: {qa_exc}")
+                logger.warning("⚠️  QA panel generation failed: %s", qa_exc)
+                import traceback
+                print(traceback.format_exc())
+                logger.debug(traceback.format_exc())
         else:
             merge_out = merge_flightline(
                 flightline_dir,
@@ -2426,7 +2468,7 @@ def process_one_flightline(
     # This creates "sister parquets" for all existing parquet files
     if polygon_path is not None:
         try:
-            from cross_sensor_cal.polygons import (
+            from spectralbridge.polygons import (
                 build_polygon_pixel_index,
                 extract_polygon_parquets_for_flightline,
                 create_dummy_polygon,
