@@ -1636,9 +1636,14 @@
 <li>[merge] 🖼️  QA panel generation requested for {prefix}</li>
 <li>[merge] 🖼️  QA panel → {out_png_path} </li>
 <li>[merge] 🖼️  Starting QA panel generation...</li>
+<li>[pipeline] ⚠️  QA panel generation failed: {qa_exc}</li>
+<li>[pipeline] ✅ No-data filtering complete - continuing to QA panel generation</li>
+<li>[pipeline] ✅ QA panel generated: {qa_png_path}</li>
+<li>[pipeline] 🖼️  Generating QA panel for polygon merge...</li>
 <li>[{flight_stem}] ⬇️ Download already complete — reusing existing files ({h5_path.name})</li>
 <li>[{flight_stem}] 🌐 Downloading {flight_stem} ({site_code}, {year_month}) into {h5_path} ...</li>
 <li>⏭️ Parquet already present for %s -&gt; %s (skipping)</li>
+<li>⚠️  QA panel generation failed: %s</li>
 <li>⚠️ Cannot create Parquet work directory for %s: %s</li>
 <li>⚠️ Cannot export Parquet for %s because .hdr is missing or empty</li>
 <li>⚠️ Cannot export Parquet for %s because .img is missing or empty</li>
@@ -1659,6 +1664,7 @@
 <li>✅ ENVI export found via discovery → {discovered_img.name} / {discovered_hdr.name}</li>
 <li>✅ Existing ENVI export found — skipping heavy export ({raw_img_path.name} / {raw_hdr_path.name})</li>
 <li>✅ Parquet stage complete for %s</li>
+<li>✅ QA panel generated: %s</li>
 <li>✅ Wrote Parquet for %s -&gt; %s</li>
 <li>✨ Existing ENVI exports detected — pipeline will reuse validated files automatically.</li>
 <li>🎉 Finished pipeline for %s</li>
@@ -1667,6 +1673,7 @@
 <li>📍 Preparing ENVI export at: {raw_img_path.name} / {raw_hdr_path.name}</li>
 <li>📦 No existing ENVI export detected — creating a new one from source data {h5_path.name}</li>
 <li>📦 Parquet export for %s ...</li>
+<li>🖼️  Generating QA panel for polygon merge...</li>
 <li>🧱 Parquet row group size = %s (legacy=%s)</li>
 <li>🧱 Using Parquet row group size of %s rows</li>
 </ul>
