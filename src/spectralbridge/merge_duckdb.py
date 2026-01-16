@@ -908,15 +908,16 @@ def merge_flightline(
                     max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
                 except ValueError:
                     max_threads = 4
-                else:
-                    memory_gb = float(merge_memory_limit_gb)
-                    max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
-                
-                effective_threads = min(merge_threads, max_threads)
-                # Ensure at least 1 thread (DuckDB requires at least 1)
-                effective_threads = max(1, effective_threads)
-                if merge_threads > max_threads:
-                    print(f"[merge] Capping threads at {max_threads} (requested {merge_threads}) based on memory_limit")
+            else:
+                memory_gb = float(merge_memory_limit_gb)
+                max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
+            
+            effective_threads = min(merge_threads, max_threads)
+            # Ensure at least 1 thread (DuckDB requires at least 1)
+            effective_threads = max(1, effective_threads)
+            if merge_threads > max_threads:
+                print(f"[merge] Capping threads at {max_threads} (requested {merge_threads}) based on memory_limit")
+        
         con.execute(f"PRAGMA threads = {effective_threads}")
 
         # Set memory limit - increase default for large merges
