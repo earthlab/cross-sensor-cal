@@ -99,6 +99,8 @@
   "naming_rule": "<prefix>_merged_pixel_extraction.parquet",
   "stages_found": [
     "Writing Parquet with row_group_size=%s",
+    "[QA]   \ud83d\udcd1 Rendering Page 4: Parquet & Merge Quality Analysis...",
+    "[QA] \u2705 QA plots version: 2025-01-20-v2 (includes Page 4: Parquet & Merge Quality)",
     "[merge] \u26a0\ufe0f  QA panel generation is DISABLED (emit_qa_panel=False)",
     "[merge] \u26a0\ufe0f QA panel after merge failed for {prefix}: {e}",
     "[merge] \ud83d\udccb Summary: merge complete, QA panel requested={emit_qa_panel}",
