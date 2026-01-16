@@ -515,11 +515,12 @@ def _filter_no_data_rows_from_parquet(
     if not available_spectral_cols:
         print("[merge]    ⚠️  No spectral columns found in dataframe - skipping filter")
         return
-    spectral_df = df[available_spectral_cols]
+    # Make a copy to avoid SettingWithCopyWarning
+    spectral_df = df[available_spectral_cols].copy()
     
     # Check which rows have ALL spectral columns as invalid/no-data
     # Convert to numeric, handling any non-numeric values
-    for col in spectral_columns:
+    for col in available_spectral_cols:
         spectral_df[col] = pd.to_numeric(spectral_df[col], errors='coerce')
     
     # Filter rows where MOST (>90%) spectral columns are invalid:
