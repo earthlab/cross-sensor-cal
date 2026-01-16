@@ -36,7 +36,6 @@ import os
 import re
 import shutil
 import sys
-import traceback
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -600,9 +599,9 @@ def _filter_no_data_rows_from_parquet(
             # Replace original file with filtered version
             if temp_path.exists():
                 temp_path.replace(parquet_path)
-                print(f"[merge]    ✅ Replaced original file with filtered version")
+                print("[merge]    ✅ Replaced original file with filtered version")
             else:
-                print(f"[merge]    ❌ ERROR: Filtered file was not created!")
+                print("[merge]    ❌ ERROR: Filtered file was not created!")
                 raise RuntimeError("Filtered parquet file was not created")
         except Exception as write_error:
             print(f"[merge]    ❌ ERROR writing filtered parquet: {write_error}")
@@ -610,7 +609,7 @@ def _filter_no_data_rows_from_parquet(
                 temp_path.unlink()
             raise
     else:
-        print(f"[merge]    ℹ️  No rows filtered (all rows have valid data)")
+        print("[merge]    ℹ️  No rows filtered (all rows have valid data)")
     
     # Clean up
     del df, df_filtered, spectral_df
@@ -1358,9 +1357,10 @@ def merge_flightline(
         except Exception as e:  # pragma: no cover - QA best effort
             print(f"[merge] ⚠️ QA panel after merge failed for {prefix}: {e}")
             print(f"[merge] ⚠️ Exception type: {type(e).__name__}")
+            import traceback
             traceback.print_exc()
     else:
-        print(f"[merge] ⚠️  QA panel generation is DISABLED (emit_qa_panel=False)")
+        print("[merge] ⚠️  QA panel generation is DISABLED (emit_qa_panel=False)")
 
     print(
         f"[merge] ✅ Done for {flightline_dir.name} at {datetime.now().isoformat(timespec='seconds')}"
