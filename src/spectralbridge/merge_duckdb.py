@@ -499,21 +499,22 @@ def _filter_no_data_rows_from_parquet(
         print("[merge]    ⚠️  File is empty - nothing to filter")
         return
     
-    # Use pandas for filtering when we have many columns (more reliable than huge SQL queries)
-    # This approach is more efficient and handles edge cases better
-    import pandas as pd
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-    
+    # Use DuckDB to read the parquet file (avoids pandas/pyarrow dependency issues)
+    # This is more reliable in test environments where pyarrow might not be available
     print(f"[merge]    Reading parquet file for filtering ({row_count_before:,} rows)...")
     
-    # Read the parquet file
-    df = pd.read_parquet(parquet_path)
+    # Read the parquet file using DuckDB (we already have a connection)
+    # DuckDB's .df() method returns a pandas DataFrame without requiring pyarrow
+    df = con.execute(f"SELECT * FROM read_parquet('{_quote_path(str(parquet_path))}')").df()
     
     print(f"[merge]    Checking {len(spectral_columns)} spectral columns for rows with majority invalid values (>90%)...")
     
-    # Select only spectral columns
-    spectral_df = df[spectral_columns]
+    # Select only spectral columns (ensure they exist in the dataframe)
+    available_spectral_cols = [col for col in spectral_columns if col in df.columns]
+    if not available_spectral_cols:
+        print("[merge]    ⚠️  No spectral columns found in dataframe - skipping filter")
+        return
+    spectral_df = df[available_spectral_cols]
     
     # Check which rows have ALL spectral columns as invalid/no-data
     # Convert to numeric, handling any non-numeric values
@@ -584,17 +585,22 @@ def _filter_no_data_rows_from_parquet(
             f"[merge]    Remaining rows: {len(df_filtered):,} (from {row_count_before:,})"
         )
         
-        # Write filtered dataframe back to parquet
+        # Write filtered dataframe back to parquet using DuckDB (avoids pyarrow dependency)
         temp_path = parquet_path.with_suffix('.tmp.parquet')
         try:
-            # Use pyarrow to write with same compression settings
-            table = pa.Table.from_pandas(df_filtered, preserve_index=False)
-            pq.write_table(
-                table,
-                temp_path,
-                compression='zstd',
-                row_group_size=row_group_size if row_group_size else 25_000,
+            # Register the filtered dataframe in DuckDB
+            con.register('df_filtered', df_filtered)
+            
+            # Use DuckDB to write the filtered dataframe back to parquet
+            # This avoids pyarrow dependency issues in test environments
+            copy_sql = (
+                f"COPY (SELECT * FROM df_filtered) TO '{_quote_path(str(temp_path))}' "
+                f"(FORMAT PARQUET, COMPRESSION zstd"
             )
+            if row_group_size:
+                copy_sql += f", ROW_GROUP_SIZE {row_group_size}"
+            copy_sql += ")"
+            con.execute(copy_sql)
             
             # Replace original file with filtered version
             if temp_path.exists():
@@ -827,17 +833,17 @@ def merge_flightline(
                     name = pq.name.lower()
                     if any(ex in name for ex in EXCLUDE_PATTERNS):
                         continue
-                # Skip if it's the simple original format (no sensor name)
-                # Original format: <flight_stem>_envi.parquet (no underscore before envi)
-                # Sensor format: <flight_stem>_<sensor>_envi.parquet (has underscore before envi)
-                # Undarkened format: <flight_stem>_<sensor>_undarkened_envi.parquet
-                parts = pq.stem.split("_")
-                if len(parts) >= 3 and (parts[-2] == "envi" or parts[-3] == "envi"):
-                    # This looks like a sensor product: ..._sensor_envi or ..._sensor_undarkened_envi
-                    resamp.append(pq)
-                elif "landsat" in name or "micasense" in name or "oli" in name or "tm" in name or "etm" in name:
-                    # Known sensor keywords (including undarkened versions)
-                    resamp.append(pq)
+                    # Skip if it's the simple original format (no sensor name)
+                    # Original format: <flight_stem>_envi.parquet (no underscore before envi)
+                    # Sensor format: <flight_stem>_<sensor>_envi.parquet (has underscore before envi)
+                    # Undarkened format: <flight_stem>_<sensor>_undarkened_envi.parquet
+                    parts = pq.stem.split("_")
+                    if len(parts) >= 3 and (parts[-2] == "envi" or parts[-3] == "envi"):
+                        # This looks like a sensor product: ..._sensor_envi or ..._sensor_undarkened_envi
+                        resamp.append(pq)
+                    elif "landsat" in name or "micasense" in name or "oli" in name or "tm" in name or "etm" in name:
+                        # Known sensor keywords (including undarkened versions)
+                        resamp.append(pq)
             
             # Remove duplicates and sort
             resamp = sorted(set(resamp))
@@ -901,13 +907,15 @@ def merge_flightline(
                     max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
                 except ValueError:
                     max_threads = 4
-            else:
-                memory_gb = float(merge_memory_limit_gb)
-                max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
-            
-            effective_threads = min(merge_threads, max_threads)
-            if merge_threads > max_threads:
-                print(f"[merge] Capping threads at {max_threads} (requested {merge_threads}) based on memory_limit")
+                else:
+                    memory_gb = float(merge_memory_limit_gb)
+                    max_threads = min(int(memory_gb / 16), 8)  # 1 thread per 16GB, max 8
+                
+                effective_threads = min(merge_threads, max_threads)
+                # Ensure at least 1 thread (DuckDB requires at least 1)
+                effective_threads = max(1, effective_threads)
+                if merge_threads > max_threads:
+                    print(f"[merge] Capping threads at {max_threads} (requested {merge_threads}) based on memory_limit")
         con.execute(f"PRAGMA threads = {effective_threads}")
 
         # Set memory limit - increase default for large merges
