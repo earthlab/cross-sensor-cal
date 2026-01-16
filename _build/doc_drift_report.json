@@ -99,8 +99,13 @@
   "naming_rule": "<prefix>_merged_pixel_extraction.parquet",
   "stages_found": [
     "Writing Parquet with row_group_size=%s",
+    "[merge] \u26a0\ufe0f  QA panel generation is DISABLED (emit_qa_panel=False)",
     "[merge] \u26a0\ufe0f QA panel after merge failed for {prefix}: {e}",
+    "[merge] \ud83d\udccb Summary: merge complete, QA panel requested={emit_qa_panel}",
+    "[merge] \ud83d\udd0d Checking QA panel generation: emit_qa_panel={emit_qa_panel}",
+    "[merge] \ud83d\uddbc\ufe0f  QA panel generation requested for {prefix}",
     "[merge] \ud83d\uddbc\ufe0f  QA panel \u2192 {out_png_path} ",
+    "[merge] \ud83d\uddbc\ufe0f  Starting QA panel generation...",
     "[{flight_stem}] \u2b07\ufe0f Download already complete \u2014 reusing existing files ({h5_path.name})",
     "[{flight_stem}] \ud83c\udf10 Downloading {flight_stem} ({site_code}, {year_month}) into {h5_path} ...",
     "\u23ed\ufe0f Parquet already present for %s -> %s (skipping)",
