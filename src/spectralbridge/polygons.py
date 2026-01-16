@@ -18,7 +18,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from spectralbridge.exports.schema_utils import ensure_coord_columns
+from cross_sensor_cal.exports.schema_utils import ensure_coord_columns
 
 from ._optional import require_geopandas, require_rasterio
 from .paths import FlightlinePaths
@@ -142,9 +142,8 @@ def create_dummy_polygon(
             "[polygons-dummy] Raster has no transform. Attempting to build from ENVI header..."
         )
         try:
-            from spectralbridge.envi import _parse_envi_header_tolerant
-            from spectralbridge.io.neon import _map_info_core
-            from affine import Affine
+            from cross_sensor_cal.envi import _parse_envi_header_tolerant
+            from cross_sensor_cal.io.neon import _map_info_core
             
             LOGGER.info("[polygons-dummy] Reading ENVI header: %s", hdr_path)
             header = _parse_envi_header_tolerant(hdr_path)
@@ -181,7 +180,7 @@ def create_dummy_polygon(
                     ulx = ref_easting - pixel_x * (ref_x - 0.5)
                     uly = ref_northing + abs(pixel_y) * (ref_y - 0.5)
                     yres = -abs(pixel_y)  # Negative for north-up
-                    transform = Affine(pixel_x, 0.0, ulx, 0.0, yres, uly)
+                    transform = AffineClass(pixel_x, 0.0, ulx, 0.0, yres, uly)
                     LOGGER.info(
                         "[polygons-dummy] ✅ Built transform from map info: ulx=%.2f, uly=%.2f, xres=%.2f, yres=%.2f",
                         ulx, uly, pixel_x, yres
@@ -242,7 +241,7 @@ def create_dummy_polygon(
             "[polygons-dummy] ENVI file has no CRS. Attempting to extract from header..."
         )
         try:
-            from spectralbridge.polygon_extraction import get_crs_from_hdr
+            from cross_sensor_cal.polygon_extraction import get_crs_from_hdr
             crs = get_crs_from_hdr(hdr_path)
             if crs is not None:
                 LOGGER.info(
@@ -443,12 +442,11 @@ def validate_coordinate_match(
     with rasterio.open(img_path) as src:
         raster_crs = src.crs
         raster_bounds = src.bounds
-        transform = src.transform
     
     # Extract CRS from header if needed
     if raster_crs is None:
         try:
-            from spectralbridge.polygon_extraction import get_crs_from_hdr
+            from cross_sensor_cal.polygon_extraction import get_crs_from_hdr
             raster_crs = get_crs_from_hdr(hdr_path)
         except Exception:
             pass
@@ -684,8 +682,6 @@ def filter_polygons_by_overlap(
     # Get raster bounds and CRS
     with rasterio.open(img_path) as src:
         transform = src.transform
-        width = src.width
-        height = src.height
         dataset_crs = src.crs
         bounds = src.bounds
     
@@ -693,9 +689,8 @@ def filter_polygons_by_overlap(
     if transform is None or not hasattr(transform, '__call__'):
         LOGGER.warning("[polygons-filter] Building transform from ENVI header...")
         try:
-            from spectralbridge.envi import _parse_envi_header_tolerant
-            from spectralbridge.io.neon import _map_info_core
-            from affine import Affine
+            from cross_sensor_cal.envi import _parse_envi_header_tolerant
+            from cross_sensor_cal.io.neon import _map_info_core
             
             header = _parse_envi_header_tolerant(hdr_path)
             map_info = header.get("map info")
@@ -724,7 +719,7 @@ def filter_polygons_by_overlap(
     # Extract CRS from header if needed
     if dataset_crs is None:
         try:
-            from spectralbridge.polygon_extraction import get_crs_from_hdr
+            from cross_sensor_cal.polygon_extraction import get_crs_from_hdr
             dataset_crs = get_crs_from_hdr(hdr_path)
         except Exception:
             pass
@@ -843,20 +838,20 @@ def filter_polygons_by_overlap(
                 )
             else:
                 LOGGER.warning(
-                    f"[polygons-filter] ⚠️  Total polygon bounds do NOT overlap with flightline bbox! "
+                    "[polygons-filter] ⚠️  Total polygon bounds do NOT overlap with flightline bbox! "
                     "This suggests polygons are from different locations within the site. "
                     "Consider using polygon_search_buffer_m to expand the search area."
                 )
         else:
             LOGGER.info(
-                f"[polygons-filter] ✅ Total polygon bounds overlap with flightline bbox"
+                "[polygons-filter] ✅ Total polygon bounds overlap with flightline bbox"
                 + (f" (with {search_buffer_m}m buffer)" if search_buffer_m > 0 else "")
             )
     
     # Debug: Check if flightline_bbox is valid
     if not flightline_bbox.is_valid:
         LOGGER.warning(
-            f"[polygons-filter] ⚠️  Flightline bbox is invalid! Attempting to fix..."
+            "[polygons-filter] ⚠️  Flightline bbox is invalid! Attempting to fix..."
         )
         flightline_bbox = flightline_bbox.buffer(0)  # Fix invalid geometry
     
@@ -955,7 +950,7 @@ def filter_polygons_by_overlap(
             
             if total_bounds_overlap:
                 LOGGER.warning(
-                    f"[polygons-filter] ⚠️  No polygons intersect, but total bounds overlap! "
+                    "[polygons-filter] ⚠️  No polygons intersect, but total bounds overlap! "
                     "This might be a precision issue. Trying with buffered bbox..."
                 )
                 # Try with a small buffer (1 meter) to handle precision issues
@@ -984,7 +979,7 @@ def filter_polygons_by_overlap(
                     )
                 else:
                     LOGGER.error(
-                        f"[polygons-filter] ❌ Still no polygons found even with buffered bbox"
+                        "[polygons-filter] ❌ Still no polygons found even with buffered bbox"
                     )
         
         if not filtered_polygons:
@@ -1123,7 +1118,7 @@ def filter_polygons_by_overlap(
         raise ValueError(error_msg)
     else:
         LOGGER.info(
-            f"[polygons-filter] ✅ Filtered polygon bounds overlap with flightline bounds"
+            "[polygons-filter] ✅ Filtered polygon bounds overlap with flightline bounds"
         )
     
     # Save filtered GeoJSON
@@ -1177,14 +1172,12 @@ def visualize_polygons_on_envi(
         Path to saved visualization PNG
     """
     import matplotlib.pyplot as plt
-    from matplotlib.patches import Patch
-    from matplotlib.colors import ListedColormap
     import numpy as np
     
     geopandas = require_geopandas()
     rasterio = require_rasterio()
-    from spectralbridge.envi import read_envi_cube, hdr_to_dict
-    from spectralbridge.header_utils import wavelengths_from_hdr
+    from cross_sensor_cal.envi import hdr_to_dict
+    from cross_sensor_cal.header_utils import wavelengths_from_hdr
     
     polygons_path = Path(polygons_path)
     if not polygons_path.exists():
@@ -1589,9 +1582,8 @@ def build_polygon_pixel_index(
             "[polygons-index] Raster has no transform. Attempting to build from ENVI header..."
         )
         try:
-            from spectralbridge.envi import _parse_envi_header_tolerant
-            from spectralbridge.io.neon import _map_info_core
-            from affine import Affine
+            from cross_sensor_cal.envi import _parse_envi_header_tolerant
+            from cross_sensor_cal.io.neon import _map_info_core
             
             header = _parse_envi_header_tolerant(hdr_path)
             map_info = header.get("map info")
@@ -1643,7 +1635,7 @@ def build_polygon_pixel_index(
             "[polygons-index] ENVI file has no CRS. Attempting to extract from header..."
         )
         try:
-            from spectralbridge.polygon_extraction import get_crs_from_hdr
+            from cross_sensor_cal.polygon_extraction import get_crs_from_hdr
             dataset_crs = get_crs_from_hdr(hdr_path)
             if dataset_crs is not None:
                 crs_epsg = dataset_crs.to_epsg()
@@ -1889,11 +1881,11 @@ def extract_polygon_parquet_from_envi(
     Path
         Path to the created polygon parquet file
     """
-    from spectralbridge.parquet_export import (
+    from cross_sensor_cal.parquet_export import (
         read_envi_in_chunks,
         _write_parquet_chunks,
     )
-    from spectralbridge.exports.schema_utils import infer_stage_from_name
+    from cross_sensor_cal.exports.schema_utils import infer_stage_from_name
     import inspect
     
     output_parquet_path = Path(output_parquet_path)
