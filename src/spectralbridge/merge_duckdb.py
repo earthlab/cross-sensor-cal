@@ -505,6 +505,7 @@ def _filter_no_data_rows_from_parquet(
     
     # Read the parquet file using DuckDB (we already have a connection)
     # DuckDB's .df() method returns a pandas DataFrame without requiring pyarrow
+    import pandas as pd
     df = con.execute(f"SELECT * FROM read_parquet('{_quote_path(str(parquet_path))}')").df()
     
     print(f"[merge]    Checking {len(spectral_columns)} spectral columns for rows with majority invalid values (>90%)...")
