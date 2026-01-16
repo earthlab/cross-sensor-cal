@@ -13,6 +13,11 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None  # type: ignore
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -260,11 +265,43 @@ def _correction_report(
     corr_sample: np.ndarray,
     sample_mask: np.ndarray,
 ) -> CorrectionReport:
-    diff = np.where(sample_mask, corr_sample - raw_sample, np.nan)
+    # Exclude -9999 (no-data) values from delta calculation
+    # -9999 values can cause spurious large deltas (e.g., -9999 - 0.5 = -9999.5, or 0.5 - (-9999) = 9999.5)
+    # Use a more lenient threshold to catch values close to -9999
+    no_data_threshold = -9990.0  # Anything <= -9990 is considered no-data
+    
+    # Mask out pixels where either raw or corrected is no-data
+    raw_is_nodata = raw_sample <= no_data_threshold
+    corr_is_nodata = corr_sample <= no_data_threshold
+    either_is_nodata = raw_is_nodata | corr_is_nodata
+    
+    # Combined mask: valid pixels AND not no-data
+    combined_mask = sample_mask & ~either_is_nodata
+    
+    # Calculate difference only for valid, non-no-data pixels
+    diff = np.where(combined_mask, corr_sample - raw_sample, np.nan)
+    
+    # CRITICAL: Exclude deltas that are suspiciously large (likely -9999 contamination)
+    # If absolute delta is > 1000, it's almost certainly from a -9999 value
+    # This catches cases like: -9999 - 76 = -10075 or 76 - (-9999) = 10075
+    # Use a threshold of 1000 to be safe (reflectance deltas should be < 1 typically)
+    suspicious_deltas = np.abs(diff) > 1000.0
+    n_suspicious = np.sum(suspicious_deltas)
+    if n_suspicious > 0:
+        print(f"[QA] ⚠️  Excluding {n_suspicious:,} suspicious deltas (|delta| > 1000) likely from -9999 contamination")
+    diff = np.where(suspicious_deltas, np.nan, diff)
+    
     delta_median = np.nanmedian(diff, axis=1)
     q75 = np.nanpercentile(diff, 75, axis=1)
     q25 = np.nanpercentile(diff, 25, axis=1)
     delta_iqr = q75 - q25
+    
+    # Count how many bands had -9999 contamination
+    nodata_bands = np.sum(either_is_nodata, axis=1)
+    if np.any(nodata_bands > 0):
+        max_contaminated = np.max(nodata_bands)
+        print(f"[QA] ⚠️  Excluded -9999 values from delta calculation (max {max_contaminated} pixels per band)")
+    
     order = np.argsort(np.abs(delta_median))[::-1]
     top = order[:3].tolist()
     return CorrectionReport(
@@ -282,6 +319,72 @@ def _spectral_angle(a: np.ndarray, b: np.ndarray) -> float:
     cos_theta = np.clip(dot / denom, -1.0, 1.0)
     angles = np.arccos(cos_theta)
     return float(np.nanmean(angles))
+
+
+def _load_filtered_parquet_stats(flightline_dir: Path, prefix: str) -> dict | None:
+    """Load statistics from filtered merged parquet file if available."""
+    if pd is None:
+        return None
+    
+    merged_parquet = flightline_dir / f"{prefix}_merged_pixel_extraction.parquet"
+    if not merged_parquet.exists():
+        return None
+    
+    try:
+        # Read a sample to get statistics
+        df = pd.read_parquet(merged_parquet)
+        
+        # Identify spectral columns (excluding raw_* and metadata)
+        import re
+        spectral_cols = [col for col in df.columns 
+                        if re.search(r'_wl\d+nm|^wl\d+nm', col, re.IGNORECASE) 
+                        and not col.lower().startswith('raw_')
+                        and col.lower() not in ['pixel_id', 'row', 'col', 'x', 'y', 'lon', 'lat']]
+        
+        if not spectral_cols:
+            return None
+        
+        # Convert to numeric
+        spectral_df = df[spectral_cols].apply(pd.to_numeric, errors='coerce')
+        
+        # Calculate statistics
+        negative_mask = (spectral_df < 0) & spectral_df.notna()
+        overbright_mask = (spectral_df > 1.2) & spectral_df.notna()
+        no_data_mask = (np.abs(spectral_df - (-9999.0)) < 0.01) & spectral_df.notna()
+        
+        total_cells = spectral_df.notna().sum().sum()
+        negative_cells = negative_mask.sum().sum()
+        overbright_cells = overbright_mask.sum().sum()
+        no_data_cells = no_data_mask.sum().sum()
+        valid_cells = total_cells - no_data_cells
+        
+        return {
+            'n_rows': len(df),
+            'n_spectral_cols': len(spectral_cols),
+            'negatives_pct': (negative_cells / valid_cells * 100) if valid_cells > 0 else 0.0,
+            'overbright_pct': (overbright_cells / valid_cells * 100) if valid_cells > 0 else 0.0,
+            'no_data_pct': (no_data_cells / total_cells * 100) if total_cells > 0 else 0.0,
+            'valid_pct': (valid_cells / total_cells * 100) if total_cells > 0 else 0.0,
+        }
+    except Exception as e:
+        logger.warning(f"Failed to load filtered parquet stats: {e}")
+        return None
+
+
+def _safe_extract_geometry_value(value) -> float | None:
+    """Safely extract geometry value, handling dict, tuple, or float."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    elif isinstance(value, dict):
+        return value.get("mean") if "mean" in value else None
+    elif isinstance(value, (list, tuple)):
+        # If it's a tuple/list, try to get mean or first element
+        if len(value) > 0:
+            try:
+                return float(value[0])
+            except (ValueError, TypeError):
+                return None
+    return None
 
 
 def _build_brightness_summary_table(
@@ -339,11 +442,24 @@ def _convolution_reports(
         f"{prefix}_*_convolved_envi.img",
         f"{prefix}_resampled_*_envi.img",
         f"{prefix}_resampled_*_envi_masked.img",
+        f"{prefix}_*landsat*_envi.img",  # Add Landsat patterns
+        f"{prefix}_*micasense*_envi.img",  # Add MicaSense patterns
+        f"{prefix}_*etm*_envi.img",  # Add ETM+ patterns
+        f"{prefix}_*oli*_envi.img",  # Add OLI patterns
+        f"{prefix}_*tm*_envi.img",  # Add TM patterns
     ]
     candidates: set[Path] = set()
     for pattern in patterns:
         for match in base_dir.rglob(pattern):
-            candidates.add(match)
+            # Exclude raw and corrected ENVI files, but include convolved/resampled
+            stem = match.stem.lower()
+            if ("corrected" not in stem and 
+                "brdfandtopo" not in stem and
+                stem != f"{prefix.lower()}_envi" and
+                ("convolved" in stem or "resampled" in stem or 
+                 "landsat" in stem or "micasense" in stem or 
+                 "etm" in stem or "oli" in stem or "tm" in stem)):
+                candidates.add(match)
 
     for img_path in sorted(candidates):
         sensor = img_path.stem.replace(f"{prefix}_", "").replace("_convolved_envi", "")
@@ -416,7 +532,32 @@ def _render_page1_envi_overview(
         wavelengths, _ = wavelengths_from_hdr(hdr)
         rgb_image, _ = _rgb_preview(cube, wavelengths, rgb_targets)
         ax.imshow(np.clip(rgb_image, 0, 1))
-        ax.set_title(img_path.stem, fontsize=8)
+        
+        # Shorten product name for display - extract key identifier
+        stem = img_path.stem
+        # Remove long prefix if present
+        if stem.startswith(prefix):
+            short_name = stem[len(prefix):].lstrip('_')
+        else:
+            short_name = stem
+        
+        # Further shorten common suffixes
+        short_name = short_name.replace('_brdfandtopo_corrected_envi', '_corrected')
+        short_name = short_name.replace('_envi', '')
+        short_name = short_name.replace('_convolved', '_conv')
+        short_name = short_name.replace('_resampled', '_resamp')
+        
+        # Wrap long names
+        if len(short_name) > 30:
+            # Try to split at underscores
+            parts = short_name.split('_')
+            if len(parts) > 2:
+                # Take first and last parts
+                short_name = f"{parts[0]}_{parts[-1]}"
+            else:
+                short_name = short_name[:27] + "..."
+        
+        ax.set_title(short_name, fontsize=8, wrap=True)
         ax.axis("off")
 
     pdf.savefig(fig, bbox_inches="tight")
@@ -451,6 +592,7 @@ def _render_page2_topo_brdf(
     corr_sample: np.ndarray,
     sample_mask: np.ndarray,
     corr_path: Path,
+    filtered_stats: dict | None = None,
 ) -> None:
     """Page 2: diagnostics specific to topo (row 1) and BRDF (row 2) corrections."""
 
@@ -463,7 +605,10 @@ def _render_page2_topo_brdf(
 
     ax_topo_delta = axes[0, 1]
     _render_delta(ax_topo_delta, wavelengths, correction_report)
-    ax_topo_delta.set_title("Topographic + BRDF: Δ median vs λ")
+    title = "Topographic + BRDF: Δ median vs λ (before filtering)"
+    if filtered_stats:
+        title += "\n(Note: -9999 values excluded from delta calculation)"
+    ax_topo_delta.set_title(title, fontsize=9)
 
     params = _load_correction_geometry_json(corr_path.parent, corr_path) or {}
     geom = params.get("geometry", {}) if isinstance(params, dict) else {}
@@ -475,15 +620,22 @@ def _render_page2_topo_brdf(
         topo_present = [k for k in topo_keys if k in geom]
         if topo_present:
             means = []
+            valid_keys = []
             for k in topo_present:
-                value = geom[k]
-                if isinstance(value, dict):
-                    means.append(value.get("mean"))
-                else:
+                value = _safe_extract_geometry_value(geom[k])
+                if value is not None:
                     means.append(value)
-            ax_brdf_geom.bar(topo_present, means)
-            ax_brdf_geom.set_title("Topographic geometry (mean)")
-            ax_brdf_geom.set_ylabel("Value (radians)")
+                    valid_keys.append(k)
+            if valid_keys and means:
+                ax_brdf_geom.bar(valid_keys, means)
+                ax_brdf_geom.set_title("Topographic geometry (mean)")
+                ax_brdf_geom.set_ylabel("Value (radians)")
+                # Set reasonable y-axis limits
+                y_range = max(means) - min(means) if len(means) > 1 else abs(means[0]) if means else 1
+                if y_range > 0:
+                    ax_brdf_geom.set_ylim(min(means) - 0.1 * y_range, max(means) + 0.1 * y_range)
+            else:
+                ax_brdf_geom.text(0.5, 0.5, "No valid topo geometry values", ha="center", va="center")
         else:
             ax_brdf_geom.text(
                 0.5,
@@ -504,15 +656,22 @@ def _render_page2_topo_brdf(
         brdf_present = [k for k in brdf_keys if k in geom]
         if brdf_present:
             means = []
+            valid_keys = []
             for k in brdf_present:
-                value = geom[k]
-                if isinstance(value, dict):
-                    means.append(value.get("mean"))
-                else:
+                value = _safe_extract_geometry_value(geom[k])
+                if value is not None:
                     means.append(value)
-            ax_brdf_geom2.bar(brdf_present, means)
-            ax_brdf_geom2.set_title("BRDF geometry (mean)")
-            ax_brdf_geom2.set_ylabel("Value (radians)")
+                    valid_keys.append(k)
+            if valid_keys and means:
+                ax_brdf_geom2.bar(valid_keys, means)
+                ax_brdf_geom2.set_title("BRDF geometry (mean)")
+                ax_brdf_geom2.set_ylabel("Value (radians)")
+                # Set reasonable y-axis limits
+                y_range = max(means) - min(means) if len(means) > 1 else abs(means[0]) if means else 1
+                if y_range > 0:
+                    ax_brdf_geom2.set_ylim(min(means) - 0.1 * y_range, max(means) + 0.1 * y_range)
+            else:
+                ax_brdf_geom2.text(0.5, 0.5, "No valid BRDF geometry values", ha="center", va="center")
         else:
             ax_brdf_geom2.text(
                 0.5, 0.5, "No BRDF geometry stats in JSON", ha="center", va="center"
@@ -532,6 +691,7 @@ def _render_page3_remaining(
     prefix: str,
     metrics: QAMetrics,
     scatter_data: dict[str, tuple[np.ndarray, np.ndarray]],
+    filtered_stats: dict | None = None,
 ) -> None:
     """Page 3: remaining QA diagnostics (convolution + header/mask/issue summary)."""
 
@@ -540,7 +700,10 @@ def _render_page3_remaining(
 
     ax_scatter = axes[0, 0]
     _render_scatter(ax_scatter, scatter_data)
-    ax_scatter.set_title("Convolved vs corrected (all sensors)")
+    title = "Convolved vs corrected (all sensors)"
+    if not scatter_data:
+        title += "\n⚠ No convolved sensors found - check ENVI files"
+    ax_scatter.set_title(title, fontsize=9)
 
     ax_header = axes[0, 1]
     header = metrics.header
@@ -564,13 +727,27 @@ def _render_page3_remaining(
     negatives_pct = metrics.negatives_pct
     overbright_pct = metrics.overbright_pct
     lines = [
-        f"Total pixels: {mask.n_total}",
-        f"Valid pixels: {mask.n_valid}",
+        "=== ENVI Cube (Before Filtering) ===",
+        f"Total pixels: {mask.n_total:,}",
+        f"Valid pixels: {mask.n_valid:,}",
         f"Valid %: {mask.valid_pct:.2f}%",
         f"Negatives %: {negatives_pct:.2f}%",
         f">1.2 reflectance %: {overbright_pct:.2f}%",
     ]
-    ax_mask.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=9)
+    if filtered_stats:
+        lines.extend([
+            "",
+            "=== Filtered Parquet (After Filtering) ===",
+            f"Rows: {filtered_stats['n_rows']:,}",
+            f"Spectral columns: {filtered_stats['n_spectral_cols']}",
+            f"Valid %: {filtered_stats['valid_pct']:.2f}%",
+            f"Negatives %: {filtered_stats['negatives_pct']:.2f}%",
+            f">1.2 reflectance %: {filtered_stats['overbright_pct']:.2f}%",
+            f"No-data %: {filtered_stats['no_data_pct']:.2f}%",
+        ])
+    else:
+        lines.append("\n(Filtered parquet stats not available)")
+    ax_mask.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=8, family='monospace')
     ax_mask.axis("off")
     ax_mask.set_title("Mask coverage & negatives")
 
@@ -596,6 +773,165 @@ def _render_page3_remaining(
     ax_issues.axis("off")
     ax_issues.set_title("Issues & brightness adjustments")
 
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _render_page4_parquet_merge_quality(
+    pdf: PdfPages,
+    flightline_dir: Path,
+    prefix: str,
+) -> None:
+    """Page 4: Parquet and merge quality analysis."""
+    
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig.suptitle(f"Parquet & Merge Quality Analysis – {prefix}")
+    
+    # Top-left: Parquet file inventory
+    ax_parquet = axes[0, 0]
+    parquet_files = sorted(flightline_dir.glob("*.parquet"))
+    parquet_info = []
+    total_size = 0
+    
+    for pq in parquet_files:
+        size_mb = pq.stat().st_size / (1024 * 1024)
+        total_size += size_mb
+        parquet_info.append(f"{pq.name[:50]}: {size_mb:.1f} MB")
+    
+    if parquet_info:
+        text = "=== Parquet Files ===\n" + "\n".join(parquet_info[:15])  # Limit to 15 files
+        if len(parquet_info) > 15:
+            text += f"\n... and {len(parquet_info) - 15} more files"
+        text += f"\n\nTotal: {len(parquet_files)} files, {total_size:.1f} MB"
+    else:
+        text = "No parquet files found"
+    
+    ax_parquet.text(0.01, 0.99, text, va="top", ha="left", fontsize=8, family='monospace')
+    ax_parquet.axis("off")
+    ax_parquet.set_title("Parquet File Inventory")
+    
+    # Top-right: Merge status
+    ax_merge = axes[0, 1]
+    merged_parquet = flightline_dir / f"{prefix}_merged_pixel_extraction.parquet"
+    
+    if merged_parquet.exists():
+        try:
+            if pd is not None:
+                df = pd.read_parquet(merged_parquet)
+                n_rows = len(df)
+                n_cols = len(df.columns)
+                
+                # Count expected parquet types
+                original_parquets = list(flightline_dir.glob("*_envi.parquet"))
+                corrected_parquets = list(flightline_dir.glob("*_corrected*.parquet"))
+                resampled_parquets = [p for p in flightline_dir.glob("*.parquet") 
+                                    if "merged" not in p.name and "corrected" not in p.name 
+                                    and "_envi.parquet" not in p.name]
+                
+                lines = [
+                    "=== Merge Status ===",
+                    "✅ Merged file exists",
+                    f"Rows: {n_rows:,}",
+                    f"Columns: {n_cols}",
+                    "",
+                    "=== Input Files ===",
+                    f"Original: {len(original_parquets)}",
+                    f"Corrected: {len(corrected_parquets)}",
+                    f"Resampled: {len(resampled_parquets)}",
+                    f"Total inputs: {len(original_parquets) + len(corrected_parquets) + len(resampled_parquets)}",
+                ]
+            else:
+                lines = [
+                    "=== Merge Status ===",
+                    "✅ Merged file exists",
+                    f"Size: {merged_parquet.stat().st_size / (1024*1024):.1f} MB",
+                    "(pandas not available for detailed stats)",
+                ]
+        except Exception as e:
+            lines = [
+                "=== Merge Status ===",
+                f"⚠️ Error reading merged file: {e}",
+            ]
+    else:
+        lines = [
+            "=== Merge Status ===",
+            "❌ Merged file not found",
+            f"Expected: {merged_parquet.name}",
+        ]
+    
+    ax_merge.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=9, family='monospace')
+    ax_merge.axis("off")
+    ax_merge.set_title("Merge Status")
+    
+    # Bottom-left: Column summary
+    ax_cols = axes[1, 0]
+    if merged_parquet.exists() and pd is not None:
+        try:
+            df = pd.read_parquet(merged_parquet)
+            import re
+            
+            # Categorize columns
+            spectral_cols = [c for c in df.columns if re.search(r'_wl\d+nm|^wl\d+nm', c, re.IGNORECASE)]
+            raw_cols = [c for c in spectral_cols if c.lower().startswith('raw_')]
+            corr_cols = [c for c in spectral_cols if 'corr' in c.lower() and not c.lower().startswith('raw_')]
+            conv_cols = [c for c in spectral_cols if any(x in c.lower() for x in ['etm', 'oli', 'tm', 'micasense']) and not c.lower().startswith('raw_')]
+            meta_cols = [c for c in df.columns if c not in spectral_cols]
+            
+            lines = [
+                "=== Column Summary ===",
+                f"Total columns: {len(df.columns)}",
+                "",
+                "Spectral columns:",
+                f"  Total: {len(spectral_cols)}",
+                f"  Raw: {len(raw_cols)}",
+                f"  Corrected: {len(corr_cols)}",
+                f"  Convolved: {len(conv_cols)}",
+                "",
+                f"Metadata columns: {len(meta_cols)}",
+            ]
+        except Exception as e:
+            lines = [f"Error analyzing columns: {e}"]
+    else:
+        lines = ["Column analysis requires merged parquet file"]
+    
+    ax_cols.text(0.01, 0.99, "\n".join(lines), va="top", ha="left", fontsize=9, family='monospace')
+    ax_cols.axis("off")
+    ax_cols.set_title("Column Summary")
+    
+    # Bottom-right: Quality checks
+    ax_quality = axes[1, 1]
+    quality_checks = []
+    
+    # Check 1: Merged file exists
+    if merged_parquet.exists():
+        quality_checks.append("✅ Merged parquet exists")
+    else:
+        quality_checks.append("❌ Merged parquet missing")
+    
+    # Check 2: Expected parquet files
+    expected_types = {
+        "Original ENVI": list(flightline_dir.glob("*_envi.parquet")),
+        "Corrected": list(flightline_dir.glob("*_corrected*.parquet")),
+    }
+    for name, files in expected_types.items():
+        if files:
+            quality_checks.append(f"✅ {name}: {len(files)} file(s)")
+        else:
+            quality_checks.append(f"⚠️ {name}: 0 files")
+    
+    # Check 3: Resampled products
+    resampled = [p for p in flightline_dir.glob("*.parquet") 
+                if "merged" not in p.name and "corrected" not in p.name 
+                and "_envi.parquet" not in p.name and "polygon" not in p.name]
+    if resampled:
+        quality_checks.append(f"✅ Resampled products: {len(resampled)} file(s)")
+    else:
+        quality_checks.append("⚠️ No resampled products found")
+    
+    ax_quality.text(0.01, 0.99, "\n".join(quality_checks), va="top", ha="left", fontsize=9, family='monospace')
+    ax_quality.axis("off")
+    ax_quality.set_title("Quality Checks")
+    
     pdf.savefig(fig, bbox_inches="tight")
     plt.close(fig)
 
@@ -711,7 +1047,30 @@ def render_flightline_panel(
     rgb_bands: str | None = None,
 ) -> tuple[Path, dict]:
     """Return (png_path, metrics_dict); also writes _qa.json/_qa.pdf when requested."""
-
+    
+    # Debug: Print which file is being used and version identifier
+    import inspect
+    import os
+    try:
+        current_file = inspect.getfile(render_flightline_panel)
+        print(f"[QA] 📍 QA plots module file: {current_file}")
+        print("[QA] ✅ QA plots version: 2025-01-20-v2 (includes Page 4: Parquet & Merge Quality)")
+        
+        # Verify file modification time
+        if os.path.exists(current_file):
+            mtime = os.path.getmtime(current_file)
+            import datetime
+            mod_time = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"[QA] 📅 File modification time: {mod_time}")
+        
+        # Verify Page 4 function exists
+        if '_render_page4_parquet_merge_quality' in globals():
+            print("[QA] ✅ Page 4 function found in module")
+        else:
+            print("[QA] ❌ WARNING: Page 4 function NOT found in module!")
+    except Exception as e:
+        print(f"[QA] ⚠️  Could not inspect module file: {e}")
+    
     flightline_dir = Path(flightline_dir)
     raw_path, corr_path = _discover_primary_cube(flightline_dir)
     prefix = _flightline_prefix(raw_path)
@@ -855,8 +1214,20 @@ def render_flightline_panel(
         write_json(metrics, json_path)
 
     pdf_path = flightline_dir / f"{prefix}_qa.pdf"
+    print(f"[QA] 📄 Generating QA PDF with 4 pages: {pdf_path.name}")
     with PdfPages(pdf_path) as pdf:
+        print("[QA]   📑 Rendering Page 1: ENVI overview...")
         _render_page1_envi_overview(pdf, flightline_dir, prefix, rgb_targets)
+        
+        # Load filtered parquet statistics if available
+        print("[QA]   📊 Loading filtered parquet statistics...")
+        filtered_stats = _load_filtered_parquet_stats(flightline_dir, prefix)
+        if filtered_stats:
+            print(f"[QA]     ✅ Found filtered stats: {filtered_stats['n_rows']:,} rows")
+        else:
+            print("[QA]     ⚠️  No filtered parquet stats available")
+        
+        print("[QA]   📑 Rendering Page 2: Topographic + BRDF diagnostics...")
         _render_page2_topo_brdf(
             pdf=pdf,
             prefix=prefix,
@@ -866,13 +1237,48 @@ def render_flightline_panel(
             corr_sample=corr_sample,
             sample_mask=sample_mask,
             corr_path=corr_path,
+            filtered_stats=filtered_stats,
         )
+        print("[QA]   📑 Rendering Page 3: Additional QA diagnostics...")
         _render_page3_remaining(
             pdf=pdf,
             prefix=prefix,
             metrics=metrics,
             scatter_data=scatter_data,
+            filtered_stats=filtered_stats,
         )
+        
+        # Add Page 4: Parquet and merge quality
+        print("[QA]   📑 Rendering Page 4: Parquet & Merge Quality Analysis...")
+        try:
+            _render_page4_parquet_merge_quality(
+                pdf=pdf,
+                flightline_dir=flightline_dir,
+                prefix=prefix,
+            )
+            print("[QA]   ✅ Page 4 rendered successfully")
+        except Exception as e:
+            print(f"[QA]   ❌ ERROR rendering Page 4: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue anyway - 3 pages is still useful
+    
+    # Verify PDF was created and count pages
+    try:
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(pdf_path)
+            num_pages = len(reader.pages)
+            print(f"[QA] ✅ QA PDF complete: {pdf_path.name} ({num_pages} pages)")
+            if num_pages < 4:
+                print(f"[QA] ⚠️  WARNING: Expected 4 pages but PDF has {num_pages} pages!")
+                print("[QA]     This may indicate the old code is still being used.")
+            elif num_pages == 4:
+                print("[QA] ✅ PDF has 4 pages as expected!")
+        except ImportError:
+            print(f"[QA] ✅ QA PDF complete: {pdf_path.name} (PyPDF2 not available to verify page count)")
+    except Exception as e:
+        print(f"[QA] ✅ QA PDF complete: {pdf_path.name} (could not verify page count: {e})")
 
     return png_path, metrics_dict
 
