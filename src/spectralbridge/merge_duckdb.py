@@ -1,7 +1,7 @@
-"""cross_sensor_cal.merge_duckdb
+"""spectralbridge.merge_duckdb
 ================================
 
-DuckDB-backed merge utilities for the cross-sensor-cal pipeline.
+DuckDB-backed merge utilities for the spectralbridge pipeline.
 
 The public entry point :func:`merge_flightline` stitches every ENVI-derived
 Parquet table for a single flightline into one master artifact named
@@ -16,7 +16,7 @@ same directory. This mirrors the default behaviour of
 
 Typical usage::
 
-    from cross_sensor_cal import merge_duckdb
+    from spectralbridge import merge_duckdb
 
     merge_duckdb.merge_flightline(
         Path("/path/to/flightline"),
@@ -441,7 +441,7 @@ def _filter_no_data_rows_from_parquet(
     row_group_size : int | None, optional
         Row group size for output parquet file. If None, uses DuckDB default.
     """
-    print("[merge] 🔍 Filtering rows with all -9999 values (no-data)...")
+    print("[merge] 🔍 Filtering rows with >90% invalid spectral values (excluding raw_* columns)...")
     
     # Get all column names
     columns_df = con.execute(
@@ -465,6 +465,7 @@ def _filter_no_data_rows_from_parquet(
     
     # Identify spectral columns by wavelength pattern: _wl####nm or wl####nm
     # Examples: corr_b001_wl0450nm, landsat_tm_b001_wl0485nm, wl0450nm
+    # EXCLUDE raw_* columns (raw reflectance) - only include corrected and convolved products
     wavelength_pattern = re.compile(r'_wl\d+nm|^wl\d+nm', re.IGNORECASE)
     
     spectral_columns = []
@@ -473,6 +474,11 @@ def _filter_no_data_rows_from_parquet(
         # Skip known metadata columns
         is_metadata = any(kw in col_lower for kw in metadata_keywords)
         if is_metadata:
+            continue
+        
+        # EXCLUDE raw_* columns (raw reflectance values)
+        # We only want to filter based on corrected and convolved products
+        if col_lower.startswith('raw_'):
             continue
         
         # Check if column matches wavelength pattern (positive indicator of spectral data)
@@ -1246,9 +1252,14 @@ def merge_flightline(
         
         # Filter rows with majority invalid reflectance values (>90%) if requested
         if filter_no_data_rows:
+            print("[merge] 🔍 About to filter no-data rows...")
             _filter_no_data_rows_from_parquet(con, out_parquet, merge_row_group_size)
+            print("[merge] ✅ Filtering complete, continuing...")
+        else:
+            print("[merge] ⚠️  Filtering is DISABLED (filter_no_data_rows=False)")
         
         # Validate row count matches expectations
+        print("[merge] 🔍 Starting row count validation...")
         try:
             import pyarrow.parquet as pq
             parquet_file = pq.ParquetFile(out_parquet)
@@ -1278,6 +1289,9 @@ def merge_flightline(
                 print(f"[merge] ℹ️  Row count: {actual_rows:,} rows (no expected value to compare)")
         except Exception as e:
             print(f"[merge] ⚠️  Could not validate row count: {e}")
+            import traceback
+            traceback.print_exc()
+        print("[merge] ✅ Row count validation section complete")
 
         if write_feather:
             out_feather = out_parquet.with_suffix(".feather").resolve()
@@ -1291,33 +1305,67 @@ def merge_flightline(
                     f"[merge] ✅ Wrote feather: {out_feather} (exists={out_feather.exists()})"
                 )
     finally:
+        print("[merge] 🔄 Closing DuckDB connection...")
         con.close()
+        print("[merge] ✅ DuckDB connection closed")
 
+    print("[merge] 🔍 Reached end of merge function (after finally block)")
+    
     if hasattr(os, "sync"):
         try:
             os.sync()
+            print("[merge] ✅ File system sync complete")
         except OSError:
-            pass
+            print("[merge] ⚠️  File system sync failed (non-critical)")
 
+    print(f"[merge] 🔍 Checking QA panel generation: emit_qa_panel={emit_qa_panel}")
+    print(f"[merge] 🔍 emit_qa_panel type: {type(emit_qa_panel)}, value: {emit_qa_panel}")
     if emit_qa_panel:
+        print(f"[merge] 🖼️  QA panel generation requested for {prefix}")
         try:
-            from cross_sensor_cal.qa_plots import render_flightline_panel
+            # Force reload to ensure we get the latest code
+            import importlib
+            import sys
+            if 'spectralbridge.qa_plots' in sys.modules:
+                importlib.reload(sys.modules['spectralbridge.qa_plots'])
+                print("[merge] 🔄 Reloaded qa_plots module to ensure latest code")
+            
+            print("[merge] 📦 Importing render_flightline_panel...")
+            print("[merge]    Attempting import: from spectralbridge.qa_plots import render_flightline_panel")
+            try:
+                from spectralbridge.qa_plots import render_flightline_panel
+                print("[merge] ✅ Successfully imported render_flightline_panel")
+            except ImportError as import_err:
+                print(f"[merge] ❌ ImportError: {import_err}")
+                print("[merge]    Trying alternative import path...")
+                # Try alternative import path in case package name is different
+                try:
+                    from cross_sensor_cal.qa_plots import render_flightline_panel
+                    print("[merge] ✅ Successfully imported from cross_sensor_cal.qa_plots")
+                except ImportError as import_err2:
+                    print(f"[merge] ❌ Alternative import also failed: {import_err2}")
+                    raise
 
-            with _progress("QA: render panel"):
-                out_png_path, _ = render_flightline_panel(
-                    flightline_dir, quick=True, save_json=True
-                )
+            print("[merge] 🖼️  Starting QA panel generation...")
+            # Don't use _progress wrapper - it might hide output
+            out_png_path, _ = render_flightline_panel(
+                flightline_dir, quick=True, save_json=True
+            )
             print(
                 f"[merge] 🖼️  QA panel → {out_png_path} "
                 f"(exists={out_png_path.exists()})"
             )
         except Exception as e:  # pragma: no cover - QA best effort
             print(f"[merge] ⚠️ QA panel after merge failed for {prefix}: {e}")
+            print(f"[merge] ⚠️ Exception type: {type(e).__name__}")
             traceback.print_exc()
+    else:
+        print(f"[merge] ⚠️  QA panel generation is DISABLED (emit_qa_panel=False)")
 
     print(
         f"[merge] ✅ Done for {flightline_dir.name} at {datetime.now().isoformat(timespec='seconds')}"
     )
+    print(f"[merge] 📋 Summary: merge complete, QA panel requested={emit_qa_panel}")
     return out_parquet
 
 
