@@ -1268,6 +1268,29 @@ def merge_flightline(
         else:
             print("[merge] ⚠️  Filtering is DISABLED (filter_no_data_rows=False)")
         
+        # Export filtered parquet to CSV (streaming to avoid memory issues)
+        out_csv = out_parquet.with_suffix(".csv").resolve()
+        if out_csv.exists():
+            out_csv.unlink()
+        print(f"[merge] 📄 Exporting filtered parquet to CSV: {out_csv.name}")
+        try:
+            import time
+            csv_start_time = time.time()
+            # Use DuckDB to stream CSV export (avoids loading entire dataset into memory)
+            csv_copy_sql = (
+                f"COPY (SELECT * FROM read_parquet('{_quote_path(str(out_parquet))}')) "
+                f"TO '{_quote_path(str(out_csv))}' (FORMAT CSV, HEADER)"
+            )
+            con.execute(csv_copy_sql)
+            csv_elapsed = time.time() - csv_start_time
+            csv_size_mb = out_csv.stat().st_size / (1024**2) if out_csv.exists() else 0
+            print(f"[merge] ✅ CSV export complete in {csv_elapsed:.1f} seconds ({csv_elapsed/60:.1f} minutes), size: {csv_size_mb:.1f} MB")
+        except Exception as e:
+            print(f"[merge] ⚠️  CSV export failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the entire merge if CSV export fails
+        
         # Validate row count matches expectations
         print("[merge] 🔍 Starting row count validation...")
         try:
