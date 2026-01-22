@@ -2245,6 +2245,33 @@ def stage_convolve_all_sensors(
                     merge_row_group_size,
                 )
                 print("[pipeline] ✅ _filter_no_data_rows_from_parquet completed successfully")
+                
+                # Export filtered parquet to CSV (streaming to avoid memory issues)
+                # Do this before closing the connection
+                merge_out_csv = merge_out.with_suffix(".csv").resolve()
+                if merge_out_csv.exists():
+                    merge_out_csv.unlink()
+                print(f"[pipeline] 📄 Exporting filtered parquet to CSV: {merge_out_csv.name}")
+                try:
+                    import time
+                    csv_start_time = time.time()
+                    # Use DuckDB to stream CSV export (avoids loading entire dataset into memory)
+                    from spectralbridge.merge_duckdb import _quote_path
+                    csv_copy_sql = (
+                        f"COPY (SELECT * FROM read_parquet('{_quote_path(str(merge_out))}')) "
+                        f"TO '{_quote_path(str(merge_out_csv))}' (FORMAT CSV, HEADER)"
+                    )
+                    con.execute(csv_copy_sql)
+                    csv_elapsed = time.time() - csv_start_time
+                    csv_size_mb = merge_out_csv.stat().st_size / (1024**2) if merge_out_csv.exists() else 0
+                    print(f"[pipeline] ✅ CSV export complete in {csv_elapsed:.1f} seconds ({csv_elapsed/60:.1f} minutes), size: {csv_size_mb:.1f} MB")
+                    logger.info("✅ CSV export complete: %s (%.1f MB)", merge_out_csv.name, csv_size_mb)
+                except Exception as csv_exc:
+                    print(f"[pipeline] ⚠️  CSV export failed: {csv_exc}")
+                    logger.warning("⚠️  CSV export failed: %s", csv_exc)
+                    import traceback
+                    print(traceback.format_exc())
+                    # Don't fail the entire pipeline if CSV export fails
             except Exception as filter_exc:
                 print(f"[pipeline] ❌ ERROR in _filter_no_data_rows_from_parquet: {filter_exc}")
                 import traceback
